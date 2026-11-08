@@ -15,9 +15,11 @@ import { rememberWorkspace } from "@/pages/workspace/lastWorkspace";
 import { AppShell } from "@/shell/AppShell";
 import { HomeShell } from "@/shell/HomeShell";
 import { NavDialogsProvider } from "@/shell/NavDialogs";
+import { AddRecordProvider } from "@/views/common/addRecord";
 import { ViewHost } from "@/views/ViewHost";
 import { BaseDialogContext, BaseDialogs, type BaseDialog } from "./BaseDialogs";
 import { CollectionHeader } from "./CollectionHeader";
+import { CollectionTabs } from "./CollectionTabs";
 import { EmptyBase } from "./EmptyBase";
 import { basePermissions } from "./permissions";
 
@@ -47,8 +49,8 @@ export function BaseShell({ section }: { section?: "automations" }) {
   const automations = section === "automations";
   // An address without a table or a view opens the one last used here, if it still exists.
   const table = !loaded || automations ? undefined : (loaded.tables.find((t) => t.id === tableId) ?? (tableId ? undefined : loaded.tables.find((t) => t.id === lastTableOf(loaded.id))) ?? loaded.tables[0]);
-  // Else its first view, else its default grid (a new table has no other).
-  const view = table?.views.find((v) => v.id === viewId) ?? (viewId ? undefined : (table?.views.find((v) => v.id === lastViewOf(table.id)) ?? (table ? (namedViews(table)[0] ?? defaultViewOf(table)) : undefined)));
+  // Else its first tab, the default view ("All clients"); a collection from before default views existed starts with its first saved view.
+  const view = table?.views.find((v) => v.id === viewId) ?? (viewId ? undefined : (table?.views.find((v) => v.id === lastViewOf(table.id)) ?? (table ? (defaultViewOf(table) ?? namedViews(table)[0]) : undefined)));
 
   // What the menu's rows open next time: this view, its table, and the workspace used last.
   const workspaceId = loaded?.workspace_id;
@@ -104,8 +106,8 @@ export function BaseShell({ section }: { section?: "automations" }) {
     page = (
       <EmptyState
         icon={<Table2 />}
-        title="This table has no views"
-        description={basePermissions.createView(schema.role) ? "Create one with the + beside the views." : "Ask an editor or creator to add a view."}
+        title="This collection has no views"
+        description={basePermissions.createView(schema.role) ? "Change how its records are shown, then save it as a view." : "Ask an editor or creator to add a view."}
       />
     );
   } else {
@@ -119,17 +121,26 @@ export function BaseShell({ section }: { section?: "automations" }) {
   return (
     <BaseDialogContext.Provider value={setDialog}>
       <NavDialogsProvider>
-        <AppShell
-          fill
-          workspaceId={schema.workspace_id}
-          tableId={table?.id}
-          mainLabel={automations ? "Automations" : (view?.name ?? "Folder content")}
-          searchHere={{ workspaceId: schema.workspace_id, baseId: schema.id }}
-        >
-          <CollectionHeader schema={schema} table={table} section={section} onShare={() => setDialog({ kind: "share", table: table ?? null, view: view ?? null, tab: "invite" })} />
-          <div className="relative min-h-0 flex-1">{page}</div>
-          <BaseDialogs schema={schema} activeViewId={view?.id} dialog={dialog} onClose={() => setDialog(null)} />
-        </AppShell>
+        <AddRecordProvider>
+          <AppShell
+            fill
+            workspaceId={schema.workspace_id}
+            tableId={table?.id}
+            mainLabel={automations ? "Automations" : (view?.name ?? "Folder content")}
+            searchHere={{ workspaceId: schema.workspace_id, baseId: schema.id }}
+          >
+            <CollectionHeader
+              schema={schema}
+              table={table}
+              section={section}
+              onShare={() => setDialog({ kind: "share", table: table ?? null, view: view ?? null, tab: "invite" })}
+              onSettings={(t) => setDialog({ kind: "collection-settings", table: t })}
+            />
+            {table && view && <CollectionTabs schema={schema} table={table} view={view} />}
+            <div className="relative min-h-0 flex-1">{page}</div>
+            <BaseDialogs schema={schema} activeViewId={view?.id} dialog={dialog} onClose={() => setDialog(null)} />
+          </AppShell>
+        </AddRecordProvider>
       </NavDialogsProvider>
     </BaseDialogContext.Provider>
   );

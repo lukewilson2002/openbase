@@ -1,9 +1,10 @@
 /**
  * A table's default grid and its other views. Every table has one default grid (`View.is_default`):
  * a plain grid of all its records whose field order and hidden fields are the layout of every record
- * (the record panel, cards and previews follow it). It is not one of the table's views: menus and
- * lists of views leave it out, and the toolbar has an icon for it before them. Its filter, sort and
- * grouping are each person's own, kept on their device; it cannot be renamed, locked or deleted.
+ * (the record panel, cards and previews follow it). It is not one of the table's saved views (`namedViews`),
+ * but it is the first tab of the collection, reading "All clients" (`lib/viewTabs.ts`), and the view a
+ * collection opens in until another has been used. Its filter, sort and grouping are each person's
+ * own, kept on their device; it cannot be renamed, locked or deleted.
  */
 import type { Table, View } from "@/api/types";
 

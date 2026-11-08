@@ -18,17 +18,13 @@ export interface TabsTriggerProps extends ComponentProps<typeof T.Trigger> {
   icon?: ReactNode;
 }
 
+/** What makes a tab a tab, for a strip that has to measure its tabs before it draws them (the view tabs fit by width). */
+export const tabTriggerClass = "-mb-px inline-flex h-control-lg shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent px-3 text-ui font-medium text-muted max-md:h-control-touch";
+
 /** A text tab; the selected one is underlined in the accent (2 px) and its text is full strength. */
 export function TabsTrigger({ className, icon, children, ...props }: TabsTriggerProps) {
   return (
-    <T.Trigger
-      className={cn(
-        "-mb-px inline-flex h-control-lg shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 text-ui font-medium text-muted max-md:h-control-touch",
-        "hover:text-fg data-[state=active]:border-primary data-[state=active]:text-fg",
-        className,
-      )}
-      {...props}
-    >
+    <T.Trigger className={cn(tabTriggerClass, "hover:text-fg data-[state=active]:border-primary data-[state=active]:text-fg", className)} {...props}>
       {icon != null && (
         <span aria-hidden className="inline-flex shrink-0 items-center [&>svg]:size-[0.9375rem]">
           {icon}

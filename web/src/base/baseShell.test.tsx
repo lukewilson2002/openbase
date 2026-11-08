@@ -5,19 +5,16 @@ import type { BasePerson, BaseSchema } from "@/api/types";
 import { SIDEBAR_KEY } from "@/shell/sidebarPrefs";
 import { USER, apiError, makeSchema, makeWorkspace, mockApi, renderApp, stubDesktop, stubPhone } from "@/test/utils";
 
-// These tests are about the shell (menu, top bar, permissions). The real grid draws on a canvas
-// and has its own tests under src/views/grid, so the shell tests render the placeholder for it,
-// with the toolbar's view switcher above it (the real views draw it in their toolbar).
+// These tests are about the shell (menu, header, view tabs, permissions). The real grid draws on a canvas
+// and has its own tests under src/views/grid, so the shell tests render the placeholder for it.
 vi.mock("@/views/grid/GridView", async () => {
   const { PlaceholderView } = await import("@/views/PlaceholderView");
-  const { ViewSwitcher } = await import("@/components/viewbar/ViewSwitcher");
   const { useSearchParams } = await import("react-router");
   // Shows the ?record= parameter so tests can see whether the shell's redirects keep it.
   function Stub(props: Parameters<typeof PlaceholderView>[0]) {
     const [params] = useSearchParams();
     return (
       <>
-        <ViewSwitcher schema={props.schema} table={props.table} view={props.view} />
         <PlaceholderView {...props} />
         <output data-testid="record-param">{params.get("record")}</output>
       </>
@@ -29,16 +26,7 @@ vi.mock("@/views/grid/GridView", async () => {
 // Same for the kanban view (its own tests live in src/views/kanban).
 vi.mock("@/views/kanban/KanbanView", async () => {
   const { PlaceholderView } = await import("@/views/PlaceholderView");
-  const { ViewSwitcher } = await import("@/components/viewbar/ViewSwitcher");
-  function Stub(props: Parameters<typeof PlaceholderView>[0]) {
-    return (
-      <>
-        <ViewSwitcher schema={props.schema} table={props.table} view={props.view} />
-        <PlaceholderView {...props} />
-      </>
-    );
-  }
-  return { default: Stub };
+  return { default: PlaceholderView };
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -71,38 +59,13 @@ const openFolderMenu = async (user: ReturnType<typeof userEvent.setup>) => {
 };
 const itemNames = (menu: HTMLElement) => within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim());
 
-/** Opens the list of the open table's views, from the toolbar's button naming the open view. */
-async function openViews(user: ReturnType<typeof userEvent.setup>, open = "All tasks", table = "Tasks") {
-  await user.click(screen.getByRole("button", { name: `View: ${open}` }));
-  return screen.findByRole("menu", { name: `Views of ${table}` });
-}
+/** The view tab with this name. */
+const tab = (name: string) => screen.getByRole("tab", { name: new RegExp(`^${name}\\s*(?:Personal view|Locked view)*$`) });
 
-/** Opens the submenu of a view type's views, from its row in the list (the views of one type share a row). */
-async function openType(user: ReturnType<typeof userEvent.setup>, list: HTMLElement, type: string) {
-  within(list).getByRole("menuitem", { name: new RegExp(`^${type} views`) }).focus();
-  await user.keyboard("{ArrowRight}");
-  return screen.findByRole("menu", { name: `${type} views` });
-}
-
-/** Opens a view's options with a right-click on it in the list. */
-async function openViewOptions(list: HTMLElement, view: string | RegExp, name: string) {
-  fireEvent.contextMenu(within(list).getByRole("menuitem", { name: view }), { clientX: 60, clientY: 80 });
+/** Opens a view's menu with a right-click on its tab. */
+async function openViewMenu(name: string) {
+  fireEvent.contextMenu(tab(name), { clientX: 60, clientY: 80 });
   return screen.findByRole("menu", { name: `Options for ${name}` });
-}
-
-/** Opens the "Add view" menu of the open table: at the end of the toolbar's list of views. */
-async function openAddView(user: ReturnType<typeof userEvent.setup>) {
-  const list = await openViews(user);
-  within(list).getByRole("menuitem", { name: "Add view" }).focus();
-  await user.keyboard("{ArrowRight}");
-  return screen.findByRole("menu", { name: "Add view" });
-}
-
-/** Chooses an item of a submenu, as the keyboard does (jsdom gives Radix's submenus no pointer). */
-async function pick(user: ReturnType<typeof userEvent.setup>, name: string | RegExp) {
-  const item = await screen.findByRole("menuitem", { name });
-  item.focus();
-  await user.keyboard("{Enter}");
 }
 
 /** Chooses an item of the open folder's "…" menu. */
@@ -115,14 +78,13 @@ describe("base shell on a desktop", () => {
   beforeEach(() => stubDesktop());
 
   it("canonicalises the URL and renders the first view through the registry", async () => {
-    const user = userEvent.setup();
     openBase("owner");
     expect(await screen.findByText("Grid view coming soon")).toBeInTheDocument();
     expect(tasksLink()).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("main", { name: "All tasks" })).toBeInTheDocument();
-    // The open view is the toolbar's, not the sidebar's.
-    const list = await openViews(user);
-    expect(within(await openType(user, list, "Grid")).getByRole("menuitem", { name: "All tasks" })).toHaveAttribute("aria-current", "page");
+    // The open view is a tab of the collection, not a row of the sidebar.
+    expect(tab("All tasks")).toHaveAttribute("aria-selected", "true");
+    expect(tab("Board")).toHaveAttribute("aria-selected", "false");
   });
 
   it("puts the collection in the app shell: no top bar, its own header inside main, then Home and Notifications above the collections in the sidebar", async () => {
@@ -133,8 +95,8 @@ describe("base shell on a desktop", () => {
     const main = screen.getByRole("main", { name: "All tasks" });
     const header = main.querySelector("header")!;
     expect(header).not.toBeNull();
-    // The workspace as the path (this project is a folder), and the collection's name as the screen's one h1.
-    expect(within(header).getByText("Acme / Project tracker")).toBeInTheDocument();
+    // The folder above the title (this project is a folder), and the collection's name as the screen's one h1.
+    expect(within(header).getByText("Project tracker")).toBeInTheDocument();
     expect(within(header).getByRole("heading", { name: "Tasks", level: 1 })).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(within(header).queryByRole("button", { name: /Acme|Project tracker/ })).not.toBeInTheDocument();
@@ -154,13 +116,13 @@ describe("base shell on a desktop", () => {
     expect(within(menu()).queryByRole("link", { name: "Members" })).not.toBeInTheDocument();
   });
 
-  it("names the top level's collection under the workspace alone, and a creator sees Share in the header", async () => {
+  it("names a top-level collection with no folder above it, and a creator sees Share in the header", async () => {
     const user = userEvent.setup();
     openBase("owner", { "GET /api/bases/app1": makeSchema("owner", { is_top_level: true }) });
     await screen.findByText("Grid view coming soon");
     const header = screen.getByRole("main", { name: "All tasks" }).querySelector("header")!;
-    expect(within(header).getByText("Acme")).toBeInTheDocument();
-    expect(within(header).queryByText("Acme / Project tracker")).not.toBeInTheDocument();
+    expect(within(header).getByRole("heading", { name: "Tasks", level: 1 })).toBeInTheDocument();
+    expect(within(header).queryByText("Project tracker")).not.toBeInTheDocument();
     await user.click(within(header).getByRole("button", { name: "Share" }));
     expect(await screen.findByRole("dialog", { name: /Share/ })).toBeInTheDocument();
   });
@@ -232,10 +194,11 @@ describe("base shell on a desktop", () => {
     const user = userEvent.setup();
     openBase("owner");
     await screen.findByText("Grid view coming soon");
-    await user.click(within(await openViews(user)).getByRole("menuitem", { name: "Board" }));
+    await user.click(tab("Board"));
     expect(await screen.findByText("Kanban view coming soon")).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "Board" })).toBeInTheDocument();
-    expect(within(await openViews(user, "Board")).getByRole("menuitem", { name: "Board" })).toHaveAttribute("aria-current", "page");
+    expect(tab("Board")).toHaveAttribute("aria-selected", "true");
+    expect(tab("All tasks")).toHaveAttribute("aria-selected", "false");
   });
 
   it("switches tables, opening the other table's first view", async () => {
@@ -245,7 +208,7 @@ describe("base shell on a desktop", () => {
     await user.click(within(tables()).getByRole("link", { name: /^People/ }));
     expect(await screen.findByRole("main", { name: "Everyone" })).toBeInTheDocument();
     expect(within(tables()).getByRole("link", { name: /^People/ })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("button", { name: "View: Everyone" })).toBeInTheDocument();
+    expect(tab("Everyone")).toHaveAttribute("aria-selected", "true");
     // The sidebar lists no views, of this collection or of any other.
     expect(within(menu()).queryByRole("link", { name: "Everyone" })).not.toBeInTheDocument();
     expect(within(menu()).queryByRole("link", { name: "All tasks" })).not.toBeInTheDocument();
@@ -260,7 +223,7 @@ describe("base shell on a desktop", () => {
     await user.click(tasksLink());
     expect(await screen.findByText("Kanban view coming soon")).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "Board" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "View: Board" })).toBeInTheDocument();
+    expect(tab("Board")).toHaveAttribute("aria-selected", "true");
     expect(JSON.parse(localStorage.getItem("ob-last-place")!)).toEqual({ tables: { tbl1: "viw2", tbl2: "viw4" }, projects: { app1: "tbl1" } });
     expect(localStorage.getItem("ob-last-workspace")).toBe("wsp1");
   });
@@ -288,15 +251,14 @@ describe("base shell on a desktop", () => {
   });
 
   it("lists collections only in the sidebar: no views under a collection", async () => {
-    const user = userEvent.setup();
     openBase("creator");
     await screen.findByText("Grid view coming soon");
     expect(screen.queryByRole("button", { name: /^(Show|Hide) views of/ })).not.toBeInTheDocument();
     expect(within(tables()).getAllByRole("link").map((a) => a.textContent)).toEqual(["Tasks0", "People0"]);
     expect(within(menu()).queryByRole("list", { name: /^(Shared|Personal) views$/ })).not.toBeInTheDocument();
     expect(within(menu()).queryByRole("button", { name: /^Options for/ })).not.toBeInTheDocument();
-    // The views are in the toolbar's list instead.
-    expect(within(await openViews(user)).getByRole("menuitem", { name: "Board" })).toBeInTheDocument();
+    // The views are the collection's tabs instead.
+    expect(within(screen.getByRole("tablist", { name: "Views of Tasks" })).getAllByRole("tab").map((t) => t.textContent)).toEqual(["All tasks", "Board", "My tasks"]);
   });
 
   it("marks the open collection's row with its color, in the selected style, and no icon", async () => {
@@ -311,13 +273,11 @@ describe("base shell on a desktop", () => {
     expect(people).not.toHaveAttribute("aria-current");
   });
 
-  it("marks personal views as personal in the list of views", async () => {
-    const user = userEvent.setup();
+  it("marks personal views as personal on their tabs", async () => {
     openBase("editor");
     await screen.findByText("Grid view coming soon");
-    const grids = await openType(user, await openViews(user), "Grid");
-    expect(within(within(grids).getByRole("menuitem", { name: /My tasks/ })).getByRole("img", { name: "Personal view" })).toBeInTheDocument();
-    expect(within(within(grids).getByRole("menuitem", { name: /All tasks/ })).queryByRole("img", { name: "Personal view" })).not.toBeInTheDocument();
+    expect(within(tab("My tasks")).getByRole("img", { name: "Personal view" })).toBeInTheDocument();
+    expect(within(tab("All tasks")).queryByRole("img", { name: "Personal view" })).not.toBeInTheDocument();
   });
 
   it("collapses the sidebar with the corner toggle and remembers it", async () => {
@@ -343,17 +303,16 @@ describe("base shell on a desktop", () => {
   });
 
   describe("viewer", () => {
-    it("cannot add tables, create views, rename the base or manage views and tables", async () => {
-      const user = userEvent.setup();
+    it("cannot add tables, rename the base or manage views and tables", async () => {
       openBase("viewer");
       await screen.findByText("Grid view coming soon");
-      // The browser's own menu stays on the views: there is nothing to do with one, nor an Add view.
-      expect(fireEvent.contextMenu(screen.getByRole("button", { name: "View: All tasks" }))).toBe(true);
-      const list = await openViews(user);
-      expect(fireEvent.contextMenu(within(list).getByRole("menuitem", { name: "Board" }))).toBe(true);
+      // The browser's own menu stays on the views: there is nothing to do with one.
+      expect(fireEvent.contextMenu(tab("All tasks"))).toBe(true);
+      expect(fireEvent.contextMenu(tab("Board"))).toBe(true);
       expect(screen.queryByRole("menu", { name: /^Options for/ })).not.toBeInTheDocument();
-      expect(within(list).queryByRole("menuitem", { name: "Add view" })).not.toBeInTheDocument();
-      await user.keyboard("{Escape}");
+      // No settings, no New button: a viewer neither changes the collection nor adds to it.
+      expect(screen.queryByRole("button", { name: "Collection settings" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^New / })).not.toBeInTheDocument();
       // A collection has no menu for a viewer: nothing in it is theirs to change.
       expect(screen.queryByRole("button", { name: /^Collection options for/ })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "Automations" })).not.toBeInTheDocument();
@@ -372,32 +331,19 @@ describe("base shell on a desktop", () => {
   });
 
   describe("editor", () => {
-    it("can create personal views only and cannot change tables or shared views", async () => {
-      const user = userEvent.setup();
-      const api = openBase("editor", {
-        "POST /api/tables/tbl1/views": (call: { body: unknown }) => ({ id: "viw9", table_id: "tbl1", name: (call.body as { name: string }).name, type: "calendar", personal: true, locked: false, config: {} }),
-      });
+    it("manages their personal views only, and cannot change tables or shared views", async () => {
+      openBase("editor");
       await screen.findByText("Grid view coming soon");
       expect(screen.queryByTitle("Rename project")).not.toBeInTheDocument();
       // Shared views are creator territory; the editor's own personal view is manageable.
-      expect(fireEvent.contextMenu(screen.getByRole("button", { name: "View: All tasks" }))).toBe(true);
+      expect(fireEvent.contextMenu(tab("All tasks"))).toBe(true);
       expect(screen.queryByRole("menu", { name: "Options for All tasks" })).not.toBeInTheDocument();
-      const list = await openViews(user);
-      const mine = await openViewOptions(await openType(user, list, "Grid"), /My tasks/, "My tasks");
+      const mine = await openViewMenu("My tasks");
       expect(within(mine).getByRole("menuitem", { name: "Rename view" })).toBeInTheDocument();
-      await user.keyboard("{Escape}{Escape}{Escape}");
-      await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
-
-      const types = await openAddView(user);
-      expect(within(types).getByText(/Editors can create personal views/)).toBeInTheDocument();
-      expect(within(types).getByRole("menuitem", { name: /^Calendar/ })).toBeInTheDocument();
-      await pick(user, /^Calendar/);
-      const dialog = await screen.findByRole("dialog", { name: "New calendar view" });
-      expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
-      expect(within(dialog).getByLabelText("Name")).toHaveValue("Calendar");
-      await user.click(within(dialog).getByRole("button", { name: "Create view" }));
-      await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/views")).toHaveLength(1));
-      expect(api.callsTo("POST /api/tables/tbl1/views")[0]?.body).toEqual({ name: "Calendar", type: "calendar", personal: true, config: null });
+      expect(within(mine).queryByRole("menuitem", { name: /Lock view|Share view/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Collection settings" })).not.toBeInTheDocument();
+      // They add records.
+      expect(screen.getByRole("button", { name: "New record" })).toBeInTheDocument();
     });
 
     it("has no Automations in the folder's menu, but Access", async () => {
@@ -438,63 +384,34 @@ describe("base shell on a desktop", () => {
   });
 
   describe("creator", () => {
-    it("can manage collections, rename the folder and create each of the seven view types", async () => {
+    it("manages collections, views and the collection's settings", async () => {
       const user = userEvent.setup();
       openBase("creator");
       await screen.findByText("Grid view coming soon");
       expect(screen.getByRole("button", { name: "Collection options for Tasks" })).toBeInTheDocument();
       // Every collection has its menu, not only the open one.
       expect(screen.getByRole("button", { name: "Collection options for People" })).toBeInTheDocument();
-      fireEvent.contextMenu(screen.getByRole("button", { name: "View: All tasks" }));
-      expect(await screen.findByRole("menu", { name: "Options for All tasks" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Collection settings" })).toBeInTheDocument();
+      expect(await openViewMenu("All tasks")).toBeInTheDocument();
       await user.keyboard("{Escape}");
-      const types = await openAddView(user);
-      const items = within(types).getAllByRole("menuitem");
-      expect(items.map((i) => i.textContent)).toEqual([
-        "GridRows and columns, like a spreadsheet",
-        "FormA page others fill in to add records",
-        "GalleryBig cards with pictures",
-        "KanbanCards in columns by a single select",
-        "CalendarRecords placed on their dates",
-        "TimelineStart and end dates as bars",
-        "ListA simple, compact list",
-      ]);
-      expect(within(types).queryByText(/Editors can create/)).not.toBeInTheDocument();
-    });
-
-    it("creates a shared view, with the personal option unchecked by default", async () => {
-      const user = userEvent.setup();
-      const api = openBase("creator", {
-        "POST /api/tables/tbl1/views": { id: "viw9", table_id: "tbl1", name: "Sprint board", type: "kanban", personal: false, locked: false, config: {} },
-      });
-      await screen.findByText("Grid view coming soon");
-      await openAddView(user);
-      await pick(user, /^Kanban/);
-      const dialog = await screen.findByRole("dialog", { name: "New kanban view" });
-      expect(within(dialog).getByRole("checkbox", { name: /Personal view/ })).not.toBeChecked();
-      const name = within(dialog).getByLabelText("Name");
-      await user.clear(name);
-      await user.type(name, "Sprint board");
-      await user.click(within(dialog).getByRole("button", { name: "Create view" }));
-      await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/views")).toHaveLength(1));
-      expect(api.callsTo("POST /api/tables/tbl1/views")[0]?.body).toEqual({ name: "Sprint board", type: "kanban", personal: false, config: null });
+      // There is no + tab and no Add view: new views come from Save as view.
+      expect(screen.queryByRole("button", { name: /Add view|New view/ })).not.toBeInTheDocument();
     });
 
     it("locks a view from its menu", async () => {
       const user = userEvent.setup();
       const api = openBase("creator", { "PATCH /api/views/viw1": { status: 204 } });
       await screen.findByText("Grid view coming soon");
-      fireEvent.contextMenu(screen.getByRole("button", { name: "View: All tasks" }));
+      await openViewMenu("All tasks");
       await user.click(await screen.findByRole("menuitem", { name: "Lock view" }));
       await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
       expect(api.callsTo("PATCH /api/views/viw1")[0]?.body).toEqual({ locked: true });
     });
 
     it("does not offer locking or sharing for personal views", async () => {
-      const user = userEvent.setup();
       openBase("creator");
       await screen.findByText("Grid view coming soon");
-      await openViewOptions(await openType(user, await openViews(user), "Grid"), /My tasks/, "My tasks");
+      await openViewMenu("My tasks");
       expect(await screen.findByRole("menuitem", { name: "Rename view" })).toBeInTheDocument();
       expect(screen.queryByRole("menuitem", { name: /Lock view/ })).not.toBeInTheDocument();
       expect(screen.queryByRole("menuitem", { name: /Share view/ })).not.toBeInTheDocument();
@@ -504,7 +421,7 @@ describe("base shell on a desktop", () => {
       const user = userEvent.setup();
       const api = openBase("creator", { "PATCH /api/views/viw2": { status: 204 } });
       await screen.findByText("Grid view coming soon");
-      await openViewOptions(await openViews(user), "Board", "Board");
+      await openViewMenu("Board");
       await user.click(await screen.findByRole("menuitem", { name: "Rename view" }));
       const dialog = await screen.findByRole("dialog", { name: "Rename view" });
       const name = within(dialog).getByLabelText("Name");
@@ -539,8 +456,7 @@ describe("base shell on a desktop", () => {
       expect(api.callsTo("POST /api/bases/app1/tables")[0]?.body).toEqual({ name: "Projects" });
     });
 
-    it("lists the default grid first in the view list, and a collection's row opens the view last used", async () => {
-      const user = userEvent.setup();
+    it("opens the view last used when a collection's row is tapped, and leaves the default view out of the sidebar", async () => {
       const schema = makeSchema("creator");
       const t = schema.tables[0]!;
       schema.tables[0] = { ...t, views: [{ ...t.views[0]!, id: "viwD", name: "Default grid", is_default: true }, ...t.views] };
@@ -549,9 +465,6 @@ describe("base shell on a desktop", () => {
       // A row names no view: BaseShell picks the one last used (else the first), so the row never links to one that is gone.
       await waitFor(() => expect(tasksLink()).toHaveAttribute("href", "/base/app1/tbl1"));
       expect(within(menu()).queryByRole("link", { name: /Default grid/ })).toBeNull();
-      const list = await openViews(user);
-      expect(within(list).getAllByRole("menuitem")[0]).toHaveAccessibleName("Default grid");
-      expect(within(list).getAllByRole("menuitem")[0]).toHaveAttribute("href", "/base/app1/tbl1/viwD");
     });
 
     it("can delete the last view (the default grid stays), but not the last collection", async () => {
@@ -561,7 +474,7 @@ describe("base shell on a desktop", () => {
       openBase("creator", { "GET /api/bases/app1": schema });
       await screen.findByText("Grid view coming soon");
 
-      fireEvent.contextMenu(screen.getByRole("button", { name: "View: All tasks" }));
+      await openViewMenu("All tasks");
       expect(await screen.findByRole("menuitem", { name: "Delete view" })).not.toHaveAttribute("aria-disabled");
       await user.keyboard("{Escape}");
       await user.click(screen.getByRole("button", { name: "Collection options for Tasks" }));
@@ -593,7 +506,7 @@ describe("base shell on a desktop", () => {
       const user = userEvent.setup();
       openBase("creator", { "GET /api/views/viw2/shares": [] });
       await screen.findByText("Grid view coming soon");
-      await openViewOptions(await openViews(user), "Board", "Board");
+      await openViewMenu("Board");
       await user.click(await screen.findByRole("menuitem", { name: "Share view…" }));
       const dialog = await screen.findByRole("dialog", { name: "Share Project tracker" });
       expect(within(dialog).getByRole("tab", { name: "Share a view" })).toHaveAttribute("aria-selected", "true");
@@ -702,27 +615,40 @@ describe("an empty base", () => {
 describe("base shell on a phone", () => {
   beforeEach(() => stubPhone());
 
-  it("has no menu to open: a back link to the Collections tab, the collection's name, Share, Members and search, above the bottom navigation", async () => {
+  it("has no menu to open: a back link to the Collections tab, Share, + and search in the header, the name under it, above the bottom navigation", async () => {
     openBase("owner");
     await screen.findByText("Grid view coming soon");
     expect(screen.queryByRole("button", { name: "Show menu" })).not.toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Collections in Project tracker" })).not.toBeInTheDocument();
     const header = screen.getByRole("main", { name: "All tasks" }).querySelector("header")!;
+    // The title has the whole row under the bar, so a long name is not squeezed between the buttons.
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Tasks");
+    expect(header).not.toContainElement(screen.getByRole("heading", { level: 1 }));
     expect(within(header).getByRole("link", { name: "Back to Collections" })).toHaveAttribute("href", "/workspace/wsp1/collections");
     expect(within(header).getByRole("button", { name: "Share" })).toBeInTheDocument();
-    expect(within(header).getByRole("link", { name: "Members" })).toHaveAttribute("href", "/workspace/wsp1/members");
+    expect(within(header).getByRole("button", { name: "New record" })).toBeInTheDocument();
     expect(within(header).getByRole("button", { name: "Search everything" })).toBeInTheDocument();
+    // The three buttons are all there is: nothing folded into More.
+    expect(within(header).queryByRole("button", { name: "More" })).not.toBeInTheDocument();
     // The Collections tab is the one that is current, from a collection.
     const tabs = await screen.findByRole("navigation", { name: "Main menu" });
     expect(within(tabs).getByRole("link", { name: "Collections" })).toHaveAttribute("aria-current", "page");
   });
 
-  it("leaves Share to those who can share", async () => {
+  it("leaves Share to those who can share, and + to those who can add", async () => {
     openBase("editor");
     await screen.findByText("Grid view coming soon");
     const header = screen.getByRole("main", { name: "All tasks" }).querySelector("header")!;
     expect(within(header).queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
-    expect(within(header).getByRole("link", { name: "Members" })).toBeInTheDocument();
+    expect(within(header).getByRole("button", { name: "New record" })).toBeInTheDocument();
+  });
+
+  it("gives a viewer neither", async () => {
+    openBase("viewer");
+    await screen.findByText("Grid view coming soon");
+    const header = screen.getByRole("main", { name: "All tasks" }).querySelector("header")!;
+    expect(within(header).queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
+    expect(within(header).queryByRole("button", { name: "New record" })).not.toBeInTheDocument();
+    expect(within(header).getByRole("button", { name: "Search everything" })).toBeInTheDocument();
   });
 });

@@ -20,7 +20,6 @@ import { canShareView } from "@/components/share/shareView";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/toast";
-import { ViewSwitcher } from "@/components/viewbar/ViewSwitcher";
 import { toolButtonClass } from "@/components/viewbar/ViewBar";
 import { cn } from "@/lib/cn";
 import { atLeast } from "@/lib/roles";
@@ -36,7 +35,7 @@ type Mode = "build" | "fill";
 
 export default function FormView(props: ViewProps) {
   const setup = useViewSetup(props);
-  const { schema, table, view, role, cfg } = setup;
+  const { table, view, role, cfg } = setup;
   const toast = useToast();
   const canFill = atLeast(role, "editor");
   const isCreator = atLeast(role, "creator");
@@ -87,8 +86,6 @@ export default function FormView(props: ViewProps) {
     <EditorEnvProvider value={setup.editorEnv}>
       <div className="flex h-full min-h-[24rem] flex-col">
         <div role="toolbar" aria-label="Form toolbar" className="flex flex-wrap items-center gap-1.5 border-b border-line bg-surface px-2.5 py-2 md:px-4 md:py-2.5">
-          {/* On a phone the picker has the first line to itself and the form's tools wrap under it. */}
-          <ViewSwitcher schema={schema} table={table} view={view} className="mr-1.5 max-w-[24rem] shrink-0 max-md:min-w-0 max-md:max-w-none max-md:basis-full" />
           {modes.length > 1 ? <SegmentedSwitch label="Form mode" size="md" value={mode} options={modes} onChange={setMode} className="md:mr-1.5" /> : null}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

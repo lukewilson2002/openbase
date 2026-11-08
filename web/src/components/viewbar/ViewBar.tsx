@@ -1,5 +1,5 @@
 /**
- * The view toolbar, one row: the table and view picker, then Filter, Sort, Group, Hide fields, Color
+ * The view toolbar, one row: Filter, Sort, Group, Hide fields, Color
  * and Row height (each tinted and naming what it does once in use, "Sorted by Who"), the view type's
  * own settings, and More; search at the end. Tools that do not fit move into More from the right end
  * first; Add field and Download CSV always live there. On a phone the tools fold into one menu behind
@@ -34,7 +34,6 @@ import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { visibleToolCount } from "./toolbarFit";
 import { FilterBuilder } from "./FilterBuilder";
 import { SortListEditor } from "./SortListEditor";
-import { ViewSwitcher } from "./ViewSwitcher";
 import {
   MAX_GROUPS,
   MAX_SORTS,
@@ -560,7 +559,7 @@ export function ViewBar(props: ViewBarProps) {
     const tools = moreEntries(toolDefs);
     return (
       <div role="toolbar" aria-label="View toolbar" className="flex flex-wrap items-center gap-1.5 bg-surface px-2.5 py-2">
-        {!showSearch && <ViewSwitcher schema={schema} table={table} view={view} className="flex-1" />}
+        {!showSearch && <div className="flex-1" />}
         <ToolMenu
           label="View tools"
           align="end"
@@ -593,7 +592,6 @@ export function ViewBar(props: ViewBarProps) {
     <DesktopBar
       toolDefs={toolDefs}
       moreEntries={moreEntries}
-      switcher={<ViewSwitcher schema={schema} table={table} view={view} className="mr-1.5 max-w-[24rem] shrink" />}
       setting={props.setting}
       extra={props.extra}
       end={
@@ -630,14 +628,12 @@ const TOOL_GAP = 2;
 function DesktopBar({
   toolDefs,
   moreEntries,
-  switcher,
   setting,
   extra,
   end,
 }: {
   toolDefs: ToolDef[];
   moreEntries: (overflow: ToolDef[]) => ToolEntry[];
-  switcher: ReactNode;
   setting?: ReactNode;
   extra?: ReactNode;
   end: ReactNode;
@@ -677,7 +673,6 @@ function DesktopBar({
 
   return (
     <div role="toolbar" aria-label="View toolbar" className="relative flex items-center gap-1.5 border-b border-line bg-surface px-4 py-2.5">
-      {switcher}
       <div ref={areaRef} className="flex min-w-0 flex-1 items-center gap-0.5" style={floor > 0 ? { minWidth: floor } : undefined}>
         {setting && (
           <span ref={settingRef} className="inline-flex shrink-0">

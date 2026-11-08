@@ -1,9 +1,8 @@
 import { createRef } from "react";
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { ViewConfig } from "@/api/types";
-import { BaseDialogContext } from "@/base/BaseDialogs";
 import { ALL_FIELDS, makeTable } from "@/test/fields";
 import { makeSchema, makeView, mockApi, renderWithProviders, stubDesktop } from "@/test/utils";
 import { ViewBar, type ViewBarProps } from "./ViewBar";
@@ -16,7 +15,7 @@ const notes = { ...ALL_FIELDS.rich_text, id: "fld_notes", name: "Notes" };
 const table = makeTable([name, notes]);
 
 /** A desktop unless `phone`; jsdom matches no media query, which the toolbar reads as a phone. */
-function renderBar(over: Partial<ViewBarProps> = {}, { phone = false, onDialog }: { phone?: boolean; onDialog?: () => void } = {}) {
+function renderBar(over: Partial<ViewBarProps> = {}, { phone = false }: { phone?: boolean } = {}) {
   if (!phone) stubDesktop();
   const view = over.view ?? makeView({ id: "viw1", name: "All tasks" });
   const props: ViewBarProps = {
@@ -35,8 +34,7 @@ function renderBar(over: Partial<ViewBarProps> = {}, { phone = false, onDialog }
     searchInputRef: createRef<HTMLInputElement>(),
     ...over,
   };
-  const bar = <ViewBar {...props} />;
-  const { unmount } = renderWithProviders(onDialog ? <BaseDialogContext.Provider value={onDialog}>{bar}</BaseDialogContext.Provider> : bar);
+  const { unmount } = renderWithProviders(<ViewBar {...props} />);
   return { ...props, unmount };
 }
 
@@ -76,7 +74,7 @@ describe("ViewBar: every change is a draft, for everyone", () => {
     renderBar({ view: makeView({ id: "viw1", name: "All tasks", locked: true }) });
     expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
     expect(screen.queryByText("Locked")).not.toBeInTheDocument();
-    expect(within(screen.getByRole("button", { name: "View: All tasks" })).getByRole("img", { name: "Locked view" })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Locked view" })).not.toBeInTheDocument();
   });
 
   it("sets the row height from the toolbar", async () => {
@@ -165,235 +163,6 @@ describe("ViewBar export and sharing", () => {
   it("has no Share view of its own: sharing a view is in the base's Share dialog and the view's menu", () => {
     renderBar({ role: "creator", schema: makeSchema("creator") });
     expect(screen.queryByRole("button", { name: /Share view/ })).not.toBeInTheDocument();
-  });
-});
-
-describe("ViewBar view switcher", () => {
-  /** Opens the list of views from the button naming the open one. */
-  const openList = async (user: ReturnType<typeof userEvent.setup>, open = "All tasks") => {
-    await user.click(screen.getByRole("button", { name: `View: ${open}` }));
-    return screen.findByRole("menu", { name: "Views of Tasks" });
-  };
-  /** Opens the grids' submenu from their row in the list (→; a click on the row opens the view it names). */
-  const openGrids = async (user: ReturnType<typeof userEvent.setup>) => {
-    within(await openList(user)).getByRole("menuitem", { name: /^Grid views/ }).focus();
-    await user.keyboard("{ArrowRight}");
-    return screen.findByRole("menu", { name: "Grid views" });
-  };
-
-  it("names the open view on one button, which lists the views, several of one type sharing a row that opens them", async () => {
-    const user = userEvent.setup();
-    const schema = makeSchema("creator");
-    const t = schema.tables[0]!;
-    renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" });
-    const button = screen.getByRole("button", { name: "View: All tasks" });
-    expect(button).toHaveTextContent("All tasks");
-    expect(button).toHaveClass("bg-primary");
-    // No button per view any more.
-    expect(screen.queryByRole("link", { name: "Board" })).not.toBeInTheDocument();
-    const menu = await openList(user);
-    // The two grids share a row named like a view (the open one), with how many more; the only kanban view stands on its own.
-    const rows = within(menu).getAllByRole("menuitem");
-    expect(rows.map((i) => i.textContent)).toEqual(["All tasks+1", "Board"]);
-    expect(rows[1]).toHaveAttribute("href", "/base/app1/tbl1/viw2");
-    expect(within(menu).getByRole("menuitem", { name: "Grid views: All tasks and 1 more" })).toHaveAttribute("aria-haspopup", "menu");
-    await user.keyboard("{Escape}");
-    const sub = await openGrids(user);
-    expect(within(sub).getAllByRole("menuitem").map((i) => [i.textContent, i.getAttribute("href"), i.getAttribute("aria-current")])).toEqual([
-      ["All tasks", "/base/app1/tbl1/viw1", "page"],
-      ["My tasks", "/base/app1/tbl1/viw3", null],
-    ]);
-    expect(within(sub).getByRole("img", { name: "Personal view" })).toBeInTheDocument();
-  });
-
-  it("names a shared row after the open view of its type", async () => {
-    const user = userEvent.setup();
-    const schema = makeSchema("creator");
-    const t = schema.tables[0]!;
-    renderBar({ schema, table: t, view: t.views[2]!, config: t.views[2]!.config, role: "creator" });
-    const menu = await openList(user, "My tasks");
-    expect(within(menu).getByRole("menuitem", { name: "Grid views: My tasks and 1 more" })).toBeInTheDocument();
-  });
-
-  it("marks a locked view", () => {
-    const view = makeView({ id: "viw1", name: "Frozen", locked: true });
-    const schema = makeSchema("viewer");
-    const t = { ...schema.tables[0]!, views: [view] };
-    renderBar({ schema, table: t, view, config: view.config });
-    expect(within(screen.getByRole("button", { name: "View: Frozen" })).getByRole("img", { name: "Locked view" })).toBeInTheDocument();
-  });
-
-  it("opens the project's dialog for a new view of the chosen type", async () => {
-    const user = userEvent.setup();
-    const onDialog = vi.fn();
-    const schema = makeSchema("creator");
-    const t = schema.tables[0]!;
-    renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" }, { onDialog });
-    // At the end of the list of views, after a line.
-    const list = await openList(user);
-    expect(within(list).getAllByRole("menuitem").at(-1)).toHaveTextContent("Add view");
-    await user.click(within(list).getByRole("menuitem", { name: "Add view" }));
-    // A click straight on the item: jsdom has no layout for the pointer's path into the submenu.
-    fireEvent.click(within(await screen.findByRole("menu", { name: "Add view" })).getByRole("menuitem", { name: /^Calendar/ }));
-    expect(onDialog).toHaveBeenCalledWith({ kind: "create-view", table: t, type: "calendar" });
-  });
-
-  it("opens the open view's menu on a right-click of the button, for those who may change it", async () => {
-    const user = userEvent.setup();
-    const onDialog = vi.fn();
-    const schema = makeSchema("creator");
-    const t = schema.tables[0]!;
-    const { unmount } = renderBar({ schema, table: t, view: t.views[1]!, config: t.views[1]!.config, role: "creator" }, { onDialog });
-    fireEvent.contextMenu(screen.getByRole("button", { name: "View: Board" }), { clientX: 40, clientY: 30 });
-    const menu = await screen.findByRole("menu", { name: "Options for Board" });
-    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Rename view", "Duplicate view", "Share view…", "Lock view", "Move up", "Move down", "Delete view"]);
-    await user.click(within(menu).getByRole("menuitem", { name: /Rename view/ }));
-    expect(onDialog).toHaveBeenCalledWith({ kind: "rename-view", view: t.views[1] });
-    unmount();
-    // A viewer has nothing to do with a view: the browser's own menu stays.
-    const viewer = makeSchema("viewer");
-    renderBar({ schema: viewer, table: viewer.tables[0]!, view: viewer.tables[0]!.views[1]!, config: viewer.tables[0]!.views[1]!.config }, { onDialog });
-    expect(fireEvent.contextMenu(screen.getByRole("button", { name: "View: Board" }))).toBe(true);
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-  });
-
-  describe("moving a view in its options menu", () => {
-    const reorderUrl = "POST /api/tables/tbl1/views/reorder";
-    const open = async (role: string, view: number) => {
-      const schema = makeSchema(role);
-      const t = schema.tables[0]!;
-      renderBar({ schema, table: t, view: t.views[view]!, config: t.views[view]!.config, role }, { onDialog: vi.fn() });
-      fireEvent.contextMenu(screen.getByRole("button", { name: `View: ${t.views[view]!.name}` }), { clientX: 40, clientY: 30 });
-      return screen.findByRole("menu", { name: `Options for ${t.views[view]!.name}` });
-    };
-
-    it("sends the shared views' ids in the new order, leaving the personal view out", async () => {
-      const user = userEvent.setup();
-      const api = mockApi({ [reorderUrl]: { ok: true } });
-      const menu = await open("creator", 0);
-      // The first of the shared views cannot go up.
-      expect(within(menu).getByRole("menuitem", { name: "Move up" })).toHaveAttribute("aria-disabled", "true");
-      await user.click(within(menu).getByRole("menuitem", { name: "Move down" }));
-      await waitFor(() => expect(api.callsTo(reorderUrl)).toHaveLength(1));
-      expect(api.callsTo(reorderUrl)[0]?.body).toEqual({ ids: ["viw2", "viw1"] });
-    });
-
-    it("disables Move down on the last of its group, and Move up sends the order back", async () => {
-      const user = userEvent.setup();
-      const api = mockApi({ [reorderUrl]: { ok: true } });
-      const menu = await open("creator", 1);
-      expect(within(menu).getByRole("menuitem", { name: "Move down" })).toHaveAttribute("aria-disabled", "true");
-      await user.click(within(menu).getByRole("menuitem", { name: "Move up" }));
-      await waitFor(() => expect(api.callsTo(reorderUrl)).toHaveLength(1));
-      expect(api.callsTo(reorderUrl)[0]?.body).toEqual({ ids: ["viw2", "viw1"] });
-    });
-
-    it("has no Move for a lone personal view", async () => {
-      mockApi({});
-      const menu = await open("creator", 2);
-      expect(within(menu).queryByRole("menuitem", { name: /^Move/ })).not.toBeInTheDocument();
-      expect(within(menu).getByRole("menuitem", { name: "Rename view" })).toBeInTheDocument();
-    });
-
-    it("lets an editor move their personal views among themselves, with the shared ones left out", async () => {
-      const user = userEvent.setup();
-      const api = mockApi({ [reorderUrl]: { ok: true } });
-      const schema = makeSchema("editor");
-      const t = { ...schema.tables[0]!, views: [...schema.tables[0]!.views, makeView({ id: "viw5", name: "Mine too", personal: true })] };
-      const mine = t.views[2]!;
-      renderBar({ schema: { ...schema, tables: [t] }, table: t, view: mine, config: mine.config, role: "editor" }, { onDialog: vi.fn() });
-      fireEvent.contextMenu(screen.getByRole("button", { name: "View: My tasks" }), { clientX: 40, clientY: 30 });
-      const menu = await screen.findByRole("menu", { name: "Options for My tasks" });
-      expect(within(menu).getByRole("menuitem", { name: "Move up" })).toHaveAttribute("aria-disabled", "true");
-      await user.click(within(menu).getByRole("menuitem", { name: "Move down" }));
-      await waitFor(() => expect(api.callsTo(reorderUrl)).toHaveLength(1));
-      expect(api.callsTo(reorderUrl)[0]?.body).toEqual({ ids: ["viw5", "viw3"] });
-    });
-
-    it("gives a viewer no menu and so no Move items", async () => {
-      const schema = makeSchema("viewer");
-      const t = schema.tables[0]!;
-      renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config }, { onDialog: vi.fn() });
-      expect(fireEvent.contextMenu(screen.getByRole("button", { name: "View: All tasks" }))).toBe(true);
-      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-      expect(screen.queryByRole("menuitem", { name: /^Move/ })).not.toBeInTheDocument();
-    });
-  });
-
-  it("opens a view's menu on a right-click of it in the list, over the list, which stays open", async () => {
-    const user = userEvent.setup();
-    const onDialog = vi.fn();
-    const schema = makeSchema("creator");
-    const t = schema.tables[0]!;
-    renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" }, { onDialog });
-    const list = await openGrids(user);
-    fireEvent.contextMenu(within(list).getByRole("menuitem", { name: /My tasks/ }), { clientX: 60, clientY: 80 });
-    let menu = await screen.findByRole("menu", { name: "Options for My tasks" });
-    expect(screen.getByRole("menu", { name: "Grid views" })).toBeInTheDocument();
-    // Escape closes the view's menu only; the list is still there to right-click another.
-    await user.keyboard("{Escape}");
-    await waitFor(() => expect(screen.queryByRole("menu", { name: "Options for My tasks" })).not.toBeInTheDocument());
-    expect(screen.getByRole("menu", { name: "Grid views" })).toBeInTheDocument();
-    fireEvent.contextMenu(within(screen.getByRole("menu", { name: "Grid views" })).getByRole("menuitem", { name: /My tasks/ }), { clientX: 60, clientY: 80 });
-    menu = await screen.findByRole("menu", { name: "Options for My tasks" });
-    // Straight onto the item: in jsdom (no layout) the pointer's way out of a submenu reads as leaving it.
-    fireEvent.click(within(menu).getByRole("menuitem", { name: /Rename view/ }));
-    expect(onDialog).toHaveBeenCalledWith({ kind: "rename-view", view: t.views[2] });
-  });
-
-  it("keeps a view's menu open while the mouse crosses the list under it on the way in", async () => {
-    const user = userEvent.setup();
-    const onDialog = vi.fn();
-    const schema = makeSchema("creator");
-    const t = schema.tables[0]!;
-    renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" }, { onDialog });
-    const list = await openList(user);
-    const board = within(list).getByRole("menuitem", { name: /Board/ });
-    fireEvent.contextMenu(board, { clientX: 60, clientY: 80 });
-    const menu = await screen.findByRole("menu", { name: "Options for Board" });
-    // Off the item it was opened from, over the grids' row (which would open their submenu), and into the menu.
-    await user.unhover(board);
-    const grids = within(list).getByRole("menuitem", { name: /^Grid views/ });
-    await user.hover(grids);
-    await user.unhover(grids);
-    expect(list).not.toContainElement(document.activeElement as HTMLElement);
-    expect(screen.queryByRole("menu", { name: "Grid views" })).not.toBeInTheDocument();
-    await user.hover(within(menu).getByRole("menuitem", { name: /Delete view/ }));
-    expect(screen.getByRole("menu", { name: "Options for Board" })).toBeInTheDocument();
-    await user.click(within(menu).getByRole("menuitem", { name: /Delete view/ }));
-    expect(onDialog).toHaveBeenCalledWith({ kind: "delete-view", table: t, view: t.views[1] });
-  });
-
-  it("opens a view's menu on a held press in the list, and the lift does not also open the view", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      const schema = makeSchema("creator");
-      const t = schema.tables[0]!;
-      renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" }, { phone: true, onDialog: vi.fn() });
-      const list = await openList(user);
-      const board = within(list).getByRole("menuitem", { name: /Board/ });
-      fireEvent.pointerDown(board, { pointerType: "touch", clientX: 40, clientY: 30 });
-      await act(() => vi.advanceTimersByTimeAsync(600));
-      expect(await screen.findByRole("menu", { name: "Options for Board" })).toBeInTheDocument();
-      fireEvent.pointerUp(board, { pointerType: "touch" });
-      // The click after the lift is swallowed: still on the first view.
-      expect(fireEvent.click(board)).toBe(false);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("tells editors they can make personal views only, and offers viewers no Add view", async () => {
-    const user = userEvent.setup();
-    const schema = makeSchema("editor");
-    const t = schema.tables[0]!;
-    const { unmount } = renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "editor" }, { onDialog: vi.fn() });
-    await user.click(within(await openList(user)).getByRole("menuitem", { name: "Add view" }));
-    expect(await screen.findByText("Editors can create personal views.")).toBeInTheDocument();
-    unmount();
-    renderBar({}, { onDialog: vi.fn() });
-    expect(within(await openList(user)).queryByRole("menuitem", { name: "Add view" })).not.toBeInTheDocument();
   });
 });
 

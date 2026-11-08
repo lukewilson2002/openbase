@@ -1,6 +1,7 @@
 /**
  * What can be done with a view, as menu items: rename, duplicate, share, lock or unlock, delete, each
- * for those who may. The view switcher's menu of a view shows them (with its own Move up and down).
+ * for those who may. A view tab's menu shows them (with its own Move left and right). Drawn as
+ * dropdown items on a desktop and as rows of a bottom sheet on a phone (`MenuItem`).
  */
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
@@ -12,8 +13,8 @@ import type { BaseSchema, Table, View } from "@/api/types";
 import type { BaseDialog } from "@/base/BaseDialogs";
 import { basePermissions } from "@/base/permissions";
 import { canShareView } from "@/components/share/shareView";
-import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/toast";
+import { MenuItem, MenuSeparator } from "@/shell/menuItems";
 
 /** Whether anyone in this role has something to do with the view (else no menu at all). */
 export function hasViewActions(schema: BaseSchema, view: View, onDialog: ((dialog: BaseDialog) => void) | null): boolean {
@@ -50,33 +51,32 @@ export function ViewMenuItems({ schema, table, view: v, onDialog, extra }: { sch
       {canConfigure && (
         <>
           {onDialog && (
-            <DropdownMenuItem onSelect={() => onDialog({ kind: "rename-view", view: v })}>
-              <Pencil aria-hidden className="size-4" /> Rename view
-            </DropdownMenuItem>
+            <MenuItem icon={Pencil} onSelect={() => onDialog({ kind: "rename-view", view: v })}>
+              Rename view
+            </MenuItem>
           )}
-          <DropdownMenuItem onSelect={() => duplicate.mutate(v.id)}>
-            <Copy aria-hidden className="size-4" /> Duplicate view
-          </DropdownMenuItem>
+          <MenuItem icon={Copy} onSelect={() => duplicate.mutate(v.id)}>
+            Duplicate view
+          </MenuItem>
         </>
       )}
       {canShare && onDialog && (
-        <DropdownMenuItem onSelect={() => onDialog({ kind: "share", table, view: v, tab: "view" })}>
-          <Share2 aria-hidden className="size-4" /> Share view…
-        </DropdownMenuItem>
+        <MenuItem icon={Share2} onSelect={() => onDialog({ kind: "share", table, view: v, tab: "view" })}>
+          Share view…
+        </MenuItem>
       )}
       {canLock && (
-        <DropdownMenuItem onSelect={() => toggleLock.mutate(v)}>
-          {v.locked ? <LockOpen aria-hidden className="size-4" /> : <Lock aria-hidden className="size-4" />}
+        <MenuItem icon={v.locked ? LockOpen : Lock} onSelect={() => toggleLock.mutate(v)}>
           {v.locked ? "Unlock view" : "Lock view"}
-        </DropdownMenuItem>
+        </MenuItem>
       )}
       {extra}
       {canConfigure && onDialog && (
         <>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem danger disabled={v.is_default} onSelect={() => onDialog({ kind: "delete-view", table, view: v })}>
-            <Trash2 aria-hidden className="size-4" /> Delete view
-          </DropdownMenuItem>
+          <MenuSeparator />
+          <MenuItem icon={Trash2} danger disabled={v.is_default} onSelect={() => onDialog({ kind: "delete-view", table, view: v })}>
+            Delete view
+          </MenuItem>
         </>
       )}
     </>
