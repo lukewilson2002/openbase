@@ -58,6 +58,10 @@ a picked list (`base_ids`); their role applies to each project they can open, an
 any other project answers 404. Owners always have every project. A member limited to
 some projects who creates or duplicates a project gets it added to their list.
 
+- `POST /api/workspaces` creates the workspace together with its top-level project (named after
+  it, without tables) and answers the summary with `root_base_id` and that project in `bases`.
+  `DELETE /api/workspaces/{id}` and `DELETE /api/bases/{id}` only move to the trash
+  (`POST /api/trash/restore`); no endpoint erases a workspace or project, only the retention purge.
 - `GET /api/workspaces` lists the caller's workspaces with the projects they can
   open, `member_count`, `pending_invite_count` and, per project, `people` (members
   who can open it, then pending invites sent to an address).

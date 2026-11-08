@@ -460,6 +460,70 @@ mod tests {
         }
     }
 
+    /// Every tool that deletes or throws something away (AGT-4). Adding a destructive tool means
+    /// deciding here, and in the list in docs/mcp.md, whether the trash brings it back.
+    const RECOVERABLE: &[&str] = &[
+        "delete_records",
+        "delete_table",
+        "delete_field",
+        "delete_view",
+        "delete_project",
+        "delete_workspace",
+    ];
+    const PERMANENT: &[&str] = &[
+        "delete_share_link",
+        "delete_automation",
+        "delete_inbox_item",
+        "revoke_invite",
+        "remove_member",
+        // Not flagged destructive, but they throw old data away.
+        "update_field",
+        "file_inbox_item",
+        "update_automation",
+    ];
+
+    #[test]
+    fn every_destructive_tool_says_whether_it_can_be_undone() {
+        let docs = include_str!("../../../../docs/mcp.md");
+        for t in registry().iter().filter(|t| t.destructive) {
+            if t.name == "api_request" {
+                // Whatever its DELETE endpoint does; the description lists the permanent ones.
+                assert!(t.description.contains("can't be undone"), "{}", t.name);
+                continue;
+            }
+            assert!(
+                RECOVERABLE.contains(&t.name) || PERMANENT.contains(&t.name),
+                "{} is destructive: add it to RECOVERABLE or PERMANENT and to docs/mcp.md",
+                t.name
+            );
+        }
+        for name in RECOVERABLE {
+            let t = registry().iter().find(|t| t.name == *name).unwrap();
+            assert!(t.destructive, "{name}");
+            assert!(
+                t.description.contains("trash") && t.description.contains("restore_from_trash"),
+                "{name} should say how to restore it"
+            );
+            assert!(
+                !t.description.contains("can't be undone"),
+                "{name} is recoverable"
+            );
+        }
+        for name in PERMANENT {
+            let t = registry().iter().find(|t| t.name == *name).unwrap();
+            assert!(
+                t.description.contains("can't be undone"),
+                "{name} deletes for good: its description must say \"This can't be undone\""
+            );
+        }
+        for name in RECOVERABLE.iter().chain(PERMANENT) {
+            assert!(
+                docs.contains(&format!("`{name}`")),
+                "{name} is missing from the destructive tools list in docs/mcp.md"
+            );
+        }
+    }
+
     #[test]
     fn long_results_are_truncated_on_a_char_boundary() {
         let text = "é".repeat(MAX_RESULT_BYTES);

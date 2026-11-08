@@ -61,7 +61,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "file_inbox_item",
             "File an inbox draft into a table",
-            "Turn an inbox draft into a record of a table and remove the draft, in one step. You choose the values: `fields` is {\"Field name\": value} like create_records (the draft's title and text are NOT copied automatically: put the title in the primary field and the text in a rich-text field yourself, or set note_as_comment to add the text as the record's first comment). To keep the draft's files, list them ([{\"id\": \"att...\"}]) in an attachment field. Needs the editor role on the project; nothing changes if the record cannot be created.",
+            "Turn an inbox draft into a record of a table and remove the draft (drafts have no trash: this can't be undone), in one step. You choose the values: `fields` is {\"Field name\": value} like create_records (the draft's title and text are NOT copied automatically: put the title in the primary field and the text in a rich-text field yourself, or set note_as_comment to add the text as the record's first comment). To keep the draft's files, list them ([{\"id\": \"att...\"}]) in an attachment field. Needs the editor role on the project; nothing changes if the record cannot be created.",
             object(
                 json!({
                     "id": string("Inbox draft id (inb...), from list_inbox."),
@@ -77,7 +77,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "delete_inbox_item",
             "Delete an inbox draft",
-            "Delete an inbox draft permanently (drafts have no trash).",
+            "Delete an inbox draft permanently (drafts have no trash). This can't be undone.",
             object(
                 json!({ "id": string("Inbox draft id (inb...), from list_inbox.") }),
                 &["id"],

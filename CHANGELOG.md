@@ -32,6 +32,14 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   which can no longer be deleted until another takes its place. Deleting or retyping a page,
   Home date or Done field clears the setting. Saving a record's page with `PUT
   /api/tables/{id}/records/{rid}/page` adds "Page" to a table that has none.
+- **Agents know the top level and what a delete leaves behind.** MCP `create_workspace` also
+  returns `workspace_id` and `top_level_project`; `list_projects` marks each project's
+  `is_top_level`. `delete_workspace` and `delete_project` say what moved to the trash, how to
+  restore it (`restore_from_trash` with kind and id) and the date the retention purge erases it
+  (`trashed`, `restore_with`, `purge_after`, `retention_days`). The tools that delete for good
+  (share links, automations, inbox drafts, invites, members) say "This can't be undone", and
+  [docs/mcp.md](docs/mcp.md#destructive-tools-and-what-can-be-undone) lists every destructive
+  tool and whether the trash brings it back.
 - **Calendar weeks and months in date filters.** `is_within` takes `this_calendar_week`,
   `next_calendar_week`, `last_calendar_week`, `next_calendar_month` and `last_calendar_month`.
   Weeks start on the request's `week_start` (0 Sunday, 1 Monday; a view query, summaries, CSV

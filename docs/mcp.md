@@ -284,10 +284,12 @@ The details are in [Choose a token](#choose-a-token), [Scope model](#scope-model
   explains each of the 28 types.
 - **Every tool returns compact JSON** (and the same data as `structuredContent`).
   Select values, people and linked records read the same way in every tool.
-- **Deletions are recoverable.** Deleted records, fields, tables, views, projects and
-  workspaces go to the trash and come back with `restore_from_trash` within
-  `OPENBASE_TRASH_DAYS` (30). Changing a field's type is the exception: it converts
-  the data and asks for confirmation first.
+- **Deleting a record, field, table, view, project or workspace is recoverable.** They go to
+  the trash and come back with `restore_from_trash` within `OPENBASE_TRASH_DAYS` (30). A few
+  deletes are for good; their descriptions say "This can't be undone", and
+  [Destructive tools](#destructive-tools-and-what-can-be-undone) lists every one.
+  Changing a field's type is another exception: it converts the data and asks for
+  confirmation first.
 - **Errors say how to fix them**: the valid names, the missing role ("requires the
   creator role on this base"), or the missing token permission ("needs an API token
   with the 'manage' permission").
@@ -325,7 +327,7 @@ are names or ids.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `list_projects` | any | Workspaces and projects the token can reach, with your role on each and their icons (alias `list_bases`) |
+| `list_projects` | any | Workspaces and projects the token can reach, with your role on each and their icons (alias `list_bases`). A project appears as a folder in the app, except a workspace's top-level project: each workspace names it (`top_level_project`) and each project says `is_top_level` |
 | `get_project_schema` | any | The project's icon, and its tables (with icons), fields (id, name, type, options) and views (alias `get_base_schema`) |
 | `list_records` | any | Records keyed by field **name**; optional view, `filterByFormula`, sort, field list; 50 per call (max 200), `offset` continues; `include_empty: true` returns fields with no value as `null` (default: left out, as in Airtable) |
 | `search_records` | any | Case-insensitive text search over all fields; takes `include_empty` like `list_records` |
@@ -344,10 +346,10 @@ are names or ids.
 | Tool | Needs | What it does |
 |---|---|---|
 | `list_workspaces` | any | Workspaces (with icons) with your role, member and pending-invite counts, and the projects you can open (with who can open each) |
-| `create_workspace` | manage | New workspace, optionally with a `color` (a colour name such as `blue`, checked like a project's colour; the next default colour otherwise) and an `icon`; you become its owner |
+| `create_workspace` | manage | New workspace, optionally with a `color` (a colour name such as `blue`, checked like a project's colour; the next default colour otherwise) and an `icon`; you become its owner. It comes with its top-level project (named after the workspace, empty), and the result gives both ids: `workspace_id` and `top_level_project` (the `project_id` to create tables in), next to the unchanged `workspace` summary. `POST /api/workspaces` answers the same summary with `root_base_id` and the project in `bases` |
 | `rename_workspace` | manage | Rename and/or change the `color` and/or change or remove the `icon` (owner role) |
 | `set_top_level_project` | manage | Choose which project of a workspace is its top level, the one whose tables the app shows directly under the workspace (every other project appears as a folder). Only the choice moves; the top-level project cannot be deleted until another is chosen (owner role). `list_projects` shows `top_level_project` and each project's `is_top_level`. Same as `POST /api/workspaces/{id}/top-level` |
-| `delete_workspace` | manage | To the trash (owner role) |
+| `delete_workspace` | manage | To the trash (owner role); nothing is erased. The result says what moved (`trashed`: the workspace and its projects), how to bring it back (`restore_with`: `restore_from_trash` with kind `workspace` and its id) and the date the retention purge will erase it (`purge_after`, `retention_days`), in `note` too |
 | `reorder_workspaces` | write | Your own order of your workspaces in the menu: list them (names or ids) in the new order; any you leave out keep their places. Nobody else's order changes |
 | `list_members` | manage | Members of a workspace with their role and projects (`all_projects` or `project_ids`), or the workspace members who can open one project |
 | `set_member_role` | manage | Change a workspace member's `role`, and/or their projects: `all_projects: true` or a `project_ids` list (owner role; owners always have every project; a workspace always keeps an owner). Scope `project` is refused: there are no per-project roles |
@@ -360,8 +362,8 @@ are names or ids.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `create_project` / `rename_project` | write | (aliases `create_base` / `rename_base`) Create a project in a workspace (it starts with the table "Table 1", which has the primary field "Name" and the page field "Page" like any table added later; if you are limited to some bases, the new one is added to your list); rename or restyle it (name, colour, `icon`) |
-| `duplicate_project` / `delete_project` | manage | (aliases `duplicate_base` / `delete_base`) Copy a project (records optional; the copy keeps the icons); delete to the trash (owner role) |
+| `create_project` / `rename_project` | write | (aliases `create_base` / `rename_base`) Create a project (a folder in the app) in a workspace (it starts with the table "Table 1", which has the primary field "Name" and the page field "Page" like any table added later; if you are limited to some bases, the new one is added to your list); rename or restyle it (name, colour, `icon`) |
+| `duplicate_project` / `delete_project` | manage | (aliases `duplicate_base` / `delete_base`) Copy a project (records optional; the copy keeps the icons); delete to the trash (owner role). The result of `delete_project` reports what moved, `restore_with` (kind `project` and the id) and `purge_after`, like `delete_workspace`. A workspace's top-level project is refused with "Make another folder the top level first, or delete the workspace": call `set_top_level_project` first |
 | `reorder_projects` | write | Order of the projects in a workspace's menu, for everyone: the listed ones take their own places in the new order, the rest stay (creator role on each) |
 | `create_table` / `rename_table` | write | Add a table, optionally with its `color` (a palette colour; the next of a cycle otherwise), `icon` (accepted, no longer shown in the app) and a `fields` list (each entry is the arguments of `create_field` without `project_id` and `table`), so a table is set up in one call; rename it or change its description, `color` or `icon`. A new table always starts with the primary text field "Name", the rich text field "Page" (the body of its records, hidden in its views, added after the listed fields; "Page 2" and so on if a listed field already has the name) and a grid view (the same as the first table of a new project): `fields` adds exactly what it lists, never anything extra. All or nothing: every field is checked first and if one is invalid nothing is created and the error names it (`fields[2] 'Status'`). A lookup, rollup or count may use a link field listed before it, and a link may point to any table of the project; to link a table to itself, create it first and add the field with `create_field` |
 | `duplicate_table` / `delete_table` | write | Copy a table (records optional; the copy keeps the icon); delete to the trash |
@@ -628,6 +630,48 @@ password in the app, then `admin_send_test_email`.
 | `admin_stats` | Counts, sizes, last backup, version |
 | `admin_create_backup` / `admin_list_backups` | Make a backup now; list the stored backups |
 
+## Destructive tools and what can be undone
+
+An agent with full access (a token with write and manage, or a connected app at Full
+control) can create and delete workspaces and projects, and every such delete can be undone
+from the trash. Deleting a workspace or project also needs its owner to be the person the token
+acts for; creating a workspace needs only full access, and creating a project needs the
+creator role. The rules are the web app's own.
+
+**Workspaces and projects are never erased by a tool or a token.** `delete_workspace` and
+`delete_project` (and `DELETE /api/workspaces/{id}`, `DELETE /api/bases/{id}`) only move them
+to the trash. Their results state what moved (`trashed`), how to bring it back (`restore_with`:
+`restore_from_trash` with `kind` `workspace` or `project` and the id) and when the daily
+retention purge will erase it (`purge_after`, `retention_days`). Only that purge erases them,
+and no REST endpoint, tool or token does it sooner. The top-level project of a workspace
+cannot be deleted at all until another project is the top level (`set_top_level_project`).
+
+Every tool that deletes or throws something away, and whether the trash brings it back:
+
+| Tool | What it removes | Recoverable | How, or why not |
+|---|---|---|---|
+| `delete_workspace` | A workspace with its projects, tables and records | **Yes** | `restore_from_trash` kind `workspace`, until the purge |
+| `delete_project` | A project (a folder) with its tables and records | **Yes** | `restore_from_trash` kind `project`, until the purge |
+| `delete_table` | A table with its records, and link fields pointing at it | **Yes** | `restore_from_trash` kind `table` |
+| `delete_field` | A field and the fields that depend on it | **Yes** | `restore_from_trash` kind `field` |
+| `delete_view` | A view (its share links stop working) | **Yes** | `restore_from_trash` kind `view`; the share links are not restored |
+| `delete_records` | 1-10 records | **Yes** | `restore_from_trash` kind `record` |
+| `delete_share_link` | A share link or public form link | **No** | No trash; create a new link (a new URL) |
+| `delete_automation` | An automation and its run history | **No** | No trash; create it again |
+| `delete_inbox_item` | An inbox draft | **No** | Drafts have no trash |
+| `revoke_invite` | An invite link | **No** | Create a new invite |
+| `remove_member` | A member's place in a workspace, or a project off their list | **No** | Invite them again; their project list is not kept |
+| `update_field` (type change) | Values that do not fit the new type | **No** | Asks for `confirm_conversion` first |
+| `update_automation` | The replaced trigger or actions | **No** | Replace them again from your own copy |
+| `update_view` | Config parts you replace (filters, sorts, groups, layout settings) | **No** | Set them again |
+| `update_records` | The old values of the fields you change | **Partly** | `get_record_history` shows the old values; write them back |
+| `file_inbox_item` | The inbox draft (it becomes a record) | **No** | Delete the record; the draft is not restored |
+| `api_request` | Whatever its `DELETE` endpoint deletes | **As that endpoint** | Records, fields, tables, views, projects and workspaces: yes. Comments (`DELETE /api/comments/{id}`), share links, automations, invites and inbox drafts: no. `POST /api/tables/{id}/records/{rid}/discard` takes back a record you created in the last 24 hours and nobody touched, for good |
+
+Tools not listed here only add or read, or change something you can change back (names,
+colours, order, access levels, enabling and disabling). The descriptions of the tools marked
+**No** say "This can't be undone", and so do the matching `DELETE` entries in `api_reference`.
+
 ## Reaching everything: api_reference and api_request
 
 The tools above cover the whole application, but `api_request` stays for
@@ -722,8 +766,10 @@ have no access" (the project is outside the user's or the token's reach).
 - **Limits.** Bodies up to 8 MB; per-token and per-user request rates; invalid tokens
   cost nothing and are never counted.
 - **Destructive actions are recoverable** (trash) except changing a field's type,
-  which needs an explicit confirmation, and deleting automations, share links and
-  invites.
+  which needs an explicit confirmation, and deleting automations, share links, comments,
+  inbox drafts and invites, and removing members. No tool or token can erase a workspace or
+  project for good: only the retention purge does, after `OPENBASE_TRASH_DAYS`
+  ([the full list](#destructive-tools-and-what-can-be-undone)).
 - **Audit.** Calls an administrator's `manage` token makes to the admin pages are
   recorded in the audit log (`admin_token_use`, with the token id). Audited actions taken
   with a token or a connected app (invites, share links, automations, user and email
