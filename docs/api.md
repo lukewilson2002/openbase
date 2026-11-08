@@ -143,7 +143,7 @@ The class is decided in one place (`Actor::require_capability`), and
 |---|---|---|---|---|
 | Data: records, comments, tables, fields, views, shares, automations, CSV, attachments, creating a project in a workspace | reads only | yes (the owner's role still applies) | yes | yes |
 | **Your inbox** (`/api/inbox*`, and downloading a file uploaded for it): private to you and in no project | reads only | yes, but **403** for a token limited to specific projects | yes, same exception | yes |
-| **Manage**: create / rename / delete / restore workspaces, workspace members (role and project access changes, removal), the members of a project (listing, taking a project off a member's list), invites (create, list, revoke, accept), deleting, duplicating and restoring projects, choosing a workspace's top-level project, workspace trash, `PATCH /api/auth/me` (name, time zone, `intro_seen`) | 403 | 403 | yes (the owner's role still applies) | yes |
+| **Manage**: create / rename / delete / restore workspaces, workspace members (role and project access changes, removal), the members of a project (listing, taking a project off a member's list), invites (create, list, revoke, accept), deleting, duplicating and restoring projects, choosing a workspace's top-level project, workspace trash, `PATCH /api/auth/me` (name, time zone, accent, `week_start`, `intro_seen`) | 403 | 403 | yes (the owner's role still applies) | yes |
 | **Admin** pages (`/api/admin/*`: users, email settings, audit log, stats, listing and creating backups) | 403 | 403 | only if the owner is an instance administrator; every call is written to the audit log (`admin_token_use`, naming the token). Credential parts are session-only, see below | administrators |
 | **Session only**: `/api/auth/password`, `/api/auth/2fa/*`, `/api/auth/passkeys*` (list, register, rename, remove), `/api/auth/sessions*`, `GET/POST /api/tokens`, `DELETE /api/tokens/{id}`, `POST /api/admin/users/{id}/reset-link`, `DELETE /api/admin/users/{id}/passkeys`, `GET /api/admin/backups/{name}` (downloading a backup archive: it holds every password hash, two-factor secret and the SMTP password), the OAuth consent step and the connected-apps lists (`/api/oauth/*`, `/api/admin/oauth/*`) | 403 | 403 | **403** | yes |
 | **Session-only parts of admin requests**: `disable_2fa` in `PATCH /api/admin/users/{id}`; `password` in `POST /api/admin/users` (and the `reset_link` in its answer); `password` in `PATCH /api/admin/email` | 403 | 403 | **403** for that part (the whole request is refused, nothing is changed) | administrators |
@@ -697,7 +697,7 @@ text is left out.
 
 ## 4. CSV
 
-- `GET /api/views/{id}/export.csv?timezone=` (Viewer): the view's visible
+- `GET /api/views/{id}/export.csv?timezone=&week_start=` (Viewer): the view's visible
   fields in view order, filter and sort applied, cells as display text (dates
   in `timezone`, default the caller's zone), streamed in 500-record pages
   from the list of matching records taken when the export starts (edits made
@@ -805,7 +805,9 @@ A date filter (`is`, `is_before`, `is_after`, `is_on_or_before`,
 `number_of_days_from_now`, and for `is_within` `past_week` / `past_month` /
 `past_year` / `next_week` / `next_month` / `next_year`,
 `past_number_of_days`, `next_number_of_days`, `this_calendar_month`,
-`this_calendar_year`) are **calendar days in the viewer's time zone**, never the
+`this_calendar_year`, `this_calendar_week`, `next_calendar_week`,
+`last_calendar_week`, `next_calendar_month`, `last_calendar_month`) are
+**calendar days in the viewer's time zone**, never the
 server's and not UTC unless that is the viewer's zone. In US Central time
 "today" therefore keeps meaning the same day until local midnight, even though
 UTC rolls over at 6 or 7 pm.
@@ -821,6 +823,26 @@ The zone is chosen per request, in this order:
 
 Automations have no request: their `record_matches` trigger and conditions use
 the profile zone of the automation's creator (UTC without one).
+
+**Calendar weeks and months.** `this_calendar_week` is the whole week that holds
+today, `next_calendar_week` and `last_calendar_week` the week after and before it;
+`next_calendar_month` and `last_calendar_month` are the whole calendar month after
+and before this one (`this_calendar_month` already existed). A week runs seven days
+from the first day of the week, and that day is chosen like the zone:
+
+1. the request's `week_start`, `0` for Sunday or `1` for Monday (any other value is a
+   400): `POST /api/views/{id}/query`, `GET /api/views/{id}/aggregations`, the CSV
+   export and `POST /api/tables/{id}/aggregate`,
+2. the signed-in user's profile `week_start` (`PATCH /api/auth/me {"week_start": 1}`;
+   `GET /api/auth/me` returns it, `0` for a profile that never chose),
+3. Sunday (anonymous share viewers that send no `week_start`).
+
+Automations use the `week_start` of their creator, the way they use the creator's
+zone. The Airtable-compatible API (`/api/v1`) has no such parameter: a view's
+calendar-week filter behind it uses the caller's profile. The other relative modes
+do not depend on the week start. The range is worked out as calendar days in the
+viewer's zone, so a week that holds a daylight saving change is still seven days, and
+a date-time lands in the week of its local day.
 
 How cells are compared:
 

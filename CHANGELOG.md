@@ -32,6 +32,12 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   which can no longer be deleted until another takes its place. Deleting or retyping a page,
   Home date or Done field clears the setting. Saving a record's page with `PUT
   /api/tables/{id}/records/{rid}/page` adds "Page" to a table that has none.
+- **Calendar weeks and months in date filters.** `is_within` takes `this_calendar_week`,
+  `next_calendar_week`, `last_calendar_week`, `next_calendar_month` and `last_calendar_month`.
+  Weeks start on the request's `week_start` (0 Sunday, 1 Monday; a view query, summaries, CSV
+  export and MCP `query_view` accept it), else the first day of the week in your profile
+  (`PATCH /api/auth/me {"week_start": 1}`, returned by `GET /api/auth/me`), else Sunday;
+  automations use their creator's. The earlier `past_week` and `next_week` stay rolling days.
 - **Select, delete and undo in every view.** Kanban, gallery, list, calendar and timeline now
   have what the grid had: Shift/Ctrl/Cmd-click to select several cards or rows, ⌘A / Ctrl+A,
   a bar with the count and **Delete**, **Duplicate** and **Clear**, the **Delete** key, and a

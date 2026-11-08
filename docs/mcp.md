@@ -405,7 +405,7 @@ finds names: every word of `query` has to match a name or an old name (`cart sho
 | `update_view` | write | Rename, lock, or change parts of the configuration (filter, sorts, groups, hidden and ordered fields, widths, summaries, row colour, kanban / calendar / gallery / list / timeline / form settings) |
 | `delete_view` | write | Delete to the trash |
 | `reorder_views` | write | Order of a table's views, for everyone: the listed ones take their own places in the new order, the rest stay. Shared views need the creator role; your own personal views the editor role. The default grid is not one of the views |
-| `query_view` | any | Rows as the app shows them: filter, sort and grouping applied, hidden fields left out, group headers, totals, paging; `include_empty: true` returns a row's unset visible fields as `null`. Optional `timezone` (IANA name) decides what "today" means for relative date filters. Optional `from` and `to` (`YYYY-MM-DD`, both included; the same day for one day) return only what a calendar or timeline shows for that window: a record is in when its span from start to end overlaps the range, one with a single date counts as that day, one with no date is left out. The dates are the view's calendar or timeline fields, or `date_field` / `end_field` (needed for other view types); the answer repeats them in `range`. Same as the `range` of `POST /api/views/{id}/query` |
+| `query_view` | any | Rows as the app shows them: filter, sort and grouping applied, hidden fields left out, group headers, totals, paging; `include_empty: true` returns a row's unset visible fields as `null`. Optional `timezone` (IANA name) decides what "today" means for relative date filters, and optional `week_start` (`0` Sunday, `1` Monday) where the week begins for `this_calendar_week` and its neighbours (default: your profile's, else Sunday). Optional `from` and `to` (`YYYY-MM-DD`, both included; the same day for one day) return only what a calendar or timeline shows for that window: a record is in when its span from start to end overlaps the range, one with a single date counts as that day, one with no date is left out. The dates are the view's calendar or timeline fields, or `date_field` / `end_field` (needed for other view types); the answer repeats them in `range`. Same as the `range` of `POST /api/views/{id}/query` |
 
 A view configuration is the REST API's `ViewConfig`; wherever it wants a field id you
 may write the field name, filter and sort entries may use `field` instead of
@@ -457,7 +457,15 @@ owner's profile (`api_request PATCH /api/auth/me {timezone}` sets it), else UTC.
 So an "Upcoming" view with `is_on_or_after {mode: "today"}` keeps today's
 events all evening in US Central time. Date-only fields are compared as calendar
 dates; date-times are turned into a day in the field's own time zone if it has
-one, otherwise the viewer's. `exact_date` is the day as written. Details:
+one, otherwise the viewer's. `exact_date` is the day as written. For `is_within`,
+`this_calendar_week`, `next_calendar_week` and `last_calendar_week` are the whole
+week that holds today, the one after and the one before it, and
+`next_calendar_month` and `last_calendar_month` the whole month after and before
+this one (`past_week`, `next_week` and the like are rolling days from today, not
+calendar weeks). A week starts on the `week_start` argument of `query_view` (`0`
+Sunday, `1` Monday), else the `week_start` on the token owner's profile
+(`api_request PATCH /api/auth/me {week_start: 1}` sets it; `GET /api/auth/me`
+returns it), else Sunday; an automation uses its creator's. Details:
 [docs/api.md, section 6](api.md#6-relative-date-filters-and-time-zones).
 
 ### Inbox
