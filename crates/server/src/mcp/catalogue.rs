@@ -191,6 +191,16 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "WorkspaceSummary",
     ),
     e(
+        GET,
+        "/api/workspaces/{id}/home",
+        "workspaces",
+        "viewer (workspace)",
+        Read,
+        "A workspace's Home in one read: what is due soon, what changed lately and your inbox drafts. due: records of collections that have a Home date setting, dated from 30 days ago to 7 days ahead in your time zone (a date property with a fixed zone keeps its own), not marked done (when the collection has a Done checkbox), oldest first, at most 50, each with its record, table and project ids, title, date (YYYY-MM-DD), time (HH:MM, only for a date with a time), has_done and done_field_id, overdue (before today) and can_edit. A computed date property can be a Home date. truncated is true when the scan budget ran out (100,000 records, 100 collections): a collection is read whole or not at all, so some were not checked. recent: the 10 records most recently created or edited that you can open, newest first, once each, with the author and the time in Unix milliseconds. drafts: your inbox drafts (they belong to no workspace; empty for a token limited to some projects). Only projects you can open are read. The MCP tool get_home wraps it.",
+        NO_BODY,
+        "HomeResponse {today, timezone, due: [{record_id, table_id, base_id, base_name, title, table_name, table_color, date, has_time, time, has_done, done_field_id, overdue, can_edit}], truncated, recent: [{record_id, table_id, base_id, base_name, title, table_name, table_color, kind: create|update|restore, author: {id, name}|null, at}], drafts: [InboxItem]}",
+    ),
+    e(
         PATCH,
         "/api/workspaces/{id}",
         "workspaces",
