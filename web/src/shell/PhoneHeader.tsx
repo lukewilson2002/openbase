@@ -23,6 +23,8 @@ export interface PhoneAction {
   /** A page to go to: the button is a link. Else `onSelect` acts. */
   to?: string;
   onSelect?: () => void;
+  /** Dimmed and inert, for an action the screen cannot take right now. */
+  disabled?: boolean;
 }
 
 /** What the right side holds: the buttons, More and the search all count. */
@@ -56,7 +58,7 @@ function ActionButton({ action }: { action: PhoneAction }) {
       </IconButton>
     );
   return (
-    <IconButton label={action.label} onClick={action.onSelect}>
+    <IconButton label={action.label} onClick={action.onSelect} disabled={action.disabled}>
       {glyph}
     </IconButton>
   );
@@ -72,7 +74,7 @@ function MoreButton({ actions }: { actions: PhoneAction[] }) {
       <SheetMenu open={open} onOpenChange={setOpen} title="More">
         <SheetMenuGroup>
           {actions.map((a) => (
-            <SheetMenuRow key={a.id} icon={a.icon} to={a.to} onSelect={a.onSelect}>
+            <SheetMenuRow key={a.id} icon={a.icon} to={a.to} onSelect={a.onSelect} disabled={a.disabled}>
               {a.label}
             </SheetMenuRow>
           ))}

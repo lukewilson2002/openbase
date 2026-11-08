@@ -20,3 +20,8 @@ export function recordNounFor(table: { record_noun?: string | null }, count: num
   const noun = recordNoun(table);
   return count === 1 ? noun : pluralize(noun);
 }
+
+/** The label of the button that adds a record: "New client", or "New record" when the collection has no name for them. */
+export function newRecordLabel(table: { record_noun?: string | null }): string {
+  return `New ${recordNoun(table)}`;
+}

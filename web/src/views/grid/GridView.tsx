@@ -37,6 +37,7 @@ import { deleteRecordsText } from "@/components/record/deleteText";
 import { Redo2, Undo2 } from "lucide-react";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
+import { useRegisterAddRecord } from "@/views/common/addRecord";
 import { EmptyRecords } from "@/views/common/EmptyRecords";
 import { viewHugAreaClass, viewHugCardClass, viewHugFooterClass } from "@/views/common/ViewFrame";
 import { queryRelevantKey, reorderVisible, resolveFieldOrder, ROW_HEIGHT_PX, setFieldWidth, setSummary } from "@/components/viewbar/config";
@@ -1071,6 +1072,10 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   // summary bar that look broken.
   const gridHeight = empty ? undefined : Math.max(GRID_HEADER_HEIGHT + (rowCountForGrid + 1) * rowHeight + 2 + hScrollbar, total === 0 ? 180 : 0);
 
+  // The floating Add and the collection header's New button add the same way.
+  const addFromToolbar = canEdit ? () => void addRecord({ group: floatingGroup() }) : undefined;
+  useRegisterAddRecord(addFromToolbar);
+
   return (
     <EditorEnvProvider value={editorEnv}>
       <div ref={wrapperRef} className="flex h-full min-h-[24rem] flex-col" onKeyDown={onWrapperKeyDown}>
@@ -1090,7 +1095,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           searchInputRef={searchInputRef}
           onAddField={canManageFields ? () => setFieldDialog({ mode: "create" }) : undefined}
           timeZone={timeZone}
-          onAdd={canEdit ? () => void addRecord({ group: floatingGroup() }) : undefined}
+          onAdd={addFromToolbar}
         />
         <DraftBar schema={schema} table={table} view={view} cfg={cfg} search={debouncedSearch} timeZone={timeZone} />
         <div className={viewHugAreaClass}>

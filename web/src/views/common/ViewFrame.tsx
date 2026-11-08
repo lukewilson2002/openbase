@@ -10,6 +10,7 @@ import { DraftBar } from "@/components/viewbar/DraftBar";
 import { ViewBar, type MoreToggle } from "@/components/viewbar/ViewBar";
 import { cn } from "@/lib/cn";
 import { gridRecordLayout } from "@/views/grid/useViewConfig";
+import { useRegisterAddRecord } from "./addRecord";
 import { useUndoShortcuts } from "./useUndoShortcuts";
 import type { ViewSetup } from "./useViewSetup";
 
@@ -65,6 +66,7 @@ export interface ViewFrameProps {
 export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide fields", toolbarSetting, toolbarExtra, moreToggles, footer, layout = "fill", onAdd, children }: ViewFrameProps) {
   const { schema, table, view, role, cfg, config } = setup;
   const searchInputRef = useRef<HTMLInputElement>(null);
+  useRegisterAddRecord(onAdd);
   // Ctrl/Cmd+Z reverts the last drop, edit, add or delete (not while a record is open: its fields have their own).
   useUndoShortcuts(setup.writes.history, setup.canEdit && !setup.openRecordId);
   // A record shows its fields as the table's grid lays them out, whichever view it is opened from.
