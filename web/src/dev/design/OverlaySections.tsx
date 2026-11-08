@@ -246,7 +246,7 @@ function PaletteDemo({ query: initial }: { query: string }) {
   const desktop = useMediaQuery(DESKTOP_QUERY);
   const [query, setQuery] = useState(initial);
   const q = query.trim().toLowerCase();
-  const groups = PALETTE_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => i.label.toLowerCase().includes(q)) }));
+  const groups = PALETTE_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => String(i.label).toLowerCase().includes(q)) }));
   return <CommandPalette open onOpenChange={noop} query={query} onQueryChange={setQuery} groups={groups} className={desktop ? "top-4 max-h-[calc(100%-2rem)] w-[calc(100%-2rem)]" : FILL_FRAME} />;
 }
 

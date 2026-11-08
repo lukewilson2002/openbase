@@ -509,6 +509,56 @@ describe("CommandPalette", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Nothing matches");
     expect(screen.queryByRole("option")).not.toBeInTheDocument();
   });
+
+  it("runs a command only after the palette has left, so what it opens does not stack under a fading palette", async () => {
+    const seen: { dialogs: number }[] = [];
+    const groups: CommandGroup[] = [{ id: "actions", label: "Actions", items: [{ id: "a1", label: "New collection", onSelect: () => seen.push({ dialogs: screen.queryAllByRole("dialog").length }) }] }];
+    render(<Harness groups={groups} />);
+    const { user, opener } = await openPalette();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(seen).toHaveLength(1));
+    expect(seen[0]).toEqual({ dialogs: 0 });
+    expect(opener).toHaveFocus();
+    // Escape runs nothing.
+    await user.click(opener);
+    await screen.findByRole("combobox", { name: "Search" });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(seen).toHaveLength(1);
+  });
+
+  it("keeps Enter from running results that are for older text, while a click still does", async () => {
+    const onSelect = vi.fn();
+    const stale: CommandGroup[] = [{ id: "records", label: "Records", stale: true, items: [{ id: "r1", label: "Acme", onSelect: () => onSelect("r1") }] }];
+    render(<Harness groups={stale} />);
+    const { user } = await openPalette();
+    await user.keyboard("{Enter}");
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Search everything" })).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "Acme" }));
+    expect(onSelect).toHaveBeenCalledWith("r1");
+  });
+
+  it("shows a second line under a row, and says a failed search as an alert", async () => {
+    const groups: CommandGroup[] = [{ id: "records", label: "Records", items: [{ id: "r1", label: "Acme", detail: "Notes: …renewal in May…", onSelect: () => {} }] }];
+    function WithError() {
+      const [open, setOpen] = useState(true);
+      return <CommandPalette open={open} onOpenChange={setOpen} query="a" onQueryChange={() => {}} groups={groups} error="Search is unavailable: Database is busy" />;
+    }
+    render(<WithError />);
+    expect(screen.getByRole("option", { name: /Acme/ })).toHaveTextContent("Notes: …renewal in May…");
+    expect(screen.getByRole("alert")).toHaveTextContent("Search is unavailable: Database is busy");
+    expect(screen.getByRole("status")).toHaveTextContent("Search is unavailable");
+  });
+
+  it("hands its field to the caller", async () => {
+    let field: HTMLInputElement | null = null;
+    function WithRef() {
+      return <CommandPalette open onOpenChange={() => {}} query="" onQueryChange={() => {}} groups={[]} inputRef={(el) => void (el && (field = el))} />;
+    }
+    render(<WithRef />);
+    expect(field).toBe(screen.getByRole("combobox", { name: "Search" }));
+  });
 });
 
 describe("FilterBar", () => {

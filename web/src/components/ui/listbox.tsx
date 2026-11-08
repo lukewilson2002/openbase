@@ -41,6 +41,8 @@ export interface ListboxOptionProps {
   leading?: ReactNode;
   /** Quiet text at the right end (a collection's name, a shortcut). */
   hint?: ReactNode;
+  /** A second quiet line under the label (a snippet of the text that matched). */
+  detail?: ReactNode;
   children: ReactNode;
   className?: string;
 }
@@ -49,7 +51,7 @@ export interface ListboxOptionProps {
  * One option of a listbox whose focus stays in the field above it. A press does not take focus off the field
  * (`onMouseDown` is cancelled), and the highlighted row scrolls into view as the keys move it.
  */
-export function ListboxOption({ id, active, onSelect, onHover, leading, hint, children, className }: ListboxOptionProps) {
+export function ListboxOption({ id, active, onSelect, onHover, leading, hint, detail, children, className }: ListboxOptionProps) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (active) ref.current?.scrollIntoView({ block: "nearest" });
@@ -67,7 +69,14 @@ export function ListboxOption({ id, active, onSelect, onHover, leading, hint, ch
       className={cn(menuRowClass, "cursor-pointer", className)}
     >
       {leading}
-      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {detail ? (
+        <span className="min-w-0 flex-1 py-1.5">
+          <span className="block truncate">{children}</span>
+          <span className="line-clamp-2 text-meta text-muted">{detail}</span>
+        </span>
+      ) : (
+        <span className="min-w-0 flex-1 truncate">{children}</span>
+      )}
       {hint && <span className="shrink-0 text-meta text-muted">{hint}</span>}
     </div>
   );
