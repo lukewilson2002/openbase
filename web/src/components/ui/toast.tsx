@@ -1,6 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CircleAlert, CircleCheck, X } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { IconButton } from "./icon-button";
+import { usePresence } from "./use-presence";
+import { Icon } from "./icon";
 
 export type ToastVariant = "default" | "success" | "error";
 
@@ -11,10 +14,17 @@ export interface ToastOptions {
   /** 0 keeps the toast until dismissed. */
   durationMs?: number;
   /** A button on the toast ("Undo"); the toast closes when it is pressed. */
-  action?: { label: string; onClick: () => void };
+  action?: ToastAction;
+  /** More buttons, after `action` ("Open" and "Undo" on a capture); each closes the toast too. */
+  actions?: ToastAction[];
 }
 
-interface ToastItem extends ToastOptions {
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
+export interface ToastItem extends ToastOptions {
   id: number;
 }
 
@@ -48,61 +58,87 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div
-        aria-live="polite"
-        aria-relevant="additions"
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-[70] flex flex-col items-center gap-2 p-4 sm:items-end"
+      {/*
+        Bottom-left on a desktop; on a phone across the bottom, above the tab bar (--bottom-nav-height, set by
+        the bar) and the home indicator. The inner element is one polite live region that is always in the page,
+        so a toast added to it is announced without taking the reader away from what they were doing (A11Y-4).
+      */}
+      <section
+        aria-label="Notifications"
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] z-[70] p-4 md:right-auto md:w-[26rem]"
       >
-        {items.map((t) => (
-          <ToastView key={t.id} item={t} onDismiss={dismiss} />
-        ))}
-      </div>
+        <div aria-live="polite" aria-relevant="additions" className="flex flex-col items-stretch gap-2">
+          {items.map((t) => (
+            <ToastView key={t.id} item={t} onDismiss={dismiss} />
+          ))}
+        </div>
+      </section>
     </ToastContext.Provider>
   );
 }
 
-function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: (id: number) => void }) {
-  const { id, durationMs = 5000 } = item;
-  useEffect(() => {
-    if (!durationMs) return;
-    const t = setTimeout(() => onDismiss(id), durationMs);
-    return () => clearTimeout(t);
-  }, [id, durationMs, onDismiss]);
+/** A toast that holds an Undo waits longer than a note does: reaching the button takes a moment. */
+const DEFAULT_MS = 5000;
+const DEFAULT_ACTION_MS = 8000;
 
-  const Icon = item.variant === "error" ? CircleAlert : item.variant === "success" ? CircleCheck : null;
+/** One toast. The provider lays them out; the design reference page (`/__dev/design`) draws them where they can be looked at. */
+export function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: (id: number) => void }) {
+  const { id } = item;
+  const actions = [...(item.action ? [item.action] : []), ...(item.actions ?? [])];
+  const durationMs = item.durationMs ?? (actions.length ? DEFAULT_ACTION_MS : DEFAULT_MS);
+  const [leaving, setLeaving] = useState(false);
+  // The clock stops while the pointer or keyboard is on the toast, so it cannot go while someone is reading it or reaching for Undo.
+  const [held, setHeld] = useState(false);
+  const presence = usePresence<HTMLDivElement>(!leaving);
+  const close = useCallback(() => setLeaving(true), []);
+
+  useEffect(() => {
+    if (!durationMs || held || leaving) return;
+    const t = setTimeout(close, durationMs);
+    return () => clearTimeout(t);
+  }, [durationMs, held, leaving, close]);
+
+  // Once the leaving animation is over the toast leaves the list.
+  useEffect(() => {
+    if (leaving && !presence.mounted) onDismiss(id);
+  }, [leaving, presence.mounted, id, onDismiss]);
+
+  const Glyph = item.variant === "error" ? CircleAlert : item.variant === "success" ? CircleCheck : null;
   return (
     <div
+      ref={presence.ref}
+      data-state={presence.state}
       role={item.variant === "error" ? "alert" : "status"}
+      onPointerEnter={() => setHeld(true)}
+      onPointerLeave={() => setHeld(false)}
+      onFocus={() => setHeld(true)}
+      onBlur={() => setHeld(false)}
       className={cn(
-        "ob-slide-in pointer-events-auto flex w-full max-w-sm items-start gap-2 rounded-lg border bg-surface p-3 shadow-pop",
+        "ob-rise-in pointer-events-auto flex w-full items-center gap-2 rounded-lg border bg-surface p-3 shadow-pop",
         item.variant === "error" ? "border-danger" : "border-line",
       )}
     >
-      {Icon && <Icon aria-hidden className={cn("mt-0.5 size-4 shrink-0", item.variant === "error" ? "text-danger" : "text-success")} />}
+      {Glyph && <Icon icon={Glyph} className={cn("mt-0.5", item.variant === "error" ? "text-danger" : "text-success")} />}
       <div className="min-w-0 flex-1">
-        <p className="text-[0.8125rem] font-medium">{item.title}</p>
-        {item.description && <p className="mt-0.5 break-words text-xs text-muted">{item.description}</p>}
+        <p className="text-label font-medium">{item.title}</p>
+        {item.description && <p className="mt-0.5 break-words text-meta text-muted">{item.description}</p>}
       </div>
-      {item.action && (
+      {actions.map((a) => (
         <button
+          key={a.label}
           type="button"
           onClick={() => {
-            onDismiss(id);
-            item.action!.onClick();
+            close();
+            a.onClick();
           }}
-          className="-my-1 shrink-0 rounded px-2 py-1 text-[0.8125rem] font-medium text-primary-text hover:bg-hover pointer-coarse:py-2"
+          className="-my-1 inline-flex min-h-control-sm shrink-0 items-center rounded-sm px-2 text-label font-medium text-primary-text hover:bg-hover max-md:min-h-control-touch pointer-coarse:min-h-control-touch"
         >
-          {item.action.label}
+          {a.label}
         </button>
-      )}
-      <button
-        type="button"
-        aria-label="Dismiss"
-        onClick={() => onDismiss(id)}
-        className="-m-1 inline-flex size-6 shrink-0 pointer-coarse:-m-2 pointer-coarse:size-9 items-center justify-center rounded text-muted hover:bg-hover hover:text-fg"
-      >
-        <X aria-hidden className="size-3.5" />
-      </button>
+      ))}
+      <IconButton label="Dismiss" size="sm" noTooltip onClick={close} className="-my-1 -mr-1 size-6 max-md:size-control-touch max-md:-my-2.5 pointer-coarse:size-control-touch pointer-coarse:-my-2.5">
+        <Icon icon={X} />
+      </IconButton>
     </div>
   );
 }

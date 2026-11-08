@@ -4,7 +4,7 @@
  * The accent colour a person picks (<html data-accent>, set before first paint by
  * public/theme-init.js) replaces the reference tokens of index.css.
  */
-:root:not([data-theme="dark"])[data-accent="blue"] {
+:is(:root, [data-theme-scope]):not([data-theme="dark"])[data-accent="blue"] {
   --bg: #f7f7f7;
   --surface: #ffffff;
   --chrome: #f7f7f7;
@@ -24,7 +24,7 @@
   --primary-ink: #002e80;
   --ring: #0b48af;
 }
-:root[data-theme="dark"][data-accent="blue"] {
+:is(:root, [data-theme-scope])[data-theme="dark"][data-accent="blue"] {
   --bg: #151515;
   --surface: #1e1e1e;
   --chrome: #191919;
@@ -44,7 +44,7 @@
   --primary-ink: #88b4ff;
   --ring: #2965ce;
 }
-:root:not([data-theme="dark"])[data-accent="cyan"] {
+:is(:root, [data-theme-scope]):not([data-theme="dark"])[data-accent="cyan"] {
   --bg: #f7f7f7;
   --surface: #ffffff;
   --chrome: #f7f7f7;
@@ -64,7 +64,7 @@
   --primary-ink: #004965;
   --ring: #007fad;
 }
-:root[data-theme="dark"][data-accent="cyan"] {
+:is(:root, [data-theme-scope])[data-theme="dark"][data-accent="cyan"] {
   --bg: #151515;
   --surface: #1e1e1e;
   --chrome: #191919;
@@ -84,7 +84,7 @@
   --primary-ink: #70ceff;
   --ring: #007fad;
 }
-:root:not([data-theme="dark"])[data-accent="teal"] {
+:is(:root, [data-theme-scope]):not([data-theme="dark"])[data-accent="teal"] {
   --bg: #f7f7f7;
   --surface: #ffffff;
   --chrome: #f7f7f7;
@@ -104,7 +104,7 @@
   --primary-ink: #004d49;
   --ring: #00857e;
 }
-:root[data-theme="dark"][data-accent="teal"] {
+:is(:root, [data-theme-scope])[data-theme="dark"][data-accent="teal"] {
   --bg: #151515;
   --surface: #1e1e1e;
   --chrome: #191919;
@@ -124,7 +124,7 @@
   --primary-ink: #6ed4cc;
   --ring: #00857e;
 }
-:root:not([data-theme="dark"])[data-accent="green"] {
+:is(:root, [data-theme-scope]):not([data-theme="dark"])[data-accent="green"] {
   --bg: #f7f7f7;
   --surface: #ffffff;
   --chrome: #f7f7f7;
@@ -144,7 +144,7 @@
   --primary-ink: #00500d;
   --ring: #008a1e;
 }
-:root[data-theme="dark"][data-accent="green"] {
+:is(:root, [data-theme-scope])[data-theme="dark"][data-accent="green"] {
   --bg: #151515;
   --surface: #1e1e1e;
   --chrome: #191919;
@@ -164,7 +164,7 @@
   --primary-ink: #6cda70;
   --ring: #008a1e;
 }
-:root:not([data-theme="dark"])[data-accent="yellow"] {
+:is(:root, [data-theme-scope]):not([data-theme="dark"])[data-accent="yellow"] {
   --bg: #f7f7f7;
   --surface: #ffffff;
   --chrome: #f7f7f7;
@@ -184,7 +184,7 @@
   --primary-ink: #674a00;
   --ring: #b78700;
 }
-:root[data-theme="dark"][data-accent="yellow"] {
+:is(:root, [data-theme-scope])[data-theme="dark"][data-accent="yellow"] {
   --bg: #151515;
   --surface: #1e1e1e;
   --chrome: #191919;
@@ -204,7 +204,7 @@
   --primary-ink: #ffcb61;
   --ring: #e3a912;
 }
-:root:not([data-theme="dark"])[data-accent="orange"] {
+:is(:root, [data-theme-scope]):not([data-theme="dark"])[data-accent="orange"] {
   --bg: #f7f7f7;
   --surface: #ffffff;
   --chrome: #f7f7f7;
@@ -224,7 +224,7 @@
   --primary-ink: #7b2b00;
   --ring: #ca4c00;
 }
-:root[data-theme="dark"][data-accent="orange"] {
+:is(:root, [data-theme-scope])[data-theme="dark"][data-accent="orange"] {
   --bg: #151515;
   --surface: #1e1e1e;
   --chrome: #191919;
@@ -244,7 +244,7 @@
   --primary-ink: #ffb192;
   --ring: #ca4c00;
 }
-:root:not([data-theme="dark"])[data-accent="red"] {
+:is(:root, [data-theme-scope]):not([data-theme="dark"])[data-accent="red"] {
   --bg: #f7f7f7;
   --surface: #ffffff;
   --chrome: #f7f7f7;
@@ -264,7 +264,7 @@
   --primary-ink: #80001f;
   --ring: #b0002e;
 }
-:root[data-theme="dark"][data-accent="red"] {
+:is(:root, [data-theme-scope])[data-theme="dark"][data-accent="red"] {
   --bg: #151515;
   --surface: #1e1e1e;
   --chrome: #191919;
@@ -284,7 +284,7 @@
   --primary-ink: #ff9496;
   --ring: #c72840;
 }
-:root:not([data-theme="dark"])[data-accent="pink"] {
+:is(:root, [data-theme-scope]):not([data-theme="dark"])[data-accent="pink"] {
   --bg: #f7f7f7;
   --surface: #ffffff;
   --chrome: #f7f7f7;
@@ -304,7 +304,7 @@
   --primary-ink: #8a0051;
   --ring: #c72e7d;
 }
-:root[data-theme="dark"][data-accent="pink"] {
+:is(:root, [data-theme-scope])[data-theme="dark"][data-accent="pink"] {
   --bg: #151515;
   --surface: #1e1e1e;
   --chrome: #191919;
@@ -324,7 +324,7 @@
   --primary-ink: #ffa7ca;
   --ring: #c72e7d;
 }
-:root:not([data-theme="dark"])[data-accent="purple"] {
+:is(:root, [data-theme-scope]):not([data-theme="dark"])[data-accent="purple"] {
   --bg: #f7f7f7;
   --surface: #ffffff;
   --chrome: #f7f7f7;
@@ -344,7 +344,7 @@
   --primary-ink: #3c0084;
   --ring: #581ab5;
 }
-:root[data-theme="dark"][data-accent="purple"] {
+:is(:root, [data-theme-scope])[data-theme="dark"][data-accent="purple"] {
   --bg: #151515;
   --surface: #1e1e1e;
   --chrome: #191919;
@@ -364,7 +364,7 @@
   --primary-ink: #b5a3ff;
   --ring: #7848de;
 }
-:root:not([data-theme="dark"])[data-accent="gray"] {
+:is(:root, [data-theme-scope]):not([data-theme="dark"])[data-accent="gray"] {
   --bg: #f7f7f7;
   --surface: #ffffff;
   --chrome: #f7f7f7;
@@ -384,7 +384,7 @@
   --primary-ink: #2a2f3a;
   --ring: #444955;
 }
-:root[data-theme="dark"][data-accent="gray"] {
+:is(:root, [data-theme-scope])[data-theme="dark"][data-accent="gray"] {
   --bg: #151515;
   --surface: #1e1e1e;
   --chrome: #191919;

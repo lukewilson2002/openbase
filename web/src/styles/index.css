@@ -17,6 +17,7 @@
  * border-line, ...) are generated from them in the @theme block below.
  */
 
+[data-theme-scope][data-theme="light"],
 :root,
 :root[data-theme="light"] {
   color-scheme: light;
@@ -53,6 +54,7 @@
   --scroll-shade: rgb(15 20 30 / 0.05);
 }
 
+[data-theme-scope][data-theme="dark"],
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #12151b;
@@ -89,12 +91,14 @@
  * A tool that is on (the view toolbar's "Sorted by Name", "2 hidden fields"): a plain grey made of the
  * text colour over the surface, so it holds no tint of the accent and stands off the bar in either theme.
  */
-:root {
+:root,
+[data-theme-scope] {
   --tool-on: color-mix(in srgb, var(--fg) 9%, var(--surface));
   --tool-on-hover: color-mix(in srgb, var(--fg) 13%, var(--surface));
 }
 /* Dark surfaces need more of the text colour for the same step. */
-:root[data-theme="dark"] {
+:root[data-theme="dark"],
+[data-theme-scope][data-theme="dark"] {
   --tool-on: color-mix(in srgb, var(--fg) 16%, var(--surface));
   --tool-on-hover: color-mix(in srgb, var(--fg) 22%, var(--surface));
 }
@@ -137,6 +141,206 @@
   --text-xs: 0.75rem;
   --text-sm: 0.8125rem;
   --text-base: 0.875rem;
+}
+
+/*
+ * Notebook design tokens (UX overhaul DL-1; docs/plans/2026-11-07-ux-overhaul.md, "Design language").
+ * Every size, radius, shadow and duration in a component comes from here, and every colour from the
+ * semantic variables above; scripts/check-tokens.mjs fails the build on a raw hex colour, rgb() or px
+ * font size in web/src. Sizes are in rem (1rem = 16px, set on <html>) so they follow the reader's text
+ * size; the px value from the spec is in each comment. `static` emits every variable even when no class
+ * uses it yet, which the design reference page (DL-2) reads.
+ *
+ * The radius names are Tailwind's own (rounded-md ...), so they replace its defaults: md is 8px here
+ * where Tailwind has 6px, and so on up the scale.
+ */
+@theme static {
+  /*
+   * Type scale. `text-meta` sets size, line height, weight and letter spacing together; a class later in
+   * the cascade (font-semibold, tracking-tight) still wins. Titles of 20px and up use -0.01em, the
+   * record title -0.02em. The phone sizes are separate tokens: text-read-phone below the desktop
+   * breakpoint, text-read from it up.
+   */
+  --text-meta: 0.75rem; /* 12 / 16, 400: counts, timestamps, a row's collection name */
+  --text-meta--line-height: 1rem;
+  --text-meta--font-weight: 400;
+  --text-label: 0.8125rem; /* 13 / 18, 400 or 600: property labels, section labels, secondary buttons */
+  --text-label--line-height: 1.125rem;
+  --text-ui: 0.875rem; /* 14 / 20, 400 / 500 / 600: default UI text, table cells, nav rows */
+  --text-ui--line-height: 1.25rem;
+  --text-read: 0.9375rem; /* 15 / 24, 400: page body on desktop */
+  --text-read--line-height: 1.5rem;
+  --text-read--font-weight: 400;
+  --text-read-phone: 1rem; /* 16 / 25, 400: page body and every input on phone */
+  --text-read-phone--line-height: 1.5625rem;
+  --text-read-phone--font-weight: 400;
+  --text-h3: 1rem; /* 16 / 21, 600: page subheadings */
+  --text-h3--line-height: 1.3125rem;
+  --text-h3--font-weight: 600;
+  --text-sheet: 1.125rem; /* 18 / 24, 600: sheet and dialog titles, phone section titles */
+  --text-sheet--line-height: 1.5rem;
+  --text-sheet--font-weight: 600;
+  --text-h2: 1.25rem; /* 20 / 26, 600: page headings */
+  --text-h2--line-height: 1.625rem;
+  --text-h2--font-weight: 600;
+  --text-h2--letter-spacing: -0.01em;
+  --text-title: 1.5rem; /* 24 / 29, 600: collection title */
+  --text-title--line-height: 1.8125rem;
+  --text-title--font-weight: 600;
+  --text-title--letter-spacing: -0.01em;
+  --text-home: 1.75rem; /* 28 / 34, 600: Home title */
+  --text-home--line-height: 2.125rem;
+  --text-home--font-weight: 600;
+  --text-home--letter-spacing: -0.01em;
+  /* The spec gives the phone Home title a size (26) but no line height; 31 matches the phone record title. */
+  --text-home-phone: 1.625rem; /* 26 / 31, 600 */
+  --text-home-phone--line-height: 1.9375rem;
+  --text-home-phone--font-weight: 600;
+  --text-home-phone--letter-spacing: -0.01em;
+  --text-record: 2.125rem; /* 34 / 39, 700: record title on desktop */
+  --text-record--line-height: 2.4375rem;
+  --text-record--font-weight: 700;
+  --text-record--letter-spacing: -0.02em;
+  --text-record-phone: 1.625rem; /* 26 / 31, 700: record title on phone */
+  --text-record-phone--line-height: 1.9375rem;
+  --text-record-phone--font-weight: 700;
+  --text-record-phone--letter-spacing: -0.02em;
+  /* The capture box input is the one exception to the scale. */
+  --text-capture: 1.125rem; /* 18 / 26 on desktop */
+  --text-capture--line-height: 1.625rem;
+  --text-capture-phone: 1.0625rem; /* 17 / 24 on phone */
+  --text-capture-phone--line-height: 1.5rem;
+
+  /* Radius: xs kbd and marks, sm chips in inputs and link chips, md buttons, inputs and nav rows, lg cards,
+     popovers and embeds, xl bottom sheets and phone cards, pill status chips, avatars and capture chips. */
+  --radius-xs: 0.25rem; /* 4 */
+  --radius-sm: 0.375rem; /* 6 */
+  --radius-md: 0.5rem; /* 8 */
+  --radius-lg: 0.75rem; /* 12 */
+  --radius-xl: 1rem; /* 16 */
+  --radius-pill: 999px;
+
+  /* Control heights (h-control-md, min-h-control-touch ...) and row heights (h-row-table ...). */
+  --spacing-control-sm: 1.875rem; /* 30 */
+  --spacing-control-md: 2.125rem; /* 34, the default */
+  --spacing-control-lg: 2.5rem; /* 40 */
+  --spacing-control-touch: 2.75rem; /* 44: the minimum for anything tappable on phone */
+  --spacing-row-table: 2.875rem; /* 46 */
+  --spacing-row-feed: 2.75rem; /* 44 on desktop */
+  --spacing-row-feed-phone: 3.5rem; /* 56 */
+
+  /* Layout widths (w-sidebar, max-w-record, max-w-home) and the page's side padding (px-gutter). */
+  --container-sidebar: 16rem; /* 256 */
+  --container-record: 47.5rem; /* 760 max */
+  --container-home: 60rem; /* 960 max */
+  --container-panel: 22.5rem; /* 360: the desktop side panel (comments, history) */
+  --spacing-gutter: var(--gutter);
+
+  /* Motion: entering eases out; every transition without its own duration takes the fast one. */
+  --ease-enter: cubic-bezier(0.2, 0, 0, 1);
+  --default-transition-duration: var(--duration-fast);
+  --default-transition-timing-function: var(--ease-enter);
+}
+
+:root {
+  /*
+   * Spacing steps, every 4px from 2 (the same distances as Tailwind's p-0.5, p-1, p-1.5, p-2 ... p-16,
+   * so classes and these variables agree). For CSS that needs one directly.
+   */
+  --space-2: 0.125rem;
+  --space-4: 0.25rem;
+  --space-6: 0.375rem;
+  --space-8: 0.5rem;
+  --space-10: 0.625rem;
+  --space-12: 0.75rem;
+  --space-16: 1rem;
+  --space-20: 1.25rem;
+  --space-24: 1.5rem;
+  --space-32: 2rem;
+  --space-40: 2.5rem;
+  --space-48: 3rem;
+  --space-64: 4rem;
+
+  /* Collections use the full width with 40px side padding on desktop and 16px on phone. */
+  --gutter-phone: 1rem;
+  --gutter-desktop: 2.5rem;
+  --gutter: var(--gutter-phone);
+
+  /* How much of the screen's bottom edge the phone tab bar covers. Toasts sit above it; the bar sets it when it is shown. */
+  --bottom-nav-height: 0rem;
+
+  /*
+   * ColorMark (DL-3): the solid rounded square that identifies a workspace, folder or collection. The
+   * size is named for its pixels; the radius goes with it. The 1px inset edge is 12% of the text colour
+   * so pale hues still read on white.
+   */
+  --mark-8: 0.5rem; /* inline in meta text */
+  --mark-8-radius: 0.125rem; /* 2 */
+  --mark-10: 0.625rem; /* chips */
+  --mark-10-radius: 0.1875rem; /* 3 */
+  --mark-14: 0.875rem; /* sidebar rows */
+  --mark-14-radius: 0.25rem; /* 4 */
+  --mark-24: 1.5rem; /* phone titles */
+  --mark-24-radius: 0.4375rem; /* 7 */
+  --mark-26: 1.625rem; /* workspace switcher */
+  --mark-26-radius: 0.4375rem; /* 7 */
+  --mark-28: 1.75rem; /* desktop titles */
+  --mark-28-radius: 0.5rem; /* 8 */
+  --mark-edge: color-mix(in srgb, var(--fg) 12%, transparent);
+
+  /*
+   * Durations: fast for hover and press, base for popovers and menus, slow for sheets and dialogs.
+   * Leaving is 30% faster than entering, with the same curve (--ease-enter).
+   */
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 240ms;
+  --duration-fast-leave: calc(var(--duration-fast) * 0.7);
+  --duration-base-leave: calc(var(--duration-base) * 0.7);
+  --duration-slow-leave: calc(var(--duration-slow) * 0.7);
+}
+/* Derived from --fg at :root, so a subtree that forces a theme (the design reference page) derives it again from its own. */
+[data-theme-scope] {
+  --mark-edge: color-mix(in srgb, var(--fg) 12%, transparent);
+}
+/* The desktop layout starts at md (see the breakpoint above). */
+@media (min-width: 64rem) {
+  :root {
+    --gutter: var(--gutter-desktop);
+  }
+}
+
+/* duration-fast, duration-base, duration-slow (and -leave): the motion tokens as classes. They set
+   --tw-duration too, so `transition-colors duration-base` takes it the way Tailwind's own duration-* does. */
+@utility duration-fast {
+  --tw-duration: var(--duration-fast);
+  transition-duration: var(--duration-fast);
+}
+@utility duration-base {
+  --tw-duration: var(--duration-base);
+  transition-duration: var(--duration-base);
+}
+@utility duration-slow {
+  --tw-duration: var(--duration-slow);
+  transition-duration: var(--duration-slow);
+}
+@utility duration-fast-leave {
+  --tw-duration: var(--duration-fast-leave);
+  transition-duration: var(--duration-fast-leave);
+}
+@utility duration-base-leave {
+  --tw-duration: var(--duration-base-leave);
+  transition-duration: var(--duration-base-leave);
+}
+@utility duration-slow-leave {
+  --tw-duration: var(--duration-slow-leave);
+  transition-duration: var(--duration-slow-leave);
+}
+
+/* Numbers, dates and money line up in columns: tabular figures. (Tailwind's tabular-nums is the same
+   property; this is the name the spec's components use.) */
+@utility num {
+  font-variant-numeric: tabular-nums;
 }
 
 @layer base {
@@ -199,14 +403,30 @@
   }
 }
 
-/* Dialog / popover animations (Radix data-state). */
+/*
+ * Dialog / popover animations (Radix data-state), on the motion tokens: fast for a fade, base for
+ * popovers, menus and side panels, slow for sheets, drawers and dialogs, all on the enter curve.
+ * Leaving (data-state="closed") runs 30% faster than entering and ends where it started, so Radix
+ * keeps the element mounted until it is done.
+ */
 @keyframes ob-fade-in {
   from {
     opacity: 0;
   }
 }
+@keyframes ob-fade-out {
+  to {
+    opacity: 0;
+  }
+}
 @keyframes ob-pop-in {
   from {
+    opacity: 0;
+    transform: translateY(2px) scale(0.98);
+  }
+}
+@keyframes ob-pop-out {
+  to {
     opacity: 0;
     transform: translateY(2px) scale(0.98);
   }
@@ -217,13 +437,41 @@
     transform: translateX(12px);
   }
 }
+@keyframes ob-slide-out {
+  to {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+@keyframes ob-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes ob-rise-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
 @keyframes ob-sheet-in {
   from {
     transform: translateY(100%);
   }
 }
+@keyframes ob-sheet-out {
+  to {
+    transform: translateY(100%);
+  }
+}
 @keyframes ob-drawer-in {
   from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes ob-drawer-out {
+  to {
     transform: translateX(-100%);
   }
 }
@@ -233,33 +481,96 @@
   }
 }
 .ob-fade-in {
-  animation: ob-fade-in 120ms ease-out;
+  animation: ob-fade-in var(--duration-fast) var(--ease-enter);
 }
 .ob-pop-in {
-  animation: ob-pop-in 120ms ease-out;
+  animation: ob-pop-in var(--duration-base) var(--ease-enter);
 }
 .ob-slide-in {
-  animation: ob-slide-in 160ms ease-out;
+  animation: ob-slide-in var(--duration-base) var(--ease-enter);
+}
+.ob-rise-in {
+  animation: ob-rise-in var(--duration-base) var(--ease-enter);
 }
 .ob-sheet-in {
-  animation: ob-sheet-in 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  animation: ob-sheet-in var(--duration-slow) var(--ease-enter);
 }
 .ob-drawer-in {
-  animation: ob-drawer-in 200ms cubic-bezier(0.32, 0.72, 0, 1);
+  animation: ob-drawer-in var(--duration-slow) var(--ease-enter);
+}
+/* Dialogs scale in at the sheet duration (slow) rather than the popover one. */
+.ob-dialog-in {
+  animation: ob-pop-in var(--duration-slow) var(--ease-enter);
+}
+.ob-fade-in[data-state="closed"] {
+  animation: ob-fade-out var(--duration-fast-leave) var(--ease-enter) forwards;
+}
+.ob-pop-in[data-state="closed"] {
+  animation: ob-pop-out var(--duration-base-leave) var(--ease-enter) forwards;
+}
+.ob-slide-in[data-state="closed"] {
+  animation: ob-slide-out var(--duration-base-leave) var(--ease-enter) forwards;
+}
+.ob-rise-in[data-state="closed"] {
+  animation: ob-rise-out var(--duration-base-leave) var(--ease-enter) forwards;
+}
+.ob-sheet-in[data-state="closed"] {
+  animation: ob-sheet-out var(--duration-slow-leave) var(--ease-enter) forwards;
+}
+.ob-drawer-in[data-state="closed"] {
+  animation: ob-drawer-out var(--duration-slow-leave) var(--ease-enter) forwards;
+}
+.ob-dialog-in[data-state="closed"] {
+  animation: ob-pop-out var(--duration-slow-leave) var(--ease-enter) forwards;
 }
 .ob-spin {
   animation: ob-spin 0.8s linear infinite;
 }
+/* A loading placeholder (components/ui/skeleton.tsx): it breathes in opacity only, so it is also fine under reduced motion. */
+@keyframes ob-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+.ob-skeleton {
+  background: var(--hover);
+  animation: ob-pulse 1.6s ease-in-out infinite;
+}
+/*
+ * Reduced motion: nothing moves. What would slide or scale fades in over 120ms instead, and every
+ * transition animates opacity only (a change of colour or position is then instant). Unlayered and
+ * !important so it also beats the inline transitions of drag and drop.
+ */
 @media (prefers-reduced-motion: reduce) {
-  .ob-fade-in,
   .ob-pop-in,
   .ob-slide-in,
+  .ob-rise-in,
   .ob-sheet-in,
-  .ob-drawer-in {
-    animation: none;
+  .ob-drawer-in,
+  .ob-dialog-in {
+    animation: ob-fade-in var(--duration-fast) var(--ease-enter);
+  }
+  .ob-fade-in[data-state="closed"],
+  .ob-pop-in[data-state="closed"],
+  .ob-slide-in[data-state="closed"],
+  .ob-rise-in[data-state="closed"],
+  .ob-sheet-in[data-state="closed"],
+  .ob-drawer-in[data-state="closed"],
+  .ob-dialog-in[data-state="closed"] {
+    animation: ob-fade-out var(--duration-fast) var(--ease-enter) forwards;
   }
   .ob-spin {
     animation-duration: 2s;
+  }
+  .ob-skeleton {
+    animation: none;
+  }
+  *,
+  ::before,
+  ::after {
+    transition-property: opacity !important;
+    transition-duration: var(--duration-fast) !important;
+    transition-delay: 0s !important;
   }
 }
 
@@ -405,8 +716,8 @@
   --accent-line: color-mix(in srgb, var(--accent) 32%, var(--surface));
   --accent-ink: color-mix(in srgb, var(--accent) 85%, #000);
 }
-:root[data-theme="dark"] .ob-tint,
-:root[data-theme="dark"] .ob-tint-button {
+:is(:root, [data-theme-scope])[data-theme="dark"] .ob-tint,
+:is(:root, [data-theme-scope])[data-theme="dark"] .ob-tint-button {
   --accent-soft: color-mix(in srgb, var(--accent) 24%, var(--surface));
   --accent-line: color-mix(in srgb, var(--accent) 45%, var(--surface));
   --accent-ink: color-mix(in srgb, var(--accent) 45%, #fff);
@@ -415,8 +726,22 @@
   background: var(--accent-soft);
   color: var(--accent);
 }
-:root[data-theme="dark"] .ob-tint {
+:is(:root, [data-theme-scope])[data-theme="dark"] .ob-tint {
   color: var(--accent-ink);
+}
+/*
+ * A subtree that forces a theme (`data-theme-scope` with its own `data-theme`, used by the design reference page)
+ * can sit in a page of the other theme. The rules above reach it through the page's own <html data-theme="dark">,
+ * so a forced-light subtree in a dark page takes its light values back here.
+ */
+[data-theme-scope][data-theme="light"] .ob-tint,
+[data-theme-scope][data-theme="light"] .ob-tint-button {
+  --accent-soft: color-mix(in srgb, var(--accent) 13%, var(--surface));
+  --accent-line: color-mix(in srgb, var(--accent) 32%, var(--surface));
+  --accent-ink: color-mix(in srgb, var(--accent) 85%, #000);
+}
+[data-theme-scope][data-theme="light"] .ob-tint {
+  color: var(--accent);
 }
 .ob-dot {
   background: var(--accent);
@@ -450,6 +775,43 @@
 .ob-solid {
   background: var(--accent);
   color: #fff;
+}
+/*
+ * ColorMark (DL-3, components/ui/color-mark.tsx): the entity colour square. Pair it with .ob-hue-* and
+ * .ob-solid for the fill; .ob-mark-<px> picks the size and radius from the --mark-* tokens, and the inset
+ * edge keeps pale hues readable on white.
+ */
+.ob-mark {
+  display: inline-block;
+  flex: none;
+  width: var(--mark-size);
+  height: var(--mark-size);
+  border-radius: var(--mark-radius);
+  box-shadow: inset 0 0 0 1px var(--mark-edge);
+}
+.ob-mark-8 {
+  --mark-size: var(--mark-8);
+  --mark-radius: var(--mark-8-radius);
+}
+.ob-mark-10 {
+  --mark-size: var(--mark-10);
+  --mark-radius: var(--mark-10-radius);
+}
+.ob-mark-14 {
+  --mark-size: var(--mark-14);
+  --mark-radius: var(--mark-14-radius);
+}
+.ob-mark-24 {
+  --mark-size: var(--mark-24);
+  --mark-radius: var(--mark-24-radius);
+}
+.ob-mark-26 {
+  --mark-size: var(--mark-26);
+  --mark-radius: var(--mark-26-radius);
+}
+.ob-mark-28 {
+  --mark-size: var(--mark-28);
+  --mark-radius: var(--mark-28-radius);
 }
 .ob-tint-button {
   background: var(--accent-soft);

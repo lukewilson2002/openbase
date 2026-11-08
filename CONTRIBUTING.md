@@ -26,7 +26,8 @@ OPENBASE_E2E=1 scripts/check.sh         # the same plus the Playwright end-to-en
 
 `scripts/check.sh` runs rustfmt, clippy with `-D warnings`, `cargo deny check` (advisories,
 licences, bans, sources; policy in `deny.toml`), `npm audit --audit-level=high`, the Rust tests,
-the generated-file checks (TypeScript bindings, icon list, brand files), `tsc`, Vitest, the
+the generated-file checks (TypeScript bindings, icon list, brand files), the design-token check (no
+raw colour or px font size in `web/src`; see `scripts/check-tokens.mjs`), `tsc`, Vitest, the
 production web build and the live contract tests. The two audits need network access. Details and other scripts are in the
 [README](README.md#running-the-tests). If you change a Rust type that crosses the API, run
 `scripts/gen-types.sh` and commit the regenerated bindings.

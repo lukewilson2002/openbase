@@ -1,13 +1,15 @@
 import type { ReactNode } from "react";
 import { Tooltip as T } from "radix-ui";
+import { usePortalHost } from "./portal-host";
 
 /** Hover/focus tooltip around a single focusable child. */
 export function Tooltip({ content, children, side = "bottom" }: { content: ReactNode; children: ReactNode; side?: "top" | "bottom" | "left" | "right" }) {
+  const host = usePortalHost();
   return (
     <T.Provider delayDuration={300} skipDelayDuration={100}>
       <T.Root>
         <T.Trigger asChild>{children}</T.Trigger>
-        <T.Portal>
+        <T.Portal container={host.container}>
           <T.Content
             side={side}
             sideOffset={6}

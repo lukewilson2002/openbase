@@ -306,6 +306,81 @@ Colours are tokens in `src/styles/index.css` for both themes; the grid canvas mi
 `lib/cells/palette.ts`. `src/styles/contrast.test.ts` keeps text on its usual surfaces at WCAG AA (4.5:1) in both themes. Marks (the dot of a
 stack or lane, the bar of a coloured row) use `swatchColor`, because the pale chip backgrounds are about 1.3:1 on a white surface.
 
+### Design tokens (Notebook)
+
+`src/styles/index.css` also holds the Notebook tokens of the UX overhaul spec (`docs/plans/2026-11-07-ux-overhaul.md`, "Design
+language"): the type scale (`text-meta`, `text-label`, `text-ui`, `text-read`, `text-h3`, `text-sheet`, `text-h2`, `text-title`,
+`text-home`, `text-record`, `text-capture`, with `-phone` variants where the spec has them; each sets size, line height, weight and
+letter spacing), the radii (`rounded-xs` to `rounded-xl` and `rounded-pill`, which replace Tailwind's own steps of the same names),
+control and row heights (`h-control-md`, `h-row-table`), layout widths (`w-sidebar`, `max-w-record`, `max-w-home`, `px-gutter`), the
+ColorMark sizes (`--mark-14`, `--mark-14-radius`), the spacing steps (`--space-8`), the durations (`duration-fast`, `duration-base`,
+`duration-slow`, each with a `-leave` variant 30% faster) and the enter curve (`ease-enter`). `num` turns on tabular figures. A
+`prefers-reduced-motion` rule makes every transition an opacity fade. `src/lib/cn.ts` teaches tailwind-merge the new names; add a name
+there whenever you add a token class. `src/styles/tokens.test.ts` pins the values.
+
+`scripts/check-tokens.sh` (part of `scripts/check.sh`, so CI) fails on a raw hex colour, `rgb()` or px font size in `src/` outside
+`styles/*.css`, `theme/accents.ts`, `lib/colors.ts`, `lib/cells/palette.ts`, `views/grid/glide/`, `components/brandMarks.ts`,
+`pages/account/AssistantMarks.tsx` and test files. Files that have not moved to tokens yet are listed in
+`scripts/check-tokens.temporary-list.txt`; the list only shrinks (a file that no longer has a violation must be removed from it), and
+it must be empty by Phase 7 of the overhaul. The detector's tests are `src/styles/checkTokens.test.mjs`.
+
+### Core components (`src/components/ui`)
+
+The Notebook component set (spec "Core components"): `Button`, `IconButton` (`label` is its `aria-label`, required by type),
+`ColorMark`, `NavRow`, `StatusChip`, `FilterChip`, `LinkChip`, `CaptureChip`, `Card`, `FeedRow` (with `FeedTile`), `PropertyList` /
+`PropertyRow`, `Tabs`, `EmptyState` and `Skeleton`. A screen uses these rather than hand-rolling one. Components that can carry an entity
+colour take `hue` (a palette colour; `null` draws the mark in the colour its `markName` hashes to, `undefined` draws none), because `color`
+is an HTML attribute. `ColorMark` is the `.ob-mark` / `.ob-mark-<px>` classes plus the hue's `.ob-solid` fill. Phone sizes (44 px
+targets) switch on at the compact layout (`max-md:`) and on touch screens (`pointer-coarse:`). `src/components/ui/core.test.tsx` covers
+their behaviour and accessibility attributes.
+
+### Overlays and the other core components (`src/components/ui`)
+
+The second half of the set, all in `src/components/ui` and tested in `overlays.test.tsx`:
+
+- **Popover and Menu**: `popover.tsx` and `dropdown-menu.tsx` share one surface (`menuSurfaceClass`: radius 12, `--shadow`, 6 px
+  padding) and one row (`menuRowClass`: 40 px, 44 on phone, the highlighted row in primary-soft). A popover that holds a form rather
+  than rows adds its own padding (`p-3`). Radix gives both the arrow keys and Escape. Escape returns focus to the opener.
+- **Sheet** (`sheet.tsx`): the phone's bottom sheet, with the grab handle, title and Done. Hold the handle or title and it follows the
+  finger, then settles at half, full or closed from the drag velocity (`sheet-snap.ts`, pure and unit tested). It is sized from the visual
+  viewport, so it clears the on-screen keyboard. **Dialog** is centered above the desktop breakpoint (`DESKTOP_QUERY`, now defined in
+  `hooks/useMediaQuery` and re-exported by the shell) and a full-screen sheet below it; `phone="bottom"` makes it a `Sheet` instead.
+  **ConfirmDialog** is a `Dialog` with `role="alertdialog"`, focus on Cancel and no dismissal by a press outside.
+- **SidePanel** (`side-panel.tsx`): the docked 360 px right panel (`w-panel`) for comments and history. Not modal; Escape or its close
+  button closes it and returns focus. On phone use a `Sheet` or a full-screen `Dialog`.
+- **CommandPalette** and **FilterBar**: presentational shells with the keyboard model built in (`listbox.tsx`: Arrow keys move the
+  highlight while focus stays in the field, `aria-activedescendant`, wrap-around). The caller supplies results and suggestions and decides what
+  choosing one does. The filter bar's Backspace-on-empty selects the last chip, then removes it.
+- **TemporaryChangesBar** and **Toast**: each is a polite live region that is in the page before its text arrives. Keep the bar mounted
+  and flip `open`. A toast takes `action` or `actions` (Undo, Open), waits while hovered or focused, and sits bottom-left on desktop and above
+  the phone tab bar on phone: the bar sets `--bottom-nav-height` when it is shown.
+
+Dialogs opened from state have no Radix trigger to return focus to, so `use-return-focus.ts` notes the opener and gives focus back
+(A11Y-1). Leaving animations (`[data-state="closed"]` on `.ob-*-in` in `styles/index.css`) run 30% faster than entering; under reduced
+motion everything fades for 120 ms. `use-presence.ts` does the same for the pieces that are not Radix primitives.
+
+### Design reference page and icons (DL-2, DL-4)
+
+`/__dev/design` (`src/dev/DesignPage.tsx`, sections in `src/dev/design/`) draws every token and every core component in every state, with the
+light and dark themes side by side. It is built by `npm run dev` and when `VITE_DESIGN_PAGE=1` (`playwright.config.ts` sets it for the e2e
+build), and never into a release build: the route in `App.tsx` is behind `import.meta.env.DEV || import.meta.env.VITE_DESIGN_PAGE === "1"`, so the
+page and its chunk are tree-shaken out (check with `npm run build`, then grep `dist` for `DesignPage`). It needs no sign-in. Add a component to its
+section in `src/dev/designSections.ts` and to the matching `*Sections.tsx`; `DesignPage.test.tsx` and `e2e/design.spec.ts` check every section in both themes.
+
+- **Forcing a theme.** A column carries `data-theme-scope`, its own `data-theme` and the person's `data-accent`; `styles/index.css` and the generated
+  `styles/accents.css` apply the theme variables to such an element as well as to `<html>`. States that need a pointer (hover, focus) are drawn with
+  the classes the real state sets.
+- **Floating pieces.** `PortalHost` (`ui/portal-host.tsx`) moves the portals of everything inside it (popovers, menus, tooltips, dialogs, sheets) into
+  an element, so they take their column's theme. With `inline` it also draws a `Dialog`, `Sheet` or `CommandPalette` open in place, without the focus
+  trap or scroll lock, so any number can be open at once inside a `Frame`. The app never uses either.
+- **Screenshots** for the ledger are in `docs/plans/ux-overhaul-screenshots/01-design-reference-{light,dark}-{1440,390}.png`. A page taller than
+  16384 px cannot be captured in one piece by Chrome: take it in strips (`clip` with `fullPage`) and append them.
+
+`ui/icon.tsx` is the one way the core components draw an icon: stroke width 2, `currentColor`, `aria-hidden`, 16 px (20 on phone and touch screens)
+by default, `size="sm"` (12 px) inside a chip or checkbox, `size="fit"` where the caller sizes it. It accepts no stroke width, colour or width/height.
+`IconButton` requires `label` by type. `ui/icons.test.tsx` holds the `@ts-expect-error` cases and a scan of `components/ui` that fails on a lucide
+glyph drawn directly, a stroke width set by hand, an `IconButton` without `label` or an icon-only `<button>` without `aria-label`.
+
 ### Logo, favicon and web app manifest
 
 `brand/` holds the logo artwork (see `brand/README.md`); `scripts/gen-brand.sh` turns it into what the client ships and

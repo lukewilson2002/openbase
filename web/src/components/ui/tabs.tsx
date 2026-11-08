@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { Tabs as T } from "radix-ui";
 import { cn } from "@/lib/cn";
 
@@ -13,16 +13,29 @@ export function TabsList({ className, ...props }: ComponentProps<typeof T.List>)
   );
 }
 
-export function TabsTrigger({ className, ...props }: ComponentProps<typeof T.Trigger>) {
+export interface TabsTriggerProps extends ComponentProps<typeof T.Trigger> {
+  /** A 15 px icon before the label: on a view tab, the layout (grid, board, calendar), because it says how the data is shown. */
+  icon?: ReactNode;
+}
+
+/** A text tab; the selected one is underlined in the accent (2 px) and its text is full strength. */
+export function TabsTrigger({ className, icon, children, ...props }: TabsTriggerProps) {
   return (
     <T.Trigger
       className={cn(
-        "-mb-px inline-flex h-9 shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 text-[0.8125rem] font-medium text-muted",
+        "-mb-px inline-flex h-control-lg shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 text-ui font-medium text-muted max-md:h-control-touch",
         "hover:text-fg data-[state=active]:border-primary data-[state=active]:text-fg",
         className,
       )}
       {...props}
-    />
+    >
+      {icon != null && (
+        <span aria-hidden className="inline-flex shrink-0 items-center [&>svg]:size-[0.9375rem]">
+          {icon}
+        </span>
+      )}
+      {children}
+    </T.Trigger>
   );
 }
 

@@ -31,6 +31,9 @@ const ForgotPasswordPage = lazy(() => import("@/pages/PasswordResetPages").then(
 const ResetPasswordPage = lazy(() => import("@/pages/PasswordResetPages").then((m) => ({ default: m.ResetPasswordPage })));
 // Dev-only harnesses for the mock API (`VITE_MOCK=1 npm run dev`); `import.meta.env.DEV` drops them from builds.
 const DevSharePage = import.meta.env.DEV ? lazy(() => import("@/dev/DevSharePage")) : null;
+// The design reference page (DL-2): in dev and in the end-to-end build (VITE_DESIGN_PAGE=1, set by playwright.config.ts).
+// The condition is compile-time, so a release build drops the route, the page and its chunk.
+const DesignPage = import.meta.env.DEV || import.meta.env.VITE_DESIGN_PAGE === "1" ? lazy(() => import("@/dev/DesignPage")) : null;
 // Public pages for people without an account: their own chunks, outside the app shell.
 const PublicFormPage = lazy(() => import("@/public/form/PublicFormPage"));
 const PublicSharePage = lazy(() => import("@/public/view/PublicSharePage"));
@@ -53,6 +56,8 @@ export function AppRoutes() {
           <Route path="/invite/:token" element={<InvitePage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          {/* A page for looking at, with nothing behind it: no sign-in needed. */}
+          {DesignPage && <Route path="/__dev/design" element={<DesignPage />} />}
           {/* The signed-in app: one RequireAuth and one IntroGate for every page in it. */}
           <Route element={<SignedInArea />}>
             <Route path="/" element={<HomePage />} />

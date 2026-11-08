@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import type { FieldType } from "@/api/types";
 import { cn } from "@/lib/cn";
+import { Icon } from "./icon";
 
 export const FIELD_TYPE_ICONS: Record<FieldType, LucideIcon> = {
   text: Type,
@@ -95,6 +96,5 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
 };
 
 export function FieldTypeIcon({ type, className }: { type: FieldType; className?: string }) {
-  const Icon = FIELD_TYPE_ICONS[type];
-  return <Icon aria-hidden className={cn("size-4 shrink-0 text-muted", className)} />;
+  return <Icon icon={FIELD_TYPE_ICONS[type]} className={cn("text-muted", className)} />;
 }

@@ -92,7 +92,7 @@ function AltButton({ alt, onChange }: { alt: string; onChange: (alt: string) => 
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className={cn("flex flex-col gap-2", KEEP_GRID_EDITOR)}
+        className={cn("flex flex-col gap-2 p-3", KEEP_GRID_EDITOR)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();

@@ -2,6 +2,7 @@ import { useId, type ReactNode } from "react";
 import { Check } from "lucide-react";
 import { Checkbox as C, Switch as S } from "radix-ui";
 import { cn } from "@/lib/cn";
+import { Icon } from "./icon";
 
 export interface CheckboxProps {
   checked: boolean;
@@ -23,7 +24,7 @@ export function Checkbox({ checked, onCheckedChange, label, disabled, className 
         className="flex size-4 shrink-0 items-center justify-center rounded border border-line-strong bg-surface data-[state=checked]:border-primary data-[state=checked]:bg-primary disabled:opacity-50"
       >
         <C.Indicator>
-          <Check aria-hidden className="size-3 text-primary-fg" strokeWidth={3} />
+          <Icon icon={Check} size="sm" className="text-primary-fg" />
         </C.Indicator>
       </C.Root>
       <label htmlFor={id} className={cn("text-[0.8125rem]", disabled && "opacity-60")}>

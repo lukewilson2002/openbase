@@ -10,10 +10,10 @@
  */
 import { useId, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { X } from "lucide-react";
 import { recordKeys, recordsApi } from "@/api/records";
 import type { Field, LinkRef } from "@/api/types";
 import { Button } from "@/components/ui/button";
+import { LinkChip } from "@/components/ui/link-chip";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import { linkRefs } from "@/lib/cells/kinds";
@@ -32,19 +32,8 @@ export interface LinkEditorProps extends FieldEditorCallbacks {
   initialText?: string;
 }
 
-export function LinkChip({ name, onRemove }: { name: string; onRemove?: () => void }) {
-  return (
-    // A linked record as a small card, as in the grid's cells: a hairline border, its title in the app's colour.
-    <span className="inline-flex max-w-full items-center gap-1 truncate rounded border border-line bg-surface px-1.5 py-px text-xs font-medium text-primary-text">
-      <span className="truncate">{name || "Untitled"}</span>
-      {onRemove && (
-        <button type="button" aria-label={`Remove ${name}`} onClick={onRemove} className="rounded hover:bg-black/10">
-          <X aria-hidden className="size-3" />
-        </button>
-      )}
-    </span>
-  );
-}
+// The chip itself is a core component (DL-3); this re-export keeps the editors' imports as they were.
+export { LinkChip };
 
 export function LinkEditor({ field, value, variant, target, initialText, onChange, onCommit: commitUp, onCancel }: LinkEditorProps) {
   const [selected, setSelected] = useState<LinkRef[]>(() => linkRefs(value));
