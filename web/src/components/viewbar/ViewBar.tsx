@@ -66,7 +66,7 @@ function FloatingAdd({ onAdd }: { onAdd: () => void }) {
       aria-label="Add record"
       onClick={onAdd}
       className={cn(
-        "fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-20 inline-flex h-12 items-center gap-1.5 rounded-full pl-4 pr-[18px] text-[0.9375rem] font-semibold shadow-pop transition-colors md:bottom-8 md:right-8",
+        "fixed bottom-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom)+1rem)] right-[max(1rem,env(safe-area-inset-right))] z-20 inline-flex h-12 items-center gap-1.5 rounded-full pl-4 pr-[18px] text-[0.9375rem] font-semibold shadow-pop transition-colors md:bottom-8 md:right-8",
         addButtonClass,
       )}
     >

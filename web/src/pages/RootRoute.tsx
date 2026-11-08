@@ -23,7 +23,7 @@ export function RootRoute() {
   if (workspaces.isPending) return <PageSpinner label="Loading workspaces" />;
   if (workspaces.isError)
     return (
-      <HomeShell>
+      <HomeShell variant="tab">
         <div className="p-6">
           <Notice tone="error">{errorMessage(workspaces.error)}</Notice>
         </div>
@@ -32,7 +32,7 @@ export function RootRoute() {
   const target = workspaceToOpen(workspaces.data);
   if (target) return <Navigate to={`/workspace/${target.id}`} replace />;
   return (
-    <HomeShell>
+    <HomeShell variant="tab">
       <FirstWorkspace />
     </HomeShell>
   );

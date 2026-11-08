@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Link } from "react-router";
 import { Bot, ChevronsUpDown, LogOut, MessageSquare, Palette, PlayCircle, Settings, Shield } from "lucide-react";
 import { useMe } from "@/auth/useAuth";
 import { AccentSwatchItems, ThemeRadioItems, useLogOutAndLeave } from "@/components/accountMenu";
 import { Avatar } from "@/components/ui/avatar";
 import { Icon } from "@/components/ui/icon";
+import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,18 +18,40 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useIntro } from "@/onboarding/IntroContext";
 import { useTheme } from "@/theme/ThemeProvider";
+import { FEEDBACK_URL, ProfileSheet } from "./ProfileSheet";
 
 const MODE_LABEL = { system: "System", light: "Light", dark: "Dark" } as const;
-/** Where feedback goes: the project's GitHub Discussions, in a new tab. */
-export const FEEDBACK_URL = "https://github.com/lukewilson2002/openbase/discussions";
 
 /**
  * The signed-in person at the bottom of the sidebar (their avatar and name, NAV-1), opening their account actions upwards: the
  * account settings (the menu's only way there), connecting an assistant, the intro, sending feedback
  * (the project's GitHub Discussions), the theme and accent colour, administration for
- * administrators, and signing out.
+ * administrators, and signing out. On a phone the row opens the same actions as a bottom sheet (NAV-8).
  */
 export function ProfileMenu() {
+  const desktop = useMediaQuery(DESKTOP_QUERY);
+  return desktop ? <ProfileDropdown /> : <ProfileSheetRow />;
+}
+
+const rowClass = "flex min-h-control-md w-full min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-hover data-[state=open]:bg-hover max-md:min-h-control-touch";
+
+function ProfileSheetRow() {
+  const { data: user } = useMe();
+  const [open, setOpen] = useState(false);
+  if (!user) return null;
+  return (
+    <>
+      <button type="button" aria-label="Account menu" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)} className={rowClass}>
+        <Avatar name={user.name} email={user.email} size="sm" own />
+        <span className="min-w-0 flex-1 truncate text-ui font-medium">{user.name}</span>
+        <Icon icon={ChevronsUpDown} className="text-muted" />
+      </button>
+      <ProfileSheet open={open} onOpenChange={setOpen} />
+    </>
+  );
+}
+
+function ProfileDropdown() {
   const { data: user } = useMe();
   const { openIntro } = useIntro();
   const { mode } = useTheme();
@@ -41,7 +65,7 @@ export function ProfileMenu() {
         <button
           type="button"
           aria-label="Account menu"
-          className="flex min-h-control-md w-full min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-hover data-[state=open]:bg-hover max-md:min-h-control-touch"
+          className={rowClass}
         >
           <Avatar name={user.name} email={user.email} size="sm" own />
           <span className="min-w-0 flex-1 truncate text-ui font-medium">{user.name}</span>

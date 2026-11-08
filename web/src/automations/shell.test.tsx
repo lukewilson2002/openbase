@@ -26,7 +26,7 @@ function open(role: string, route: string) {
 }
 
 describe("automations in the base shell", () => {
-  // The links live in the menu tree, docked from tablet width up (a drawer on phones).
+  // The links live in the menu tree, docked from tablet width up (a phone has the Collections tab).
   beforeEach(() => stubDesktop());
 
   it("is reached from the folder in the sidebar by creators, keeps the collections listed and does not mistake the path for a collection", async () => {

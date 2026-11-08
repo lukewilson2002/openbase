@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BasePerson, BaseSchema } from "@/api/types";
 import { SIDEBAR_KEY } from "@/shell/sidebarPrefs";
-import { USER, apiError, makeSchema, makeWorkspace, mockApi, renderApp, stubDesktop } from "@/test/utils";
+import { USER, apiError, makeSchema, makeWorkspace, mockApi, renderApp, stubDesktop, stubPhone } from "@/test/utils";
 
 // These tests are about the shell (menu, top bar, permissions). The real grid draws on a canvas
 // and has its own tests under src/views/grid, so the shell tests render the placeholder for it,
@@ -698,56 +698,29 @@ describe("an empty base", () => {
 });
 
 describe("base shell on a phone", () => {
-  it("keeps the menu in a drawer that closes when a collection is chosen", async () => {
-    const user = userEvent.setup();
+  beforeEach(() => stubPhone());
+
+  it("has no menu to open: a back link to the Collections tab, the collection's name, Share, Members and search, above the bottom navigation", async () => {
     openBase("owner");
     await screen.findByText("Grid view coming soon");
+    expect(screen.queryByRole("button", { name: "Show menu" })).not.toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Collections in Project tracker" })).not.toBeInTheDocument();
-    // Share keeps its name as an icon button.
-    expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Show menu" }));
-    let drawer = await screen.findByRole("dialog", { name: "Menu" });
-    // Opening a collection closes the drawer; it opens the view last used in it.
-    await user.click(await within(drawer).findByRole("link", { name: /^People/ }));
-    expect(await screen.findByRole("main", { name: "Everyone" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument());
-
-    // Choosing the collection already open closes it too, though the address stays the same.
-    await user.click(screen.getByRole("button", { name: "Show menu" }));
-    drawer = await screen.findByRole("dialog", { name: "Menu" });
-    await user.click(await within(drawer).findByRole("link", { name: /^People/ }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument());
-  });
-
-  it("names the collection in its own header, whose toggle opens the drawer: Home and Notifications, then the collections", async () => {
-    const user = userEvent.setup();
-    openBase("owner");
-    await screen.findByText("Grid view coming soon");
-    // The workspace and folder small over the open collection's name; not a picker.
     const header = screen.getByRole("main", { name: "All tasks" }).querySelector("header")!;
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Tasks");
-    expect(within(header).getByText("Acme / Project tracker")).toBeInTheDocument();
-    await user.click(within(header).getByRole("button", { name: "Show menu" }));
-    const drawer = await screen.findByRole("dialog", { name: "Menu" });
-    expect(within(drawer).getByRole("button", { name: "Close menu" })).toBeInTheDocument();
-    const nav = within(drawer).getByRole("navigation", { name: "Main menu" });
-    expect(within(nav).getAllByRole("link")[0]).toHaveAccessibleName("Home");
-    expect(within(nav).getByRole("button", { name: "Notifications" })).toBeInTheDocument();
-    expect(await within(nav).findByRole("list", { name: "Collections in Project tracker" })).toBeInTheDocument();
-    // Folding a folder is not navigating: the drawer stays.
-    await user.click(within(nav).getByRole("button", { name: "Project tracker" }));
-    expect(screen.getByRole("dialog", { name: "Menu" })).toBeInTheDocument();
+    expect(within(header).getByRole("link", { name: "Back to Collections" })).toHaveAttribute("href", "/workspace/wsp1/collections");
+    expect(within(header).getByRole("button", { name: "Share" })).toBeInTheDocument();
+    expect(within(header).getByRole("link", { name: "Members" })).toHaveAttribute("href", "/workspace/wsp1/members");
+    expect(within(header).getByRole("button", { name: "Search everything" })).toBeInTheDocument();
+    // The Collections tab is the one that is current, from a collection.
+    const tabs = await screen.findByRole("navigation", { name: "Main menu" });
+    expect(within(tabs).getByRole("link", { name: "Collections" })).toHaveAttribute("aria-current", "page");
   });
 
-  it("opens a collection's dialogs over the drawer", async () => {
-    const user = userEvent.setup();
-    openBase("creator");
+  it("leaves Share to those who can share", async () => {
+    openBase("editor");
     await screen.findByText("Grid view coming soon");
-    await user.click(screen.getByRole("button", { name: "Show menu" }));
-    const drawer = await screen.findByRole("dialog", { name: "Menu" });
-    await user.click(await within(drawer).findByRole("button", { name: "Collection options for People" }));
-    await user.click(await screen.findByRole("menuitem", { name: "Rename" }));
-    expect(await screen.findByRole("dialog", { name: "Rename collection" })).toBeInTheDocument();
+    const header = screen.getByRole("main", { name: "All tasks" }).querySelector("header")!;
+    expect(within(header).queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
+    expect(within(header).getByRole("link", { name: "Members" })).toBeInTheDocument();
   });
 });

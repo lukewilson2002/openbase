@@ -20,7 +20,6 @@ import { Icon } from "@/components/ui/icon";
 import { NavRow } from "@/components/ui/nav-row";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
-import { useCloseMenu } from "./menuContext";
 import { useNavDialog } from "./NavDialogs";
 import { MenuGroups, RowMenu, countSlotClass, rowEndClass } from "./NavRowMenu";
 import { MoveItems, SortableGroup, SortableRow, useRowMenu } from "./sortable";
@@ -65,7 +64,6 @@ function CollectionRow({ base, table: t, active }: { base: BaseSummary; table: T
   const qc = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
-  const closeMenu = useCloseMenu();
   const openDialog = useNavDialog();
   const { menu, onContextMenu } = useRowMenu();
   const canManage = basePermissions.manageTables(base.role);
@@ -91,7 +89,7 @@ function CollectionRow({ base, table: t, active }: { base: BaseSummary; table: T
       row={
         <>
           <NavRow asChild hue={t.color} markName={t.name} selected={active} className={rowEndClass} count={<span className={countSlotClass}>{countFormat.format(t.record_count)}</span>}>
-            <Link to={collectionPath(base.id, t.id)} onClick={closeMenu}>
+            <Link to={collectionPath(base.id, t.id)}>
               {t.name}
             </Link>
           </NavRow>

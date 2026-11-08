@@ -276,6 +276,8 @@
 
   /* How much of the screen's bottom edge the phone tab bar covers. Toasts sit above it; the bar sets it when it is shown. */
   --bottom-nav-height: 0rem;
+  /* The tab bar itself, 64 tall (PH-1), not counting the home indicator it sits above. */
+  --bottom-nav-size: 4rem;
 
   /*
    * ColorMark (DL-3): the solid rounded square that identifies a workspace, folder or collection. The
@@ -413,7 +415,7 @@
 
 /*
  * Dialog / popover animations (Radix data-state), on the motion tokens: fast for a fade, base for
- * popovers, menus and side panels, slow for sheets, drawers and dialogs, all on the enter curve.
+ * popovers, menus and side panels, slow for sheets and dialogs, all on the enter curve.
  * Leaving (data-state="closed") runs 30% faster than entering and ends where it started, so Radix
  * keeps the element mounted until it is done.
  */
@@ -473,16 +475,6 @@
     transform: translateY(100%);
   }
 }
-@keyframes ob-drawer-in {
-  from {
-    transform: translateX(-100%);
-  }
-}
-@keyframes ob-drawer-out {
-  to {
-    transform: translateX(-100%);
-  }
-}
 @keyframes ob-spin {
   to {
     transform: rotate(360deg);
@@ -503,9 +495,6 @@
 .ob-sheet-in {
   animation: ob-sheet-in var(--duration-slow) var(--ease-enter);
 }
-.ob-drawer-in {
-  animation: ob-drawer-in var(--duration-slow) var(--ease-enter);
-}
 /* Dialogs scale in at the sheet duration (slow) rather than the popover one. */
 .ob-dialog-in {
   animation: ob-pop-in var(--duration-slow) var(--ease-enter);
@@ -524,9 +513,6 @@
 }
 .ob-sheet-in[data-state="closed"] {
   animation: ob-sheet-out var(--duration-slow-leave) var(--ease-enter) forwards;
-}
-.ob-drawer-in[data-state="closed"] {
-  animation: ob-drawer-out var(--duration-slow-leave) var(--ease-enter) forwards;
 }
 .ob-dialog-in[data-state="closed"] {
   animation: ob-pop-out var(--duration-slow-leave) var(--ease-enter) forwards;
@@ -554,7 +540,6 @@
   .ob-slide-in,
   .ob-rise-in,
   .ob-sheet-in,
-  .ob-drawer-in,
   .ob-dialog-in {
     animation: ob-fade-in var(--duration-fast) var(--ease-enter);
   }
@@ -563,7 +548,6 @@
   .ob-slide-in[data-state="closed"],
   .ob-rise-in[data-state="closed"],
   .ob-sheet-in[data-state="closed"],
-  .ob-drawer-in[data-state="closed"],
   .ob-dialog-in[data-state="closed"] {
     animation: ob-fade-out var(--duration-fast) var(--ease-enter) forwards;
   }

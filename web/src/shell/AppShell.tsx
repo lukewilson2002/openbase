@@ -1,23 +1,28 @@
 /**
- * The frame of every signed-in screen: the sidebar beside the screen itself. There is no global
- * top bar (NAV-5); each screen draws its own header inside `main` (`ScreenHeader`, or the collection
- * header), and that header holds the sidebar's toggle and the search button. On a desktop the sidebar is
- * docked, resizable and collapsible (the toggle, or Ctrl+\) and the notifications open beside it; on a
- * phone it is a drawer that the header's toggle opens and the notifications open inside it.
+ * The frame of every signed-in screen. There is no global top bar (NAV-5); each screen draws its own header
+ * inside `main` (`ScreenHeader`, or the collection header), and that header holds the sidebar's toggle and the
+ * search button. On a desktop the sidebar is docked, resizable and collapsible (the toggle, or Ctrl+\) and the
+ * notifications open beside it. A phone has no sidebar: its three tabs are the bottom navigation (PH-1), and the
+ * Collections tab holds what the sidebar holds (NAV-7).
  */
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { useLocation } from "react-router";
-import { NotificationsPanel, useUnreadCount } from "@/components/notifications/Notifications";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/api/endpoints";
+import { keys } from "@/api/keys";
+import { useUnreadCount } from "@/components/notifications/Notifications";
 import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
-import { MenuControlContext, useCloseMenu, type MenuControl } from "./menuContext";
+import { workspaceToOpen } from "@/pages/workspace/lastWorkspace";
+import { BottomNav, HideBottomNavProvider, isRecordPath } from "./bottomNav";
+import { MenuControlContext, type MenuControl } from "./menuContext";
 import { SearchBarProvider, type SearchHere } from "./SearchEverything";
 import { useSidebarPrefs, useSidebarShortcut } from "./sidebarPrefs";
-import { DockedSidebar, SidebarDrawer } from "./Sidebar";
+import { DockedSidebar } from "./Sidebar";
 import { SidebarContent } from "./SidebarContent";
 
 // Tailwind's `md` (raised to 1024px in styles/index.css): from here up the desktop layout, with the menu docked beside the page.
-export { DESKTOP_QUERY, useCloseMenu };
+export { DESKTOP_QUERY };
 
 export interface AppShellProps {
   /** The screen: its header (which carries the menu's toggle), then its content. */
@@ -41,71 +46,61 @@ export interface AppShellProps {
 export function AppShell({ children, className, fill, mainLabel, searchHere, workspaceId, tableId }: AppShellProps) {
   const desktop = useMediaQuery(DESKTOP_QUERY);
   const [prefs, setPrefs] = useSidebarPrefs();
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerNotifications, setDrawerNotifications] = useState(false);
-  const toggleRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
-  const { pathname, search } = useLocation();
+  const { pathname } = useLocation();
   const unread = useUnreadCount();
+  // `retryOnMount` off: a failed list that the screen above shows an error for must not start again (and flip that screen back to loading) just because the shell mounted under it.
+  const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list, retryOnMount: false });
+  // Screens that hide the bottom navigation (full-screen editors) register here; a record page hides it by its address.
+  const [hiders, setHiders] = useState(0);
+  const registerHider = useCallback(() => {
+    setHiders((n) => n + 1);
+    return () => setHiders((n) => n - 1);
+  }, []);
 
-  // A tap on a menu item navigates; the drawer must not stay open over the page it opened.
-  useEffect(() => setDrawerOpen(false), [pathname, search]);
-  // Growing the window past the breakpoint docks the menu; a drawer left open would cover it.
+  // The tabs lead to the page's workspace, else the one used last; with none (first run) there is nowhere to lead.
+  const tabsWorkspace = workspaceId ?? workspaceToOpen(workspaces.data ?? [])?.id;
+  const bottomNav = !desktop && !!tabsWorkspace && hiders === 0 && !isRecordPath(pathname);
+  // The toast stands above the bar (--bottom-nav-height), and so do floating buttons.
   useEffect(() => {
-    if (desktop) setDrawerOpen(false);
-  }, [desktop]);
-  // The drawer opens on its menu, not on the notifications it was left on.
-  useEffect(() => {
-    if (!drawerOpen) setDrawerNotifications(false);
-  }, [drawerOpen]);
+    if (!bottomNav) return;
+    const root = document.documentElement;
+    root.style.setProperty("--bottom-nav-height", "var(--bottom-nav-size)");
+    return () => void root.style.removeProperty("--bottom-nav-height");
+  }, [bottomNav]);
 
-  const expanded = desktop ? !prefs.collapsed : drawerOpen;
-  const toggle = useCallback(() => (desktop ? setPrefs({ collapsed: !prefs.collapsed }) : setDrawerOpen((o) => !o)), [desktop, prefs.collapsed, setPrefs]);
-  const closeMenu = useCallback(() => setDrawerOpen(false), []);
-  // Notifications is in the menu, so a hidden menu carries its unread mark on the toggle.
+  const expanded = !prefs.collapsed;
+  const toggle = useCallback(() => setPrefs({ collapsed: !prefs.collapsed }), [prefs.collapsed, setPrefs]);
+  // Notifications is in the sidebar, so a hidden sidebar carries its unread mark on the toggle.
   const flagUnread = unread > 0 && !expanded;
   const toggleLabel = expanded ? "Hide menu" : flagUnread ? `Show menu (${unread} unread in Notifications)` : "Show menu";
-  const control = useMemo<MenuControl>(
-    () => ({
-      close: closeMenu,
-      toggle,
-      expanded,
-      toggleLabel,
-      flagUnread,
-      toggleRef,
-      menuId,
-      desktop,
-    }),
-    [closeMenu, desktop, toggle, expanded, toggleLabel, flagUnread, menuId],
-  );
+  const control = useMemo<MenuControl>(() => ({ toggle, expanded, toggleLabel, flagUnread, menuId }), [toggle, expanded, toggleLabel, flagUnread, menuId]);
   useSidebarShortcut(toggle);
 
   return (
     <MenuControlContext.Provider value={control}>
-      <SearchBarProvider here={searchHere}>
-        <div className={cn("flex", fill ? "h-dvh overflow-hidden" : "min-h-dvh pb-[env(safe-area-inset-bottom)]", className)}>
-          {desktop && !prefs.collapsed && (
-            <DockedSidebar id={menuId} width={prefs.width} onResize={(width, persist) => setPrefs({ width }, persist)}>
-              <SidebarContent mode="docked" workspaceId={workspaceId} tableId={tableId} />
-            </DockedSidebar>
-          )}
-          <main aria-label={mainLabel} className={cn("flex min-w-0 flex-1 flex-col", fill && "overflow-hidden")}>
-            {children}
-          </main>
-          {!desktop && (
-            <SidebarDrawer
-              id={menuId}
-              open={drawerOpen}
-              onOpenChange={setDrawerOpen}
-              returnFocus={toggleRef}
-              notificationsPanel={drawerNotifications ? <NotificationsPanel onOpened={closeMenu} className="flex-1" /> : undefined}
-              onCloseNotifications={() => setDrawerNotifications(false)}
-            >
-              <SidebarContent mode="drawer" workspaceId={workspaceId} tableId={tableId} onOpenNotifications={() => setDrawerNotifications(true)} />
-            </SidebarDrawer>
-          )}
-        </div>
-      </SearchBarProvider>
+      <HideBottomNavProvider register={registerHider}>
+        <SearchBarProvider here={searchHere}>
+          <div
+            className={cn(
+              "flex",
+              fill ? "h-dvh overflow-hidden" : "min-h-dvh",
+              bottomNav ? "pb-[calc(var(--bottom-nav-size)+env(safe-area-inset-bottom))]" : !fill && "pb-[env(safe-area-inset-bottom)]",
+              className,
+            )}
+          >
+            {desktop && !prefs.collapsed && (
+              <DockedSidebar id={menuId} width={prefs.width} onResize={(width, persist) => setPrefs({ width }, persist)}>
+                <SidebarContent mode="docked" workspaceId={workspaceId} tableId={tableId} />
+              </DockedSidebar>
+            )}
+            <main aria-label={mainLabel} className={cn("flex min-w-0 flex-1 flex-col", fill && "overflow-hidden")}>
+              {children}
+            </main>
+            {bottomNav && tabsWorkspace && <BottomNav workspaceId={tabsWorkspace} />}
+          </div>
+        </SearchBarProvider>
+      </HideBottomNavProvider>
     </MenuControlContext.Provider>
   );
 }

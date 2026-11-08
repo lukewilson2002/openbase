@@ -198,10 +198,12 @@ describe("account", () => {
     renderApp({ route: "/account?tab=tokens" });
 
     await user.click(await screen.findByRole("button", { name: /New token/ }));
+    // The shell (a phone's tabs) asks for the workspaces on its own; the form must not add a request.
+    const shellRequests = api.callsTo("GET /api/workspaces").length;
     const form = await screen.findByRole("dialog", { name: "New personal access token" });
     await user.type(within(form).getByLabelText("Name"), "Scoped");
     // Without the list of bases being asked for, nothing is fetched.
-    expect(api.callsTo("GET /api/workspaces")).toHaveLength(0);
+    expect(api.callsTo("GET /api/workspaces")).toHaveLength(shellRequests);
     await user.selectOptions(within(form).getByLabelText("Projects"), "some");
     const group = await within(form).findByRole("group", { name: "Allowed projects" });
     expect(within(form).getByRole("button", { name: "Create token" })).toBeDisabled();

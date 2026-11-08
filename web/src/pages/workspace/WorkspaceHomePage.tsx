@@ -10,5 +10,5 @@ import { useWorkspace } from "./useWorkspace";
 export function WorkspaceHomePage() {
   const { workspaceId } = useParams();
   const { ws, fallback } = useWorkspace(workspaceId);
-  return <HomeShell workspaceId={workspaceId}>{ws ? <InboxPage title="Home" /> : fallback}</HomeShell>;
+  return <HomeShell workspaceId={workspaceId} variant="home">{ws ? <InboxPage title="Home" /> : fallback}</HomeShell>;
 }

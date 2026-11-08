@@ -4,6 +4,7 @@ import { render, screen, type RenderResult } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { AppRoutes } from "@/App";
+import { COARSE_POINTER } from "@/hooks/useMediaQuery";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { setUnauthorizedHandler } from "@/api/client";
 import { Providers, createQueryClient } from "@/providers";
@@ -210,6 +211,26 @@ export function stubDesktop(): void {
     (query: string) =>
       ({
         matches: query === DESKTOP_QUERY,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as MediaQueryList,
+  );
+}
+
+/**
+ * Make `useMediaQuery` see a phone: narrower than the desktop breakpoint, with a finger for a pointer. jsdom matches
+ * nothing, which already reads as a phone; this says so, and also sets the touch pointer.
+ */
+export function stubPhone(): void {
+  vi.spyOn(window, "matchMedia").mockImplementation(
+    (query: string) =>
+      ({
+        matches: query === COARSE_POINTER,
         media: query,
         onchange: null,
         addEventListener: () => {},

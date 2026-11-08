@@ -131,49 +131,6 @@ describe("AppShell on a desktop", () => {
   });
 });
 
-describe("AppShell on a phone", () => {
-  it("opens the menu as a drawer and closes it with the corner button, focus back on the toggle", async () => {
-    const user = userEvent.setup();
-    routes();
-    renderWithProviders(<Shell />);
-    expect(screen.queryByRole("navigation", { name: "Main menu" })).not.toBeInTheDocument();
-    const toggle = screen.getByRole("button", { name: "Show menu" });
-    await user.click(toggle);
-
-    const drawer = await screen.findByRole("dialog", { name: "Menu" });
-    expect(within(drawer).getByRole("link", { name: "Home" })).toBeInTheDocument();
-    expect(await within(drawer).findByRole("button", { name: "Account menu" })).toBeInTheDocument();
-    expect(drawer).toContainElement(document.activeElement as HTMLElement);
-
-    await user.click(within(drawer).getByRole("button", { name: "Close menu" }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Show menu" })).toHaveFocus();
-  });
-
-  it("closes the drawer on a tap on Home even when Home is already the page", async () => {
-    const user = userEvent.setup();
-    routes();
-    renderWithProviders(<Shell />, "/");
-    await user.click(screen.getByRole("button", { name: "Show menu" }));
-    await user.click(within(await screen.findByRole("dialog", { name: "Menu" })).getByRole("link", { name: "Home" }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument());
-  });
-
-  it("closes the drawer with Escape and after following a link", async () => {
-    const user = userEvent.setup();
-    routes();
-    renderWithProviders(<Shell />, "/elsewhere");
-    await user.click(screen.getByRole("button", { name: "Show menu" }));
-    await screen.findByRole("dialog", { name: "Menu" });
-    await user.keyboard("{Escape}");
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument());
-
-    await user.click(screen.getByRole("button", { name: "Show menu" }));
-    await user.click(within(await screen.findByRole("dialog", { name: "Menu" })).getByRole("link", { name: "Home" }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument());
-  });
-});
-
 describe("ProfileMenu", () => {
   it("offers the account settings, an assistant, the intro, the theme and signing out", async () => {
     stubDesktop();
@@ -371,19 +328,5 @@ describe("HomeShell", () => {
     expect(within(header).getByRole("button", { name: "Hide menu" })).toBeInTheDocument();
     expect(within(header).getByRole("button", { name: "Search everything" })).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Search everything" })).not.toBeInTheDocument();
-  });
-
-  it("on a phone names the open workspace in the header, whose toggle opens the menu", async () => {
-    const user = userEvent.setup();
-    home();
-    const header = screen.getByRole("main").querySelector("header")!;
-    expect(within(header).getByRole("button", { name: "Search everything" })).toBeInTheDocument();
-    expect(await within(header).findByText("Acme")).toBeInTheDocument();
-    await user.click(within(header).getByRole("button", { name: "Show menu" }));
-    const drawer = await screen.findByRole("dialog", { name: "Menu" });
-    expect(within(drawer).getByRole("button", { name: /Acme/ })).toBeInTheDocument();
-    // Folding a folder in the drawer does not close it: only a navigation does.
-    await user.click(await within(drawer).findByRole("button", { name: "Chores" }));
-    expect(screen.getByRole("dialog", { name: "Menu" })).toBeInTheDocument();
   });
 });

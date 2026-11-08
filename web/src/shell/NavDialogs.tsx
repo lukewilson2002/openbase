@@ -1,9 +1,9 @@
 /**
  * The dialogs the sidebar's rows open: a new workspace, folder or collection, renames, colors, deletes,
  * CSV imports, sharing a folder and inviting people to a workspace. They live here, around the page
- * rather than inside the sidebar, because on a phone the menu is a drawer that unmounts when it closes,
- * and a dialog inside it would vanish with it. Every shell wraps its frame in `NavDialogsProvider`; the
- * sidebar and the empty folder's page open dialogs through `useNavDialog`. A collection's dialogs work
+ * rather than inside the sidebar, because a dialog opened from a sheet (the phone's workspace switcher) or a
+ * menu would vanish with it when it closes. Every shell wraps its frame in `NavDialogsProvider`; the
+ * sidebar, the phone's sheets and the empty folder's page open dialogs through `useNavDialog`. A collection's dialogs work
  * from any page, so a collection of another folder can be renamed or imported into without opening it.
  * The view dialogs stay in `BaseDialogs`, which needs the open folder's schema.
  */

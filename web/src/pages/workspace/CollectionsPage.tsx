@@ -14,7 +14,7 @@ export function CollectionsPage() {
   const { ws, fallback } = useWorkspace(workspaceId);
   if (desktop) return <Navigate to={`/workspace/${workspaceId}`} replace />;
   return (
-    <HomeShell workspaceId={workspaceId} title="Collections">
+    <HomeShell workspaceId={workspaceId} title="Collections" variant="tab">
       {ws ? (
         <nav aria-label="Workspace menu">
           <SidebarContent mode="page" workspaceId={ws.id} />

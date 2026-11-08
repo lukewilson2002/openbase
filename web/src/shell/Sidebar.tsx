@@ -1,13 +1,9 @@
 /**
- * The frames the sidebar's content (`SidebarContent`) sits in: the docked, resizable column of a desktop
- * (a `nav` landmark, NAV-2) and the drawer of a phone (until the Collections tab replaces it, NAV-7), plus
- * the layout of the content itself: pinned rows above, a scrolling middle, pinned rows below.
+ * The frame the sidebar's content (`SidebarContent`) sits in on a desktop: the docked, resizable column
+ * (a `nav` landmark, NAV-2), plus the layout of the content itself: pinned rows above, a scrolling middle,
+ * pinned rows below. A phone has no sidebar: the Collections tab draws the same content as a screen.
  */
-import { useRef, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
-import { ChevronLeft, X } from "lucide-react";
-import { Dialog as D } from "radix-ui";
-import { Icon } from "@/components/ui/icon";
-import { IconButton } from "@/components/ui/icon-button";
+import { useRef, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { useScrollEdges } from "@/hooks/useScrollEdges";
 import { cn } from "@/lib/cn";
 import { SIDEBAR_MAX, SIDEBAR_MIN, clampWidth } from "./sidebarPrefs";
@@ -116,69 +112,5 @@ export function DockedSidebar({
         <span aria-hidden className="h-full w-0.5 bg-transparent transition-colors group-hover:bg-primary group-focus-visible:bg-ring group-active:bg-primary" />
       </div>
     </nav>
-  );
-}
-
-export function SidebarDrawer({
-  id,
-  open,
-  onOpenChange,
-  returnFocus,
-  notificationsPanel,
-  onCloseNotifications,
-  children,
-}: {
-  id: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  returnFocus: RefObject<HTMLButtonElement | null>;
-  /** The notifications, shown in place of the menu while the Notifications row is open. */
-  notificationsPanel?: ReactNode;
-  onCloseNotifications?: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <D.Root open={open} onOpenChange={onOpenChange}>
-      <D.Portal>
-        <D.Overlay className="ob-fade-in fixed inset-0 z-40 bg-overlay" />
-        <D.Content
-          id={id}
-          aria-describedby={undefined}
-          onCloseAutoFocus={(e) => {
-            // Back to the toggle even when the drawer was opened some other way, so a keyboard user
-            // continues where the menu came from instead of at the top of the page.
-            e.preventDefault();
-            returnFocus.current?.focus();
-          }}
-          className="ob-drawer-in fixed inset-y-0 left-0 z-40 flex w-[min(19.5rem,calc(100vw-3rem))] flex-col bg-chrome pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] shadow-pop focus-visible:outline-none"
-        >
-          {/* With the notifications open, the way back takes the title's place, beside the close button. */}
-          <div className="mx-2.5 flex min-h-14 shrink-0 items-center gap-0.5 border-b border-line py-1.5">
-            {notificationsPanel ? (
-              <>
-                <D.Title className="sr-only">Menu</D.Title>
-                <button type="button" onClick={onCloseNotifications} className="-ml-0.5 flex h-control-touch min-w-0 flex-1 items-center gap-1 rounded-md px-1.5 text-left text-ui text-fg hover:bg-hover">
-                  <Icon icon={ChevronLeft} className="text-muted" /> <span className="truncate">Back to the menu</span>
-                </button>
-              </>
-            ) : (
-              <D.Title className="flex-1 pl-1.5 text-ui font-semibold">Menu</D.Title>
-            )}
-            <D.Close asChild>
-              <IconButton label="Close menu" noTooltip>
-                <Icon icon={X} />
-              </IconButton>
-            </D.Close>
-          </div>
-          {notificationsPanel ? (
-            <div className="flex min-h-0 flex-1 flex-col">{notificationsPanel}</div>
-          ) : (
-            <nav aria-label="Main menu" className="flex min-h-0 flex-1 flex-col">
-              {children}
-            </nav>
-          )}
-        </D.Content>
-      </D.Portal>
-    </D.Root>
   );
 }
