@@ -115,19 +115,24 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
   await test.step("creates a workspace, which starts with its top-level project", async () => {
     await page.getByRole("textbox", { name: "Workspace name" }).fill("Journey workspace");
     await page.getByRole("button", { name: "Create workspace" }).click();
-    // A new workspace starts with an empty top-level project named after it, and opens it: the page asks for the first table.
-    await expect(page).toHaveURL(/\/base\/app[^/]+$/);
-    // The later steps and specs name the project, so give it the name they use (the sidebar and the top bar show it).
-    const topLevelId = /\/base\/(app[^/]+)/.exec(page.url())![1]!;
+    // A new workspace opens on its Home, and starts with an empty top-level project named after it.
+    await expect(page).toHaveURL(/\/workspace\/wsp[^/]+$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+    const workspaceId = /\/workspace\/(wsp[^/]+)/.exec(page.url())![1]!;
+    const listed = await api<{ id: string; root_base_id: string | null }[]>(page, "/api/workspaces");
+    const topLevelId = listed.find((w) => w.id === workspaceId)!.root_base_id!;
+    // The later steps and specs name the project, so give it the name they use (the sidebar and the header show it).
     const renamed = await page.request.patch(`/api/bases/${topLevelId}`, { data: { name: "Journey base" }, headers: CSRF });
     expect(renamed.ok(), `rename the top-level project: ${renamed.status()}`).toBeTruthy();
-    await page.reload();
-    // A new base starts without tables, and the page asks for the first one by name.
+    await page.goto(`/base/${topLevelId}`);
+    // It has no collections yet, and the page asks for the first one.
     baseId = topLevelId;
-    await expect(page.getByRole("heading", { name: "Create your first table" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "No collections in Journey base yet" })).toBeVisible();
     await expect(page.getByRole("list", { name: /^Tables in / }).getByText("No tables yet.")).toBeVisible();
-    await page.getByRole("textbox", { name: "Table name" }).fill("Table 1");
-    await page.getByRole("button", { name: "Create table" }).click();
+    await page.getByRole("button", { name: "New collection" }).click();
+    const newCollection = page.getByRole("dialog", { name: "New collection" });
+    await newCollection.getByLabel("Name").fill("Table 1");
+    await newCollection.getByRole("button", { name: "Create collection" }).click();
     await expect(page).toHaveURL(new RegExp(`/base/${baseId}/tbl[^/]+/viw[^/]+$`));
     await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
     // A new table opens in its default grid, its only view: the view button names it, not a named view.
@@ -359,12 +364,12 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     expect(link.options).toMatchObject({ linked_table_id: clients.id });
   });
 
-  await test.step("gives the project and the workspace icons from their menus; the menu and the top bar show them instead of the letters", async () => {
+  await test.step("gives the project and the workspace icons from their menus; the menu shows them instead of the letters", async () => {
     const menu = page.getByRole("navigation", { name: "Main menu" });
     await menu.getByRole("button", { name: "Project options for Journey base" }).click();
     await page.getByRole("menuitem", { name: /Change icon/ }).click();
     await page.getByRole("group", { name: "Popular icons" }).getByRole("button", { name: "Store" }).click();
-    // The menu's row shows the icon; the top bar's path is plain text.
+    // The menu's row shows the icon; the collection header names the place without one.
     await expect(page.getByRole("heading", { level: 1 }).locator("[data-entity-tile]")).toHaveCount(0);
     await expect(menu.getByRole("button", { name: "Journey base", exact: true }).locator("[data-entity-tile] svg[data-icon='store']")).toBeVisible();
 

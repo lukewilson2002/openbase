@@ -3,11 +3,10 @@ import { randomBytes } from "node:crypto";
 import { expect, skipIntro, test } from "./fixtures";
 
 /**
- * "Search everything" from inside a project: the box sits in the project's top bar and shows where
- * the text matched (a highlighted snippet of a rich text field, as plain text); "This project"
- * narrows it. In a crowded bar and on a phone it is a button at the bar's end that opens the same
- * search, and the bar's other items stay in place. Signs up its own users. Runs only with
- * OPENBASE_E2E=1.
+ * "Search everything" from inside a project: the button in the screen's header opens the box, which shows
+ * where the text matched (a highlighted snippet of a rich text field, as plain text); "This project"
+ * narrows it. On a desktop and on a phone alike it is that button, and the header's other items stay in
+ * place. Signs up its own users. Runs only with OPENBASE_E2E=1.
  */
 test.skip(!process.env["OPENBASE_E2E"], "set OPENBASE_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
 
@@ -38,8 +37,11 @@ test("searches from inside a project and shows where the text matched", async ({
   await page.setViewportSize({ width: 1440, height: 900 });
   const { baseId, recordId } = await seed(page.request, "Launch plan");
   await page.goto(`/base/${baseId}`);
-  const bar = page.getByRole("banner");
-  const box = bar.getByRole("combobox", { name: "Search everything" });
+  // The screen's own header holds the search button; nothing spans the app.
+  const header = page.getByRole("main").locator("header");
+  await header.getByRole("button", { name: "Search everything" }).click();
+  const dialog = page.getByRole("dialog", { name: "Search everything" });
+  const box = dialog.getByRole("combobox", { name: "Search everything" });
   await expect(box).toBeVisible();
 
   await box.fill("mark");
@@ -58,7 +60,7 @@ test("searches from inside a project and shows where the text matched", async ({
   await record.click();
   await expect(page).toHaveURL(new RegExp(`/base/${baseId}/[^/]+/[^/?]+\\?record=${recordId}`));
 
-  // ⌘K / Ctrl+K comes back to the box from anywhere on the page, once the record is closed.
+  // ⌘K / Ctrl+K opens the box from anywhere on the page, once the record is closed.
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -67,19 +69,19 @@ test("searches from inside a project and shows where the text matched", async ({
   await expect(box).toBeFocused();
 });
 
-test("is a button at the end of a crowded bar and on a phone, and nothing in the bar moves", async ({ page }) => {
+test("is a button in the header, on a desktop and on a phone, and the header does not overflow", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 800 });
-  const { baseId } = await seed(page.request, "A project with a name long enough to crowd the top bar of the window");
+  const { baseId } = await seed(page.request, "A project with a name long enough to crowd the header of the window");
   await page.goto(`/base/${baseId}`);
-  const bar = page.getByRole("banner");
-  const button = bar.getByRole("button", { name: "Search everything" });
+  const header = page.getByRole("main").locator("header");
+  const button = header.getByRole("button", { name: "Search everything" });
   await expect(button).toBeVisible();
-  await expect(bar.getByRole("combobox")).toHaveCount(0);
-  // The button is the bar's last item; the bar does not scroll or spill over.
-  const share = await bar.getByRole("button", { name: "Share" }).boundingBox();
+  await expect(header.getByRole("combobox")).toHaveCount(0);
+  // The button is the header's last item; the header does not scroll or spill over.
+  const share = await header.getByRole("button", { name: "Share" }).boundingBox();
   const at = await button.boundingBox();
   expect(at!.x).toBeGreaterThan(share!.x);
-  expect(await bar.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+  expect(await header.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
 
   await button.click();
   const dialog = page.getByRole("dialog", { name: "Search everything" });

@@ -233,7 +233,7 @@ test("shares a grid with a password: a stranger gets the rows, not the hidden fi
     await call(page.request, "patch", `/api/views/${viewId}`, { config: { ...created.config, hidden_fields: [fx.fields.salary] } });
     await openView(page, viewId);
     // Sharing a view lives in the base's Share dialog, with the view on screen picked.
-    await page.getByRole("banner").getByRole("button", { name: "Share" }).click();
+    await page.getByRole("main").locator("header").getByRole("button", { name: "Share" }).click();
     const dialog = page.getByRole("dialog", { name: /^Share / });
     await dialog.getByRole("tab", { name: "Share a view" }).click();
     await expect(dialog.getByRole("combobox", { name: "View" })).toHaveValue(viewId);

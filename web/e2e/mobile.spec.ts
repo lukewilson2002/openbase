@@ -47,17 +47,27 @@ test("the project, the menu, its toolbar and the record panel fit a phone", asyn
   const created = await (await page.request.post(`/api/tables/${table.id}/records`, { data: { records: [{ values: {} }] }, headers: CSRF })).json();
   const recordId = created.records[0].id as string;
 
-  // `/` is the Inbox (it no longer opens the last project): a capture box that fits the phone. The menu leads on.
+  // `/` is the last workspace's Home (it no longer opens the last project): a capture box that fits the phone. The menu leads on.
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Note" })).toBeVisible();
-  await expect(page).toHaveURL(/\/$/);
-  await expectFits(page, "inbox");
+  await expect(page).toHaveURL(new RegExp(`/workspace/${ws.id}$`));
+  await expectFits(page, "home");
+  // The other screens the phone's tabs lead to fit it too.
+  for (const [route, heading, label] of [
+    [`/workspace/${ws.id}/collections`, "Collections", "collections"],
+    ["/notifications", "Notifications", "notifications"],
+    [`/workspace/${ws.id}/automations`, "Automations", "automations"],
+  ] as const) {
+    await page.goto(route);
+    await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+    await expectFits(page, label);
+  }
+  await page.goto(`/workspace/${ws.id}`);
   await page.getByRole("button", { name: /^Show menu/ }).tap();
   const inboxMenu = page.getByRole("dialog", { name: "Menu" });
-  await expect(inboxMenu.getByRole("link", { name: "Inbox" })).toHaveAttribute("aria-current", "page");
-  // No workspace is open on the Inbox: unfold the only one and its project (names only fold), then open its table.
-  await inboxMenu.getByRole("button", { name: "Expand Mobile workspace" }).tap();
+  await expect(inboxMenu.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
+  // The workspace is open on its Home: unfold its project (names only fold), then open its table.
   await inboxMenu.getByRole("list", { name: "Projects in Mobile workspace" }).getByRole("button", { name: "A base with a fairly long name", exact: true }).tap();
   await inboxMenu.getByRole("list", { name: /^Tables in / }).getByRole("link", { name: "Table 1" }).tap();
   await expect(page).toHaveURL(new RegExp(`/base/${base.id}/${table.id}/viw[^/]+$`));
@@ -80,8 +90,8 @@ test("the project, the menu, its toolbar and the record panel fit a phone", asyn
   const toolbar = page.getByRole("toolbar", { name: "View toolbar" });
   await expect(toolbar).toBeVisible();
   await expectFits(page, "base");
-  // The top bar keeps Share as an icon, and Add floats at the bottom corner, clear of the screen edge.
-  await expect(page.getByRole("banner").getByRole("button", { name: "Share" })).toBeVisible();
+  // The collection's own header keeps Share as an icon, and Add floats at the bottom corner, clear of the screen edge.
+  await expect(page.getByRole("main").locator("header").getByRole("button", { name: "Share" })).toBeVisible();
   const add = (await page.getByRole("button", { name: "Add record" }).boundingBox())!;
   expect(add.height).toBeGreaterThanOrEqual(48);
   expect(add.x + add.width, "Add inside the screen").toBeLessThanOrEqual(viewport.width);
@@ -179,8 +189,7 @@ test("a swipe that starts on a menu button scrolls the menu and opens nothing; a
   await page.goto("/");
   await page.getByRole("button", { name: /^Show menu/ }).tap();
   const drawer = page.getByRole("dialog", { name: "Menu" });
-  // `/` is the Inbox, outside any workspace: open this one to list its projects.
-  await drawer.getByRole("button", { name: "Expand Swipe workspace" }).tap();
+  // `/` is the workspace's Home, so its projects are already listed.
   await expect(drawer.getByRole("button", { name: "Project options for Project 24" })).toBeAttached();
   const scroller = drawer.locator("[data-sidebar-scroll]");
   await expect(scroller).toBeVisible();
