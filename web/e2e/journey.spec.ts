@@ -20,7 +20,7 @@ const CSRF = { "X-OpenBase-CSRF": "1" };
 // the view before the grid is clicked: a column without a width of its own fits its content.
 const MARKER_W = 56;
 const HEADER_H = 44;
-const ROW_H = 42;
+const ROW_H = 46;
 // A table made on the empty base's page has its primary field and the hidden Page property, so the columns the grid shows follow "Name".
 const COLUMNS = [
   { key: "name", width: 220 },

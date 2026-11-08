@@ -22,7 +22,7 @@ const CSRF = { "X-OpenBase-CSRF": "1" };
 // Grid geometry (see grid.spec.ts): the Name column of a fresh table starts after the row marker.
 const MARKER_W = 56;
 const HEADER_H = 44;
-const ROW_H = 42;
+const ROW_H = 46;
 
 interface Fixture {
   baseId: string;

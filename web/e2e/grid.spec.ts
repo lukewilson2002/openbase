@@ -25,7 +25,8 @@ const CSRF = { "X-OpenBase-CSRF": "1" };
 // Grid geometry (see views/grid/cellModels.ts defaultWidth and the Glide setup in GlideGrid.tsx).
 const MARKER_W = 56;
 const HEADER_H = 44;
-const ROW_H = 42;
+// The fixture's view is made with a config that names no row height, which stays Short (36 px).
+const ROW_H = 36;
 // The fixture builds Name, Notes, Qty, Status and Done, in that order.
 const WIDTHS = { name: 220, notes: 260, qty: 140, status: 170, done: 110 };
 
@@ -396,9 +397,9 @@ test("opens the expanded record with Shift+Space, comments, and the link is shar
 });
 
 test("adds and deletes records, with undo", async ({ page, diagnostics }) => {
-  // Undoing the add of a blank record races the grid taking it back (it was never touched): the loser
-  // gets a 404, either the undo's delete or the take-back's lookup or discard. Both ends treat that as
-  // "already gone", but the browser logs the failed request.
+  // Undoing the add of a blank record can still race the grid taking it back (it was never touched): when
+  // the take-back wins, the undo's delete gets a 404 that both ends treat as "already gone", but the
+  // browser logs the failed request.
   diagnostics.allow(/status of 404.*\/api\/tables\/[^/]+\/records(\/[^/]+(\/discard)?)?\)$/);
   await gotoGrid(page);
   await newRecordButton(page).click();
