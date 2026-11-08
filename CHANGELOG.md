@@ -13,6 +13,15 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Added
 
+- **The grid, List and Board in the new look.** The grid's header row is 12 px and muted on the
+  page's grey, the title column is bold, choices are drawn as chips in their own colour and linked
+  records as chips with the colour of their collection, and each group ends in "+ New client" (the
+  collection's record name). New views and new collections start on Medium rows (46 px; Short is now
+  36 px); views you already have keep the row height they were saved with. A List row and a Board
+  card are cards: the title, then up to three properties on one line (a choice as a chip, a date,
+  numbers at the right). Board stacks are 280 px wide with the stack's value as a chip and its card
+  count, and a "+ New client" at the foot. The column menu says "property": Rename, Edit property,
+  Insert left and right, Hide and Delete.
 - **Upgrade to database schema 17 (a page for every table).** The server snapshots the database
   first, as for every upgrade, and no value you entered changes. A table with exactly one rich
   text property besides its title uses it as its page; every other table gets a new rich text
