@@ -334,6 +334,7 @@ pub fn aggregate_in(
                 &entry.ids,
                 tz,
                 FORMULA_TIME_BUDGET,
+                &actor.user_id,
             )?,
             None => entry.ids.clone(),
         })

@@ -12,7 +12,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use axum::Json as AxumJson;
@@ -31,6 +31,7 @@ use ob_core::view::{Direction, Sort, ViewConfig, ViewType};
 use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::{Map, Value as Json};
+use tokio::sync::{Semaphore, SemaphorePermit};
 
 use crate::auth::Actor;
 use crate::engine::query::{self, CachedQuery};
@@ -330,9 +331,76 @@ impl EvalContext for RowCtx<'_> {
 /// a 100,000-record table takes a second or two.
 pub(crate) const FORMULA_TIME_BUDGET: Duration = Duration::from_secs(5);
 
+/// Formula filters that may evaluate at once on the whole instance. Each holds
+/// one of the four reader connections for up to [`FORMULA_TIME_BUDGET`], and
+/// session and token lookups need readers too, so a few callers repeating an
+/// expensive filter must not be able to take them all.
+const FORMULA_SLOTS: usize = 2;
+
+/// Slots for formula filters, and the users holding one (one each, so a
+/// single caller cannot take every slot).
+struct FormulaLimiter {
+    permits: Semaphore,
+    users: Mutex<HashSet<String>>,
+}
+
+static FORMULA_LIMITER: LazyLock<FormulaLimiter> =
+    LazyLock::new(|| FormulaLimiter::new(FORMULA_SLOTS));
+
+/// The right to evaluate one formula filter; released on drop.
+struct FormulaSlot<'a> {
+    _permit: SemaphorePermit<'a>,
+    limiter: &'a FormulaLimiter,
+    user_id: String,
+}
+
+impl FormulaLimiter {
+    fn new(slots: usize) -> FormulaLimiter {
+        FormulaLimiter {
+            permits: Semaphore::new(slots),
+            users: Mutex::new(HashSet::new()),
+        }
+    }
+
+    fn users(&self) -> std::sync::MutexGuard<'_, HashSet<String>> {
+        self.users.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// Takes a slot for `user_id` or says to retry: waiting would queue
+    /// requests behind the reader pool, which is the thing being protected.
+    fn take(&self, user_id: &str) -> V1Result<FormulaSlot<'_>> {
+        let busy = || {
+            V1Error::rate_limited_with(
+                "Another formula filter is still running. Retry when it has finished.",
+            )
+        };
+        if !self.users().insert(user_id.to_string()) {
+            return Err(busy());
+        }
+        match self.permits.try_acquire() {
+            Ok(permit) => Ok(FormulaSlot {
+                _permit: permit,
+                limiter: self,
+                user_id: user_id.to_string(),
+            }),
+            Err(_) => {
+                self.users().remove(user_id);
+                Err(busy())
+            }
+        }
+    }
+}
+
+impl Drop for FormulaSlot<'_> {
+    fn drop(&mut self) {
+        self.limiter.users().remove(&self.user_id);
+    }
+}
+
 /// The ids among `ids` (order kept) for which `formula_text` is truthy.
 /// `{Field Name}` references resolve against the table's field names. Fails
 /// with 422 if the evaluation takes longer than `budget`.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn filter_by_formula(
     conn: &Connection,
     table: &TableRow,
@@ -341,10 +409,12 @@ pub(crate) fn filter_by_formula(
     ids: &[String],
     tz: Tz,
     budget: Duration,
+    user_id: &str,
 ) -> V1Result<Vec<String>> {
     let (stored, _ty) = fields_engine::check_formula(fields, formula_text)
         .map_err(|e| invalid_formula(e.to_string()))?;
     let expr = formula::parse(&stored).map_err(|e| invalid_formula(e.to_string()))?;
+    let _slot = FORMULA_LIMITER.take(user_id)?;
     let by_id: HashMap<&str, &Field> = fields.iter().map(|f| (f.id.as_str(), f)).collect();
     let names = NameCache::new(conn, tz);
     let now = Utc::now();
@@ -480,6 +550,7 @@ fn list_in(
                     &entry.ids,
                     tz,
                     FORMULA_TIME_BUDGET,
+                    &actor.user_id,
                 )?;
                 entry = Arc::new(CachedQuery {
                     ids: kept,
@@ -1196,12 +1267,41 @@ mod tests {
     #[test]
     fn filter_by_formula_gives_up_after_its_time_budget() {
         let (conn, table, fields, ids) = fixture(20);
-        let run =
-            |budget| filter_by_formula(&conn, &table, &fields, "TRUE()", &ids, Tz::UTC, budget);
+        let run = |budget| {
+            filter_by_formula(
+                &conn,
+                &table,
+                &fields,
+                "TRUE()",
+                &ids,
+                Tz::UTC,
+                budget,
+                "usrA",
+            )
+        };
         assert_eq!(run(Duration::from_secs(60)).unwrap().len(), 20);
         let err = run(Duration::ZERO).unwrap_err();
         assert_eq!(err.status, StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(err.kind, "INVALID_FILTER_BY_FORMULA");
         assert!(err.message.contains("too long"), "{}", err.message);
+    }
+
+    #[test]
+    fn formula_filters_are_limited_to_a_slot_each_and_a_few_in_all() {
+        // A local limiter: the real one is shared by every test in the process.
+        let limiter = FormulaLimiter::new(2);
+        let a = limiter.take("usrA").unwrap();
+        let again = limiter.take("usrA").err().expect("one slot per user");
+        assert_eq!(again.status, StatusCode::TOO_MANY_REQUESTS);
+        let b = limiter.take("usrB").unwrap();
+        let full = limiter.take("usrC").err().expect("only two in all");
+        assert_eq!(full.status, StatusCode::TOO_MANY_REQUESTS);
+        assert!(full.retry_after.is_some());
+        // A refused request leaves nothing behind: after a slot is released
+        // the same user can take it.
+        drop(a);
+        let c = limiter.take("usrC").unwrap();
+        drop((b, c));
+        assert!(limiter.take("usrA").is_ok());
     }
 }

@@ -69,10 +69,14 @@ impl V1Error {
     }
 
     pub fn rate_limited() -> V1Error {
+        V1Error::rate_limited_with("Rate limit reached. Slow down and retry in a moment.")
+    }
+
+    pub fn rate_limited_with(message: &str) -> V1Error {
         V1Error {
             status: StatusCode::TOO_MANY_REQUESTS,
             kind: "RATE_LIMIT_REACHED",
-            message: "Rate limit reached. Slow down and retry in a moment.".into(),
+            message: message.into(),
             retry_after: Some(1),
         }
     }
