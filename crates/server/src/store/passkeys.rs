@@ -123,10 +123,11 @@ pub fn count(conn: &Connection, user_id: &str) -> AppResult<i64> {
     )?)
 }
 
-/// The user's passkeys, oldest first.
+/// The user's passkeys, oldest first. Two made in the same millisecond keep the order they were added in (`rowid`): the id is random,
+/// so it cannot break the tie.
 pub fn list(conn: &Connection, user_id: &str) -> AppResult<Vec<PasskeyInfo>> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT {INFO_COLUMNS} FROM passkeys WHERE user_id = ?1 ORDER BY created_at, id"
+        "SELECT {INFO_COLUMNS} FROM passkeys WHERE user_id = ?1 ORDER BY created_at, rowid"
     ))?;
     let rows = stmt.query_map([user_id], info_from_row)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
