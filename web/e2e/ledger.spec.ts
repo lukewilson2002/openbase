@@ -71,7 +71,7 @@ for (const shot of SHOTS) {
         await settle(page);
         // The phone must not scroll sideways on any shot (PH-7): a screenshot of a page wider than the screen hides it.
         if (phone) expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), "the page is wider than the phone").toBeLessThanOrEqual(0);
-        await page.screenshot({ path: file(shot, theme, size), animations: "disabled", caret: "hide" });
+        await page.screenshot({ path: file(shot, theme, size), animations: "disabled", caret: "hide", fullPage: shot.fullPage });
         await context.close();
       });
     }

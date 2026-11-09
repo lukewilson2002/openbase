@@ -38,6 +38,8 @@ export interface Shot {
    * "admin" the instance's administrator, "fresh" a person with no workspace yet and "newcomer" one who has not seen the intro.
    */
   as?: "owner" | "limited" | "anonymous" | "admin" | "fresh" | "newcomer";
+  /** The whole page, not the screen: for a reference page that is far longer than one. */
+  fullPage?: boolean;
   /** The widths this shot exists at; both by default. */
   sizes?: readonly Size[];
   /** Get the screen to the state to shoot, and return once it is settled. */
@@ -129,6 +131,7 @@ export const SHOTS: Shot[] = [
     slug: "design-reference",
     name: "design reference",
     as: "anonymous",
+    fullPage: true,
     open: async ({ page }) => {
       await page.goto("/__dev/design");
       await expect(page.getByRole("heading", { level: 1, name: "Design reference" })).toBeVisible();
