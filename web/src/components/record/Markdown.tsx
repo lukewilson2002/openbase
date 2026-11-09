@@ -52,6 +52,9 @@ const MARK = "data-ob-media";
  */
 let nonce = "";
 
+/** The classes the renderer itself writes (and a code block's language), the only ones text may keep. */
+const OWN_CLASS = /^(?:ob-(?:media|file|file-icon|file-name|file-download|callout|check|mention|embed|embed-static|embed-unreadable)|language-[\w+#.-]{1,40})$/;
+
 function newNonce(): string {
   const bytes = new Uint8Array(12);
   globalThis.crypto.getRandomValues(bytes);
@@ -65,6 +68,15 @@ function ensureHooks(): void {
     if (node.tagName === "A") {
       node.setAttribute("target", "_blank");
       node.setAttribute("rel", "noopener noreferrer nofollow");
+    }
+    // The page's own stylesheet makes any class a style, so text that names `fixed inset-0 z-50` would cover
+    // the app (F31, F32, F66, F67). Only the classes this renderer writes survive, and they are the ones that
+    // can only change how the text looks inside its own box.
+    const classes = node.getAttribute("class");
+    if (classes !== null) {
+      const kept = classes.split(/\s+/).filter((c) => OWN_CLASS.test(c));
+      if (kept.length > 0) node.setAttribute("class", kept.join(" "));
+      else node.removeAttribute("class");
     }
     if (FETCHING.has(node.tagName)) {
       // Only Markdown image syntax makes media (the renderer marked its own with the nonce), and only
@@ -131,14 +143,63 @@ renderer.image = (href: string, title: string | null, text: string) => {
   return `<figure class="ob-media" data-kind="${kind}">${body}${title ? `<figcaption>${title}</figcaption>` : ""}</figure>`;
 };
 // A figure is a block: lifted out of the paragraph it was written in, the text around it staying paragraphs.
-const FIGURE = /(<figure class="ob-media"[\s\S]*?<\/figure>)/;
+const FIGURE_OPEN = '<figure class="ob-media"';
+const FIGURE_CLOSE = "</figure>";
+const BR_AT_START = /^<br\s*\/?>/i;
+const BR_WHOLE = /^<br\s*\/?>$/i;
+const isSpace = (c: string) => /\s/.test(c);
+
+/**
+ * The text without the spaces and `<br>`s at its ends. Walked from each end rather than matched with a
+ * `(?:\s|<br>)+$` pattern: that one rescans a whole run of spaces from every start inside it, which made a
+ * text of 100,000 spaces cost the browser tab minutes (F56). This reads each character once.
+ */
+function trimBreaks(text: string): string {
+  let start = 0;
+  while (start < text.length) {
+    if (isSpace(text[start]!)) start++;
+    else {
+      const m = BR_AT_START.exec(text.slice(start, start + 64));
+      if (!m) break;
+      start += m[0].length;
+    }
+  }
+  let end = text.length;
+  while (end > start) {
+    if (isSpace(text[end - 1]!)) end--;
+    else if (text[end - 1] === ">") {
+      const open = text.lastIndexOf("<", end - 1);
+      if (open < start || end - open > 64 || !BR_WHOLE.test(text.slice(open, end))) break;
+      end = open;
+    } else break;
+  }
+  return text.slice(start, end);
+}
+
+// A figure runs from its opening to the first closing tag after it; found with indexOf, because a lazy
+// `[\s\S]*?` pattern rescans the rest of the text for every opening that has no close (many of them: quadratic).
+function splitFigures(text: string): { figure: boolean; text: string }[] {
+  const pieces: { figure: boolean; text: string }[] = [];
+  let pos = 0;
+  for (;;) {
+    const open = text.indexOf(FIGURE_OPEN, pos);
+    if (open < 0) break;
+    const close = text.indexOf(FIGURE_CLOSE, open);
+    if (close < 0) break;
+    pieces.push({ figure: false, text: text.slice(pos, open) });
+    pieces.push({ figure: true, text: text.slice(open, close + FIGURE_CLOSE.length) });
+    pos = close + FIGURE_CLOSE.length;
+  }
+  pieces.push({ figure: false, text: text.slice(pos) });
+  return pieces;
+}
+
 renderer.paragraph = (text: string) => {
-  if (!text.includes('<figure class="ob-media"')) return `<p>${text}</p>\n`;
-  return text
-    .split(FIGURE)
+  if (!text.includes(FIGURE_OPEN)) return `<p>${text}</p>\n`;
+  return splitFigures(text)
     .map((piece) => {
-      if (piece.startsWith('<figure class="ob-media"')) return `${piece}\n`;
-      const rest = piece.replace(/^(?:\s|<br\s*\/?>)+|(?:\s|<br\s*\/?>)+$/gi, "");
+      if (piece.figure) return `${piece.text}\n`;
+      const rest = trimBreaks(piece.text);
       return rest ? `<p>${rest}</p>\n` : "";
     })
     .join("");
@@ -205,13 +266,21 @@ interface Rendered {
   nonce: string;
 }
 
+/**
+ * A run of spaces shows as one space anyway, but marked reads it in time that grows with the square of its
+ * length (100,000 spaces took seconds of the main thread), so a run is cut to 200 before it is read (F56).
+ */
+function squeeze(source: string): string {
+  return source.replace(/[ \t]{200,}/g, " ".repeat(200));
+}
+
 function render(source: string, share: Embeds | null | undefined, wantEmbeds: boolean): Rendered {
   ensureHooks();
   embeds = share ?? null;
   nonce = newNonce();
   found = wantEmbeds ? [] : null;
   try {
-    const html = marked.parse(source, { gfm: true, breaks: true, mangle: false, headerIds: false, renderer, walkTokens: plainEmbeds });
+    const html = marked.parse(squeeze(source), { gfm: true, breaks: true, mangle: false, headerIds: false, renderer, walkTokens: plainEmbeds });
     return { html: sanitize(html), embeds: found ?? [], nonce };
   } finally {
     embeds = null;

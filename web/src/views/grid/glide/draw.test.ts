@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chipFont, chipPadding, layoutChips, type ChipDraw } from "./draw";
+import { chipFont, chipPadding, drawCellText, layoutChips, oneLine, type ChipDraw } from "./draw";
 
 // A canvas whose text is 7 px a character, so widths are easy to check.
 const ctx = { font: "", measureText: (s: string) => ({ width: s.length * 7 }) } as unknown as CanvasRenderingContext2D;
@@ -53,5 +53,38 @@ describe("chips in the grid, as StatusChip and LinkChip draw them", () => {
     const chips: ChipDraw[] = [{ text: "Alpha", kind: "link", color: "blue" }];
     const { placed } = layoutChips(ctx, theme, { x: 0, y: 0, width: 300, height: 46 }, chips);
     expect(placed[0]!.w).toBe(5 * 7 + 28);
+  });
+});
+
+describe("oneLine", () => {
+  it("joins lines with one space and trims around the breaks", () => {
+    expect(oneLine("a  \n\n  b\n c")).toBe("a b c");
+    expect(oneLine("no break")).toBe("no break");
+  });
+
+  it("reads a 100,000-character run of spaces in linear time (F35)", () => {
+    const text = `a${" ".repeat(99_998)}b`;
+    const t = performance.now();
+    expect(oneLine(text)).toBe(text);
+    expect(performance.now() - t).toBeLessThan(200);
+  });
+});
+
+describe("drawCellText", () => {
+  it("hands the canvas only a short prefix of a huge value (F35)", () => {
+    let longest = 0;
+    const c = {
+      font: "",
+      fillStyle: "",
+      textBaseline: "",
+      measureText: (s: string) => {
+        longest = Math.max(longest, s.length);
+        return { width: s.length * 7 };
+      },
+      fillText: () => {},
+      fillRect: () => {},
+    } as unknown as CanvasRenderingContext2D;
+    drawCellText(c, theme as never, { x: 0, y: 0, width: 200, height: 30 }, `a${" ".repeat(99_998)}b`, { color: "#000", align: "left" } as never);
+    expect(longest).toBeLessThanOrEqual(2001);
   });
 });

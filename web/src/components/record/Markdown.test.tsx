@@ -81,4 +81,43 @@ describe("Markdown mentions", () => {
     expect(doc.querySelector(".ob-mention")).toBeNull();
     expect(doc.querySelector("code")?.textContent).toBe("@[Ada](usr1)");
   });
+
+  it("drops every class text brings, so it cannot use the app's utilities to cover the screen (F31, F32, F66, F67)", () => {
+    const el = html('<a href="https://evil.example/login" class="fixed inset-0 z-50 bg-surface">Sign in again</a>\n\n<div class="fixed inset-0 z-50 ob-callout">x</div>\n\n<span class="opacity-0 ob-mention">y</span>');
+    expect(el.querySelector("a")).not.toBeNull();
+    expect(el.querySelector("a")?.hasAttribute("class")).toBe(false);
+    // An own class may stay, the others beside it may not.
+    const own = el.querySelector(".ob-callout");
+    expect(own?.className).toBe("ob-callout");
+    expect(el.querySelector(".ob-mention")?.className).toBe("ob-mention");
+    expect(el.innerHTML).not.toMatch(/fixed|inset-0|z-50|opacity-0|bg-surface/);
+  });
+
+  it("keeps the classes its own formatting needs", () => {
+    const el = html("> [!NOTE]\n> hi\n\n```ts\nlet a = 1;\n```\n\n- [x] done\n\n@[Ann](usr123)\n\n![a](/api/attachments/a/b.png)");
+    expect(el.querySelector(".ob-callout")).not.toBeNull();
+    expect(el.querySelector("code.language-ts")).not.toBeNull();
+    expect(el.querySelector(".ob-check")).not.toBeNull();
+    expect(el.querySelector(".ob-mention")).not.toBeNull();
+    expect(el.querySelector("figure.ob-media")).not.toBeNull();
+  });
+
+  it("renders a very long run of spaces next to media without freezing (F56)", () => {
+    const src = `![x](/api/attachments/a/b.png) x${" ".repeat(100_000)}y`;
+    const t = performance.now();
+    const out = renderMarkdown(src);
+    expect(performance.now() - t).toBeLessThan(1500);
+    expect(out).toContain("<figure");
+    expect(out).toContain("y");
+    // Many openings that never close are read once, not once each.
+    const t2 = performance.now();
+    renderMarkdown('<figure class="ob-media"'.repeat(4000) + "x");
+    expect(performance.now() - t2).toBeLessThan(1500);
+  });
+
+  it("still trims the breaks and spaces around a figure's text", () => {
+    const out = renderMarkdown("before\\\n![x](/api/attachments/a/b.png)\nafter");
+    expect(out).toMatch(/<p>before<\/p>\s*<figure/);
+    expect(out).toMatch(/<\/figure>\s*<p>after<\/p>/);
+  });
 });

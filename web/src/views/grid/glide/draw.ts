@@ -89,9 +89,26 @@ export interface TextOptions {
   bold?: boolean;
 }
 
+const MAX_DRAWN_TEXT = 2000;
+
+/**
+ * Line breaks and the spaces around them become one space. Split and trimmed rather than replaced with a
+ * backtracking pattern (whitespace, newline, whitespace): that pattern retries from every space of a long run of spaces, so a stored cell of them froze the grid (F35).
+ */
+export function oneLine(text: string): string {
+  if (!text.includes("\n")) return text;
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "")
+    .join(" ");
+}
+
 /** Draw single- or multi-line text inside a cell, vertically centred when it is one line. */
 export function drawCellText(ctx: CanvasRenderingContext2D, theme: DrawTheme, rect: Rect, text: string, opts: TextOptions): void {
   if (!text) return;
+  // A cell shows a short prefix of its text, and a value can be 100,000 characters: only the part that can be seen is handled.
+  if (text.length > MAX_DRAWN_TEXT) text = text.slice(0, MAX_DRAWN_TEXT);
   const padX = theme.cellHorizontalPadding;
   const maxWidth = rect.width - padX * 2;
   const lineHeight = Math.round(parseFloat(/(\d+(?:\.\d+)?)px/.exec(theme.baseFontFull)?.[1] ?? "13") * 1.4);
@@ -99,7 +116,7 @@ export function drawCellText(ctx: CanvasRenderingContext2D, theme: DrawTheme, re
   ctx.font = opts.bold ? theme.baseFontFull.replace(/^(?:\d+\s+)?/, "600 ") : theme.baseFontFull;
   ctx.fillStyle = opts.color;
   ctx.textBaseline = "middle";
-  const lines = maxLines > 1 ? wrapLines(ctx, text, maxWidth, maxLines) : [fitText(ctx, text.replace(/\s*\n\s*/g, " "), maxWidth)];
+  const lines = maxLines > 1 ? wrapLines(ctx, text, maxWidth, maxLines) : [fitText(ctx, oneLine(text), maxWidth)];
   const blockHeight = lines.length * lineHeight;
   let y = maxLines > 1 ? rect.y + 5 + lineHeight / 2 : rect.y + rect.height / 2;
   if (maxLines > 1 && lines.length === 1) y = rect.y + rect.height / 2;
