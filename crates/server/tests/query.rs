@@ -77,6 +77,51 @@ async fn paging_offsets_totals_and_limits() {
 }
 
 #[tokio::test]
+async fn neighbours_of_a_record_are_the_ids_on_either_side_in_the_views_order() {
+    let p = people().await;
+    // Without the option the response has none.
+    assert!(p.f.query(json!({})).await["neighbours"].is_null());
+    let ask = |id: &str| json!({ "limit": 0, "neighbours_of": id });
+    let middle = p.f.query(ask(&p.ids[2])).await;
+    assert_eq!(middle["records"], json!([]));
+    assert_eq!(
+        middle["neighbours"],
+        json!({ "previous": p.ids[1], "next": p.ids[3] })
+    );
+    // The ends have one side only; a record that is not in the result has neither.
+    let first = p.f.query(ask(&p.ids[0])).await;
+    assert_eq!(
+        first["neighbours"],
+        json!({ "previous": null, "next": p.ids[1] })
+    );
+    let last = p.f.query(ask(&p.ids[4])).await;
+    assert_eq!(
+        last["neighbours"],
+        json!({ "previous": p.ids[3], "next": null })
+    );
+    let missing = p.f.query(ask("recNOPE")).await;
+    assert_eq!(
+        missing["neighbours"],
+        json!({ "previous": null, "next": null })
+    );
+    // They follow the sort and the filter, past a page boundary.
+    let sorted = p.f.query(json!({ "limit": 1, "neighbours_of": p.ids[2], "transient": { "sorts": [{ "field_id": p.name, "direction": "desc" }] } })).await;
+    assert_eq!(rec_ids(&sorted).len(), 1);
+    let order = rec_ids(
+        &p.f.query(
+            json!({ "transient": { "sorts": [{ "field_id": p.name, "direction": "desc" }] } }),
+        )
+        .await,
+    );
+    let at = order.iter().position(|i| *i == p.ids[2]).unwrap();
+    assert_eq!(
+        sorted["neighbours"]["previous"],
+        json!(at.checked_sub(1).map(|i| &order[i]))
+    );
+    assert_eq!(sorted["neighbours"]["next"], json!(order.get(at + 1)));
+}
+
+#[tokio::test]
 async fn default_page_is_100_and_the_limit_is_capped_at_the_maximum() {
     let f = Fixture::new().await;
     for i in 0..1_050 {

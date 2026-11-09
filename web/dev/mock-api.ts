@@ -706,7 +706,13 @@ function runQuery(view: Obj, body: Obj): Obj {
   }
   const offset = Number(body.offset ?? 0);
   const limit = Math.min(Number(body.limit ?? 100), 1000);
-  return { total: rows.length, offset, records: rows.slice(offset, offset + limit), groups, colors };
+  const out: Obj = { total: rows.length, offset, records: rows.slice(offset, offset + limit), groups, colors };
+  // The ids on either side of a record, for a record page's Previous and Next.
+  if (typeof body.neighbours_of === "string") {
+    const at = rows.findIndex((r) => r.id === body.neighbours_of);
+    out.neighbours = { previous: at > 0 ? rows[at - 1].id : null, next: at >= 0 && at + 1 < rows.length ? rows[at + 1].id : null };
+  }
+  return out;
 }
 
 function aggregate(view: Obj, transient: Obj, search: string): Obj {

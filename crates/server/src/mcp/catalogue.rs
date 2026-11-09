@@ -532,8 +532,8 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "viewer",
         Read,
         "Records of a view with its filter, sorts and groups applied, plus optional search and per-request overrides. A transient override (the web app's unsaved changes to a view) is computed exactly like the same config saved on the view and is never stored: its row_color gives `colors`. A POST that only reads.",
-        "{offset?, limit? (default 100; 0 = count only), search?, range?, timezone?, week_start? (0 Sunday, 1 Monday; for calendar-week date filters, default your profile's), transient?: {filter?, sorts?, groups?, row_color? ({mode: by_select, field_id} | {mode: by_conditions, rules: [{color, filter}]}; rules [] = no colors), summaries? ({field_id: aggregation}, as in a view config; {} = none)}}",
-        "QueryResponse {total, offset, records: [{id, values: {field_id: value}, ...}], groups, colors: {record_id: color}}",
+        "{offset?, limit? (default 100; 0 = count only), search?, range?, timezone?, week_start? (0 Sunday, 1 Monday; for calendar-week date filters, default your profile's), transient?: {filter?, sorts?, groups?, row_color? ({mode: by_select, field_id} | {mode: by_conditions, rules: [{color, filter}]}; rules [] = no colors), summaries? ({field_id: aggregation}, as in a view config; {} = none)}, neighbours_of? (a record id: the response adds `neighbours` with the ids before and after that record in the result, null at the ends or when it is not in it; use limit 0 to skip the page)}",
+        "QueryResponse {total, offset, records: [{id, values: {field_id: value}, ...}], groups, colors: {record_id: color}, neighbours?: {previous, next}}",
     ),
     e(
         POST,

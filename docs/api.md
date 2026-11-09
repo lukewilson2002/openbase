@@ -305,13 +305,17 @@ removes its history, and with it its entries here.
 ### View queries and drafts (internal API)
 
 `POST /api/views/{id}/query` (Viewer; a read) answers a view's records with its filter, sorts and
-groups applied. The body is `{offset, limit, search, range, timezone, week_start, transient}`, all
+groups applied. The body is `{offset, limit, search, range, timezone, week_start, transient, neighbours_of}`, all
 optional: `limit` defaults to 100 (`0` counts only), `search` is case-insensitive over the visible
 fields, `range` is a `{field_id, from, to}` window for calendar and timeline layouts,
 `timezone` (IANA) decides what "today" means and `week_start` (`0` Sunday, `1` Monday; anything
 else is a 400) where a calendar week begins ([section 6](#6-relative-date-filters-and-time-zones)).
 The answer is `{total, offset, records, groups, colors}`, with `colors` mapping record ids to the
 row colour the view (or the draft) gives them.
+
+`neighbours_of` is a record id. The answer then also has `neighbours: {previous, next}`, the ids on
+either side of that record in the result (`null` at the ends, and for a record that is not in it).
+It is what a record's page uses for Previous and Next; send `limit: 0` to skip the records.
 
 `transient` is a **draft**: parts of the view's configuration that apply to this request only and
 are never stored. It is what the web app sends for changes nobody has saved yet, and what lets a

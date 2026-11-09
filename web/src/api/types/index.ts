@@ -118,6 +118,7 @@ export type { LookupOptions } from "./LookupOptions";
 export type { MarkRead } from "./MarkRead";
 export type { Member } from "./Member";
 export type { MoveRecords } from "./MoveRecords";
+export type { Neighbours } from "./Neighbours";
 export type { NewRecord } from "./NewRecord";
 export type { Notification } from "./Notification";
 export type { NotificationsResponse } from "./NotificationsResponse";

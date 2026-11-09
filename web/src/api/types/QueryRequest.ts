@@ -28,4 +28,10 @@ week_start?: number | null,
  * A one-off filter / sort / group override for this request only; see
  * [`TransientConfig`].
  */
-transient?: TransientConfig | null, };
+transient?: TransientConfig | null, 
+/**
+ * A record id: besides the page, the response names the records before and after it in the
+ * result (`neighbours`), so a record's page can offer Previous and Next without loading the
+ * whole view. Ignored by public share queries.
+ */
+neighbours_of?: string | null, };

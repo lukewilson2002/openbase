@@ -83,6 +83,11 @@ pub struct QueryRequest {
     /// [`TransientConfig`].
     #[serde(default)]
     pub transient: Option<TransientConfig>,
+    /// A record id: besides the page, the response names the records before and after it in the
+    /// result (`neighbours`), so a record's page can offer Previous and Next without loading the
+    /// whole view. Ignored by public share queries.
+    #[serde(default)]
+    pub neighbours_of: Option<String>,
 }
 
 /// A request-scoped replacement for parts of a view's saved config, for users
@@ -152,6 +157,18 @@ pub struct QueryResponse {
     /// Row colour per record id (only when the view colours rows).
     #[serde(default)]
     pub colors: BTreeMap<String, String>,
+    /// Only when the request had `neighbours_of`.
+    #[serde(default)]
+    pub neighbours: Option<Neighbours>,
+}
+
+/// The ids on either side of a record in a view's result. Both are `None` at the ends of the
+/// result, and when the record is not in it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct Neighbours {
+    pub previous: Option<String>,
+    pub next: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

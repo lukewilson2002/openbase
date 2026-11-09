@@ -54,8 +54,8 @@ use std::time::{Duration, Instant};
 use chrono::{NaiveDate, Utc, Weekday};
 use chrono_tz::Tz;
 use ob_core::api::records::{
-    AggregationsResponse, DateRange, GroupHeader, LinkRef, QueryRequest, QueryResponse, Record,
-    TransientConfig,
+    AggregationsResponse, DateRange, GroupHeader, LinkRef, Neighbours, QueryRequest, QueryResponse,
+    Record, TransientConfig,
 };
 use ob_core::cell::{NoNames, display_text, to_value};
 use ob_core::field::{Field, FieldKind, ValueFormat};
@@ -1006,6 +1006,15 @@ fn run_query_with(
         records,
         groups: groups(entry, &scanned.plan),
         colors,
+        neighbours: req.neighbours_of.as_deref().map(|id| {
+            let at = entry.ids.iter().position(|i| i == id);
+            Neighbours {
+                previous: at
+                    .and_then(|i| i.checked_sub(1))
+                    .map(|i| entry.ids[i].clone()),
+                next: at.and_then(|i| entry.ids.get(i + 1)).cloned(),
+            }
+        }),
     })
 }
 
