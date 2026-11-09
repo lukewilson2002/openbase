@@ -53,7 +53,7 @@ export function AuditTab() {
 
   return (
     <div className="flex flex-col gap-3">
-      <Table minWidth="44rem">
+      <Table label="Audit log" minWidth="44rem">
         <THead>
           <tr>
             <Th>When</Th>

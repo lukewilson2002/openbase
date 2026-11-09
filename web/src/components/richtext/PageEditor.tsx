@@ -99,7 +99,7 @@ export function PageEditor({ value, onChange, onBlur, autoFocus, upload, people,
         "aria-label": label,
         // Enter in the record's title lands here (RecordPage).
         "data-record-page": "",
-        class: "ob-prose ob-editor min-h-48 pb-24 text-read-phone outline-none md:text-read",
+        class: "ob-prose ob-editor min-h-48 pb-24 text-read-phone md:text-read",
       },
       // The caret keeps clear of the formatting bar when typing scrolls the page.
       scrollMargin: { top: 8, bottom: 96, left: 8, right: 8 },

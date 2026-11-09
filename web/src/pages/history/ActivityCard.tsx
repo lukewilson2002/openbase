@@ -44,7 +44,7 @@ export function ActivityCard({ group, fields, format, now, topLevel }: ActivityC
               <span className="line-through">{name}</span> <span className="text-label font-normal">(deleted)</span>
             </p>
           ) : (
-            <Link to={`/base/${encodeURIComponent(place.base_id)}/${encodeURIComponent(place.table_id)}/r/${encodeURIComponent(record.id)}`} className="block min-w-0 break-words text-ui font-semibold text-fg hover:underline max-md:py-3">
+            <Link to={`/base/${encodeURIComponent(place.base_id)}/${encodeURIComponent(place.table_id)}/r/${encodeURIComponent(record.id)}`} className="block min-h-6 min-w-0 break-words text-ui font-semibold text-fg hover:underline max-md:py-3">
               {name}
             </Link>
           )}
@@ -227,7 +227,7 @@ function CommentText({ body }: { body: string }) {
 
 function Toggle({ expanded, onClick, more, less }: { expanded: boolean; onClick: () => void; more: string; less: string }) {
   return (
-    <button type="button" aria-expanded={expanded} onClick={onClick} className="mt-1 inline-flex items-center text-meta font-medium text-primary-text underline hover:no-underline max-md:min-h-control-touch">
+    <button type="button" aria-expanded={expanded} onClick={onClick} className="mt-1 inline-flex min-h-6 items-center text-meta font-medium text-primary-text underline hover:no-underline max-md:min-h-control-touch">
       {expanded ? less : more}
     </button>
   );

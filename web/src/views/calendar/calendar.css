@@ -87,6 +87,8 @@
   margin: var(--space-4) var(--space-6) 0;
 }
 .ob-calendar .fc-daygrid-event {
+  /* A target of at least 24 px (A11Y-6): a one-line chip is 18 px by its text alone. */
+  min-height: 1.5rem;
   margin: 0 !important;
   padding: 0;
   border-radius: var(--radius-sm);
@@ -98,7 +100,7 @@
 }
 .ob-calendar .fc-event:focus-visible {
   outline: 2px solid var(--ring);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 .ob-calendar .fc-daygrid-dot-event:hover,
 .ob-calendar .fc-daygrid-event:hover {

@@ -5,15 +5,17 @@ import { Card } from "./card";
 export interface TableProps extends ComponentProps<"table"> {
   /** Narrower than this and the table scrolls sideways inside its own box (PH-7) rather than squeezing its columns. */
   minWidth?: string;
+  /** Names the box that scrolls sideways, which takes the keyboard focus so its overflow can be reached without a mouse. */
+  label: string;
 }
 
 /**
  * The shared table styles (APP-15): a bordered Card that scrolls sideways on its own, a quiet header row, and
  * 46 px body rows. Admin's Users and Audit tables are built from these, so every table looks alike.
  */
-export function Table({ className, minWidth, style, ...props }: TableProps) {
+export function Table({ className, minWidth, style, label, ...props }: TableProps) {
   return (
-    <Card padded={false} className="overflow-x-auto">
+    <Card padded={false} className="overflow-x-auto" role="region" aria-label={label} tabIndex={0}>
       <table className={cn("w-full text-left text-ui", className)} style={{ minWidth, ...style }} {...props} />
     </Card>
   );

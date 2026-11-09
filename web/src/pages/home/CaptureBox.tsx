@@ -316,7 +316,7 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
     <Card
       onDragOver={onDragOver}
       onDrop={onDrop}
-      className="border-primary-soft-line p-4 shadow-pop focus-within:border-ring max-md:p-3.5"
+      className="border-primary-soft-line p-4 shadow-pop focus-within:border-ring focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring max-md:p-3.5"
       role="group"
       aria-label="Capture"
     >

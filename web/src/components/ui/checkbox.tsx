@@ -28,7 +28,8 @@ export function Checkbox({ checked, onCheckedChange, label, disabled, className 
         checked={checked}
         disabled={disabled}
         onCheckedChange={(v) => onCheckedChange(v === true)}
-        className="flex size-4 shrink-0 items-center justify-center rounded border border-line-strong bg-surface data-[state=checked]:border-primary data-[state=checked]:bg-primary disabled:opacity-50"
+        // The 16 px box is what is drawn; the press area is 24 px on a desktop (A11Y-6), a layer around it.
+        className="relative flex size-4 shrink-0 items-center justify-center rounded border border-line-strong bg-surface before:absolute before:left-1/2 before:top-1/2 before:size-6 before:-translate-x-1/2 before:-translate-y-1/2 data-[state=checked]:border-primary data-[state=checked]:bg-primary disabled:opacity-50"
       >
         <C.Indicator>
           <Icon icon={Check} size="sm" className="text-primary-fg" />

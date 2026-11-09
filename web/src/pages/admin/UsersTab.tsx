@@ -60,7 +60,7 @@ export function UsersTab() {
           <UserPlus aria-hidden className="size-4" /> New user
         </Button>
       </div>
-      <Table>
+      <Table label="Users">
         <THead>
           <tr>
             <Th>User</Th>

@@ -19,6 +19,7 @@ import type { EditValue } from "@/components/record/editors/env";
 import { Button } from "@/components/ui/button";
 import { defaultDrafts, resolveForm, shownItems, type Drafts } from "@/lib/forms/drafts";
 import { DEFAULT_SUBMIT_LABEL, DEFAULT_SUCCESS_MESSAGE, fieldDefault, liveEntries, liveItems, redirectAfterSubmit } from "@/lib/forms/formConfig";
+import { scrollBehavior } from "@/lib/reducedMotion";
 import type { ViewSetup } from "../common/useViewSetup";
 import { FormSurface } from "./FormSurface";
 
@@ -57,7 +58,7 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
   /** Puts the cursor in the field (the first one that needs attention) and brings it into view. */
   const focusField = (id: string) => {
     const block = [...(top.current?.querySelectorAll<HTMLElement>("[data-field-id]") ?? [])].find((el) => el.dataset["fieldId"] === id);
-    block?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    block?.scrollIntoView?.({ block: "center", behavior: scrollBehavior() });
     block?.querySelector<HTMLElement>("input, textarea, select, button, [contenteditable=true]")?.focus({ preventScroll: true });
   };
 

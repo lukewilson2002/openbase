@@ -182,7 +182,7 @@ export function CollectionHeader({ schema, table, section, onShare, onSettings }
       className="py-2"
       actions={
         <>
-          <Link to={`/workspace/${schema.workspace_id}/members`} className="shrink-0 rounded-pill px-1 no-underline">
+          <Link to={`/workspace/${schema.workspace_id}/members`} className="inline-flex min-h-6 shrink-0 items-center rounded-pill px-1 no-underline">
             <BaseAvatars people={schema.people} viewers={viewers} max={4} size="md" />
           </Link>
           {canShare && (

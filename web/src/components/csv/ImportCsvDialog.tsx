@@ -114,7 +114,7 @@ function ImportBody({ baseId, table, onClose }: { baseId: string; table: ImportC
             <p className="text-meta text-muted">
               Columns whose name matches a property are matched for you. Pick “Skip this column” to leave one out. Values are read the way pasted text is (“$1,200”, “25%”, “yes”); a select value that does not exist yet becomes a new choice.
             </p>
-            <div className="overflow-x-auto rounded-lg border border-line">
+            <div role="region" aria-label="Preview of the file" tabIndex={0} className="overflow-x-auto rounded-lg border border-line">
               <table className="w-full min-w-max border-collapse text-left text-label">
                 <thead className="bg-subtle align-top">
                   <tr>

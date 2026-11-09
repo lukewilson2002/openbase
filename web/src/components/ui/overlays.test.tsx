@@ -799,12 +799,12 @@ describe("FilterBar", () => {
     { id: "c2", label: "Owner is me" },
   ];
 
-  it("holds its chips before the text and has a 2 px accent border when focused", async () => {
+  it("holds its chips before the text and has the 2 px focus ring around it when focused (A11Y-2)", async () => {
     render(<Harness initialChips={CHIPS} />);
     const input = screen.getByRole("combobox", { name: "Filter or search" });
     expect(screen.getByText("Status is Todo")).toBeInTheDocument();
     const field = input.parentElement!;
-    expect(field).toHaveClass("focus-within:border-primary", "focus-within:ring-1", "focus-within:ring-inset", "focus-within:ring-primary");
+    expect(field).toHaveClass("focus-within:border-primary", "focus-within:outline-2", "focus-within:outline-offset-2", "focus-within:outline-ring");
     // Chips come before the input in the one field.
     expect(field.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_CONTAINED_BY).toBeTruthy();
     expect(screen.getByText("Owner is me").compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

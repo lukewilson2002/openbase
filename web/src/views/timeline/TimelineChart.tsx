@@ -48,6 +48,7 @@ import {
   type DependencyEdge,
   type DragMode,
 } from "./geometry";
+import { scrollBehavior } from "@/lib/reducedMotion";
 import { spanLabel, type Lane } from "./lanes";
 import "./timeline.css";
 
@@ -426,7 +427,7 @@ export function TimelineChart(props: TimelineChartProps) {
     // Whole days, so a page lands on a day boundary like the first screen did.
     const days = Math.max(1, Math.floor(visibleWidth(el) / axis.pxPerDay));
     const target = el.scrollLeft + dir * days * axis.pxPerDay;
-    if (typeof el.scrollTo === "function") el.scrollTo({ left: target, behavior: "smooth" });
+    if (typeof el.scrollTo === "function") el.scrollTo({ left: target, behavior: scrollBehavior() });
     else el.scrollLeft = target;
   };
   useImperativeHandle(props.ref, () => ({ page: pageBy }));
@@ -1103,7 +1104,7 @@ export function TimelineChart(props: TimelineChartProps) {
                 onKeyDown={(e) => barKey(bar, e)}
                 className={cn(
                   // Selected (focused, by a click or the keyboard), it is outlined.
-                  "group pointer-events-auto absolute flex touch-pan-x touch-pan-y select-none items-center [-webkit-touch-callout:none] outline-none focus:outline-2 focus:outline-offset-2 focus:outline-ring",
+                  "group pointer-events-auto absolute flex touch-pan-x touch-pan-y select-none items-center [-webkit-touch-callout:none]",
                   bar.canMove ? "cursor-grab" : "cursor-pointer",
                   dragging && "z-20 cursor-grabbing shadow-pop",
                   dragging && drag?.unschedule && "opacity-50",

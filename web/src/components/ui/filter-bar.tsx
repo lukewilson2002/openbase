@@ -195,7 +195,7 @@ export function FilterBar({ chips, onRemoveChip, text, onTextChange, suggestions
           className={cn(
             "flex min-h-control-md min-w-0 flex-1 cursor-text flex-wrap items-center gap-1.5 rounded-md border border-line-strong bg-surface py-1 pl-2.5 pr-2 max-md:min-h-control-touch max-md:py-0",
             // 2 px in all: the 1 px border plus an inset ring of 1 px, so the field does not change size.
-            "focus-within:border-primary focus-within:ring-1 focus-within:ring-inset focus-within:ring-primary",
+            "focus-within:border-primary focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring",
             className,
           )}
         >

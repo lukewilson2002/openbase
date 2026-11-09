@@ -37,9 +37,11 @@ const OpenContext = createContext<{ open: boolean; setOpen: (open: boolean) => v
 /**
  * Radix's root, with the open state held here (controlled or not) for the trigger's tap handling. Below the desktop
  * breakpoint the menu is a bottom sheet titled `title` instead of a dropdown (PH-3): its content, items and labels
- * draw as sheet rows, so a menu is written once.
+ * draw as sheet rows, so a menu is written once. A dropdown is not modal: Radix's modal menu hides the rest of the page with
+ * `aria-hidden` (sparing whatever holds a live region), which leaves focusable controls inside hidden regions (A11Y-7);
+ * Escape, a press outside and Tab still close it and the focus still goes back to the trigger.
  */
-export function DropdownMenu({ open: openProp, defaultOpen = false, onOpenChange, title = "Menu", ...props }: ComponentProps<typeof M.Root> & { title?: string }) {
+export function DropdownMenu({ open: openProp, defaultOpen = false, onOpenChange, title = "Menu", modal = false, ...props }: ComponentProps<typeof M.Root> & { title?: string }) {
   const desktop = useMediaQuery(DESKTOP_QUERY);
   const [inner, setInner] = useState(defaultOpen);
   const open = openProp ?? inner;
@@ -53,7 +55,7 @@ export function DropdownMenu({ open: openProp, defaultOpen = false, onOpenChange
   const value = useMemo(() => ({ open, setOpen, sheet: !desktop, title }), [open, setOpen, desktop, title]);
   return (
     <OpenContext value={value}>
-      <M.Root open={open} onOpenChange={setOpen} {...props} />
+      <M.Root open={open} onOpenChange={setOpen} modal={modal} {...props} />
     </OpenContext>
   );
 }

@@ -83,12 +83,11 @@ export function holdClicks() {
 
 /**
  * The one drag context of the tree: wrap everything that has `SortableGroup`s in it. `inMenu` is for a root
- * inside a `role="menu"`: dnd-kit's live region (a `role="status"`) would otherwise be a direct child of the
- * menu, which may own only items, groups and separators, so it is placed in a group of its own.
+ * inside a `role="menu"`: dnd-kit's live region (a `role="status"`) would otherwise be a child of the menu,
+ * which may own only items, groups and separators, so it is drawn in the page's body instead.
  */
 export function ReorderRoot({ children, inMenu = false }: { children: ReactNode; inMenu?: boolean }) {
   const id = useId();
-  const [liveRegion, setLiveRegion] = useState<HTMLElement | null>(null);
   const sensors = useSensors(
     useSensor(RowMouseSensor, { activationConstraint: { distance: 5 } }),
     // A finger must rest on the row first: moving straight away is a swipe that scrolls the menu.
@@ -122,9 +121,8 @@ export function ReorderRoot({ children, inMenu = false }: { children: ReactNode;
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
         onDragCancel={onDragCancel}
-        accessibility={{ announcements, container: inMenu && liveRegion ? liveRegion : undefined, screenReaderInstructions: { draggable: "Drag with the pointer, or use Move up and Move down in the row's options menu." } }}
+        accessibility={{ announcements, container: inMenu ? document.body : undefined, screenReaderInstructions: { draggable: "Drag with the pointer, or use Move up and Move down in the row's options menu." } }}
       >
-        {inMenu && <div role="group" ref={setLiveRegion} />}
         {children}
       </DndContext>
     </InRoot.Provider>

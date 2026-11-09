@@ -90,7 +90,7 @@ function Body({ baseId, onClose }: { baseId: string; onClose: () => void }) {
           <Checkbox checked={hasHeader} disabled={busy} onCheckedChange={setHasHeader} label="The first row holds the property names" />
           <section aria-label="Preview">
             <h3 className="mb-1.5 text-h3">Preview</h3>
-            <div className="overflow-x-auto rounded-lg border border-line">
+            <div role="region" aria-label="Preview of the file" tabIndex={0} className="overflow-x-auto rounded-lg border border-line">
               <table className="w-full min-w-max border-collapse text-left text-label">
                 <thead className="bg-subtle">
                   <tr>
