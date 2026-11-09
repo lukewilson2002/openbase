@@ -268,6 +268,22 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   icon "did you mean" search). Changing a rich text property's type no longer indents nested lists
   without limit, which let one 100,000 character cell need gigabytes. All stored filters and view
   configurations load as before.
+- **A formula can no longer take the server down.** `REGEX_REPLACE` checks what one match would
+  append (the replacement plus the match once per `$`) before building it, where a replacement of
+  200,000 `$0` over one 400,000 byte match made the server try to allocate 80 GB and abort. Running a
+  regular expression is now priced by the size of the pattern as well as the text, so a counted
+  repetition such as `[ab]{12000}` over a long text runs out of the evaluation budget instead of
+  holding a read connection for minutes. `DATETIME_PARSE` takes a format of at most 1,000 bytes (as
+  `DATETIME_FORMAT` always did) and reads a format of unclosed `[` in one pass. A date at the edge of
+  the range (year 262142, which `DATETIME_PARSE` can write) seen through a time zone that pushes it
+  past the edge is `#ERROR: Date out of range` instead of a panic that failed every write to the
+  collection and, for a formula using `NOW()`, kept other workspaces' clock-dependent properties from
+  refreshing. The formula check no longer keeps the expressions it previews in the process-wide parse
+  cache, which is now bounded by size as well as count. At most two `filterByFormula` filters (and
+  one per user) are evaluated at the same time, including `filter_by_formula` of the aggregate
+  endpoint and `list_records` / `aggregate_records`; another one is `429 RATE_LIMIT_REACHED` with
+  `Retry-After: 1` instead of queueing for the four read connections that sign-in and every read
+  share. Formulas that worked before give the same results.
 - **A share link's visitor can no longer change the view's filter.** `POST /api/public/shares/{token}/query`
   used to let a `transient.filter` replace the saved filter, which showed every record of the collection
   in the shown properties, including the ones the filter hides. It now answers 400 for a `transient`

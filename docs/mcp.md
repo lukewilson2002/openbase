@@ -952,7 +952,7 @@ tool above its access. `scope` and `resource_metadata` are left out when OAuth i
 | the approval page says "This request has expired" | the page waited more than 10 minutes, or it was already used; start again from the app |
 | the app says `invalid_grant` after working for a while | its refresh token was used twice more than 30 seconds apart (the connection was revoked for safety), was idle 30 days, or the connection ended with a password change, turning on two-factor authentication, "sign out other sessions" or a deactivation; connect it again. An `invalid_grant` that says the token "was just exchanged" is two refreshes at once: nothing was revoked |
 | `403` "Origin is not allowed" | a browser-based client on another origin; add it to `OPENBASE_MCP_ALLOWED_ORIGINS` |
-| `429` | rate limit; retry after the `Retry-After` seconds |
+| `429` | rate limit, or (`list_records`, `aggregate_records` with `filterByFormula`) another formula filter is still running: at most two run at once on the server and one per user; retry after the `Retry-After` seconds |
 | a tool is missing from the list | the token lacks write or `manage`, or its owner is not an administrator (`admin_*`); create another token |
 | "not found, or you have no access" | wrong id, or the base is outside the token's base list or the owner's access |
 | "Several tables have a view named ..." | view names repeat across tables (every table starts with "Grid view"); pass `table` |

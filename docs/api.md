@@ -606,7 +606,7 @@ Every error, including unknown paths and malformed bodies, is
 | 422 | `INVALID_FILTER_BY_FORMULA` | `filterByFormula` does not parse, names an unknown field or fails type checking |
 | 422 | `LIST_RECORDS_ITERATOR_NOT_AVAILABLE` | the `offset` expired, is unknown, belongs to someone else, or was made for different parameters |
 | 422 | `VIEW_NAME_NOT_FOUND` | the `view` parameter names no view of the table |
-| 429 | `RATE_LIMIT_REACHED` | see above |
+| 429 | `RATE_LIMIT_REACHED` | see above, or another `filterByFormula` is still being evaluated |
 | 500 | `SERVER_ERROR` | logged; the message is generic |
 
 All batches are **atomic**: if any record fails, nothing is written.
@@ -675,7 +675,7 @@ its exact name (ids win). Response: `{"records": [{"id", "createdTime",
 | `view` | a view id or name. Only that view's records, in its order (its filter and sort apply). Fields hidden in the view are still returned, as in Airtable. Personal views of other users and views of other tables are `VIEW_NAME_NOT_FOUND`. |
 | `fields[]` | only these fields, by name or id (`fields[]=Name&fields[]=Status`; `fields=` also works). |
 | `sort[i][field]`, `sort[i][direction]` | sort levels (`asc` default, or `desc`), field by name or id; at most 10 levels. Replaces the view's sort. |
-| `filterByFormula` | keep records for which the formula is truthy (see below). Evaluation is cut off after 5 seconds per request (422 `INVALID_FILTER_BY_FORMULA`); a single record whose formula exceeds the evaluation budget counts as not matching. |
+| `filterByFormula` | keep records for which the formula is truthy (see below). Evaluation is cut off after 5 seconds per request (422 `INVALID_FILTER_BY_FORMULA`); a single record whose formula exceeds the evaluation budget counts as not matching. At most two filters run at the same time on the server and one per user; a request that finds no free slot is `429 RATE_LIMIT_REACHED` with `Retry-After: 1` (the same for `filter_by_formula` in `POST /api/tables/{id}/aggregate`). |
 | `returnFieldsByFieldId` | key `fields` by field id instead of name. |
 | `includeEmpty` | OpenBase extension (not in Airtable). `true` returns fields with no value as `null` instead of omitting them, so a client can infer the columns from the records (also for a table with no values yet). Only the fields selected by `fields[]` are included. Default `false` (Airtable-compatible omission); anything but a boolean is a 422. |
 | `cellFormat` | only `json` (the default). `string` is a 422. |

@@ -439,11 +439,15 @@ ceremony state (not the credentials) is kept in memory, which suits the single-n
 
 | Limit | Value | Where |
 |---|---|---|
-| Work budget per formula evaluation | 20,000,000 units (about a byte of text touched by a function; an uncached regex compile costs 500,000; running a regex costs 8 per byte of input; `ARRAYUNIQUE` costs n^2/16) | `formula/eval.rs`, `functions/regex.rs` |
+| Work budget per formula evaluation | 20,000,000 units (about a byte of text touched by a function; an uncached regex compile costs 500,000; running a regex costs 8 per byte of input plus 1 per 64 estimated pattern states (a counted repetition multiplies what it repeats, so `[ab]{12000}` is priced about 25 times a plain pattern); `ARRAYUNIQUE` costs n^2/16) | `formula/eval.rs`, `functions/regex.rs` |
 | Live intermediate values per evaluation | 4 MiB of text/array data alive at once (arguments already computed while later ones are evaluated) | `formula/eval.rs` |
 | Formula result text | 400,000 bytes (100,000 characters x 4) | `formula/coerce.rs` |
 | Formula source length / nesting | 10,000 characters, 64 nested computed-field levels, tree height 512 | `limits.rs`, `formula/mod.rs` |
 | Regex pattern length / compiled size | 2,000 characters / 1 MiB | `functions/regex.rs` |
+| `REGEX_REPLACE` expansion | what one match appends (the replacement plus one match length per `$`) is checked against the 400,000 byte result limit and charged to the work budget before it is built | `functions/regex.rs` |
+| Date format | `DATETIME_FORMAT` and `DATETIME_PARSE` take a format of at most 1,000 bytes; an unclosed `[` is searched for once, not once per `[` | `functions/date.rs`, `datetime.rs` |
+| Dates at the edge of the range | a date a zone offset pushes past the years chrono can hold (year 262142 and its mirror, which `DATETIME_PARSE` can produce) is `#ERROR: Date out of range`, never a panic; every local view of a date goes through `datetime::local_naive` | `datetime.rs`, `functions/date.rs` |
+| Parsed-formula cache | 10,000 entries and about 64 MiB of source plus tree; the formula check parses without caching, so only stored expressions take space | `engine/recompute.rs` |
 | Regex cache | 64 compiled patterns per thread, least recently used evicted; **failed compiles are cached too** | `functions/regex.rs` |
 | Grid search text | 500 characters (400 beyond); lower-cased once per query, not per row | `limits.rs`, `query/search.rs` |
 | Search everything (`GET /api/search`) | 200 characters of text (400 beyond); at most 50 results (default 20); record text of at most 100,000 records in at most 100 tables per search, after which only names are searched | `store/search.rs` |
@@ -452,7 +456,7 @@ ceremony state (not the credentials) is kept in memory, which suits the single-n
 | Aggregate `sort` | 23 entries (one per aggregate and group field); a repeated key is dropped | `v1/aggregate.rs` |
 | Icon search (`list_icons`, the "did you mean" hints) | 200 characters of query, repeated words counted once | `icons.rs` |
 | Rich text to plain text (changing a field's type) | indentation of nested lists stops at 32 levels and reading stops after 400,000 bytes of output | `store/markdown.rs` |
-| `filterByFormula` (v1 API) | 5 seconds of evaluation per request, then 422 | `v1/records.rs` |
+| `filterByFormula` (v1 API, aggregate) | 5 seconds of evaluation per request, then 422; 2 filters evaluate at once on the instance and 1 per user, the rest get `429 RATE_LIMIT_REACHED` with `Retry-After: 1` instead of queueing for a reader connection | `v1/records.rs` |
 | v1 pagination snapshots | 16 per user, 256 and 1,000,000 ids overall; when the store is full the user holding the most loses their oldest snapshot first | `v1/cursor.rs` |
 
 A formula that exhausts a budget evaluates to `#ERROR: Formula is too expensive to
