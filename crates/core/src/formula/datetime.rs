@@ -61,11 +61,32 @@ const DATE_FORMATS: &[&str] = &[
     "%a, %B %d, %Y",
 ];
 
+/// Years a formula date may have. The calendar columns read and write only
+/// these, and keeping to them means no zone offset or presentation code
+/// downstream ever meets a date at the edge of chrono's range.
+const YEARS: std::ops::RangeInclusive<i32> = 0..=9999;
+
+pub(crate) fn instant_in_range(t: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    YEARS.contains(&t.year()).then_some(t)
+}
+
+fn date_in_range(d: NaiveDate) -> Option<NaiveDate> {
+    YEARS.contains(&d.year()).then_some(d)
+}
+
 /// Parses date text in the common formats people and other systems write:
 /// ISO 8601 / RFC 3339 (with or without offset), `YYYY/MM/DD`, US
 /// `M/D/YYYY` with optional 12/24-hour time, and English month names.
 /// Date-only text yields a calendar date; text without an offset is UTC.
 pub(crate) fn parse_date_text(s: &str) -> Option<DateVal> {
+    let parsed = parse_date_text_unchecked(s)?;
+    match parsed {
+        DateVal::Instant(t) => instant_in_range(t).map(DateVal::Instant),
+        DateVal::Date(d) => date_in_range(d).map(DateVal::Date),
+    }
+}
+
+fn parse_date_text_unchecked(s: &str) -> Option<DateVal> {
     let s = s.trim();
     if s.is_empty() || s.len() > 100 {
         return None;
@@ -288,12 +309,12 @@ pub(crate) fn date_add(d: DateVal, count: f64, unit: Unit, tz: Tz) -> Option<Dat
         return match d {
             DateVal::Date(day) => {
                 let n = add_calendar(naive_midnight(day), whole, unit)?;
-                Some(DateVal::Date(n.date()))
+                date_in_range(n.date()).map(DateVal::Date)
             }
             DateVal::Instant(t) => {
                 let local = local_naive(t, tz)?;
                 let moved = add_calendar(local, whole, unit)?;
-                Some(DateVal::Instant(from_local(moved, tz)?))
+                instant_in_range(from_local(moved, tz)?).map(DateVal::Instant)
             }
         };
     }
@@ -306,7 +327,10 @@ pub(crate) fn date_add(d: DateVal, count: f64, unit: Unit, tz: Tz) -> Option<Dat
         DateVal::Date(day) => from_local(naive_midnight(day), tz)?,
         DateVal::Instant(t) => t,
     };
-    start.checked_add_signed(delta).map(DateVal::Instant)
+    start
+        .checked_add_signed(delta)
+        .and_then(instant_in_range)
+        .map(DateVal::Instant)
 }
 
 /// Fractional months from `b` to `a` (positive when `a` is later), using
@@ -784,7 +808,8 @@ pub(crate) fn parse_with_format(
                 if !ms.is_finite() || ms.abs() > 1e16 {
                     return None;
                 }
-                return DateTime::from_timestamp_millis(ms.round() as i64);
+                return DateTime::from_timestamp_millis(ms.round() as i64)
+                    .and_then(instant_in_range);
             }
             "Z" | "ZZ" => {
                 sc.s = sc.s.trim_start();
@@ -840,6 +865,7 @@ pub(crate) fn parse_with_format(
             .map(|t| t.with_timezone(&Utc)),
         None => Some(naive.and_utc()),
     }
+    .and_then(instant_in_range)
 }
 
 // ---------------------------------------------------------------------------

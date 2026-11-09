@@ -232,6 +232,14 @@ pub fn purge_trash(
 /// Most record ids put into one refresh event.
 const REFRESH_EVENT_IDS: usize = 1000;
 
+/// Runs `f`, turning a panic into an error. One base's formulas must not be
+/// able to stop the bases after it from refreshing; the transaction rolls
+/// back as the panic unwinds out of `write_sync`.
+fn isolate_panic<T>(f: impl FnOnce() -> AppResult<T>) -> AppResult<T> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
+        .unwrap_or_else(|_| Err(AppError::internal("a formula panicked while refreshing")))
+}
+
 /// Recompute every formula that depends on the clock (`NOW()`, `TODAY()`...)
 /// for the live records of every base, plus whatever depends on those
 /// formulas, one base per transaction. Subscribers hear about the changed
@@ -241,10 +249,11 @@ pub fn refresh_volatile_formulas(state: &AppState, now: DateTime<chrono::Utc>) -
     let groups = state.db.write_sync(|tx| recompute::volatile_fields(tx))?;
     let mut changed = 0;
     for (base_id, field_ids) in groups {
-        let outcome = match state
-            .db
-            .write_sync(|tx| recompute::refresh_volatile(tx, &base_id, &field_ids, now))
-        {
+        let outcome = match isolate_panic(|| {
+            state
+                .db
+                .write_sync(|tx| recompute::refresh_volatile(tx, &base_id, &field_ids, now))
+        }) {
             Ok(outcome) => outcome,
             Err(e) => {
                 tracing::error!(base = %base_id, error = %e, "volatile formula refresh failed for this base");
@@ -487,4 +496,16 @@ pub fn run_backup_if_due(state: &AppState, now: DateTime<Local>) -> AppResult<Op
     let path = backup::create_automatic(state)?;
     tracing::info!(path = %path.display(), "automatic backup written");
     Ok(Some(path))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_panic_in_one_base_is_an_error_not_an_unwind() {
+        let r: AppResult<()> = isolate_panic(|| panic!("a formula went wrong"));
+        assert!(r.is_err());
+        assert_eq!(isolate_panic(|| Ok(3)).unwrap(), 3);
+    }
 }

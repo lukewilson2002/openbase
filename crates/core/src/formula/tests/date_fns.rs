@@ -642,65 +642,101 @@ fn datetime_parse_with_format() {
 }
 
 // A date at the edge of chrono's range, seen through a zone whose offset
-// pushes it past the edge, is an error, never a panic (F44, F63).
-const LAST_INSTANT: &str = "DATETIME_PARSE(\"262142-12-31 23:00\", \"Y-MM-DD HH:mm\")";
-const FIRST_INSTANT: &str = "DATETIME_PARSE(\"-262143-01-01 00:00\", \"Y-MM-DD HH:mm\")";
+// pushes it past the edge, is an error, never a panic (F44, F63). Formula
+// text cannot write such a date any more (see the next test), but a stored
+// value can still be one, so the local views are total on their own.
+fn edge_ctx(tz: chrono_tz::Tz) -> Ctx {
+    Ctx {
+        tz,
+        ..with(&[
+            (
+                "Last",
+                Value::DateTime(chrono::DateTime::<chrono::Utc>::MAX_UTC),
+            ),
+            (
+                "First",
+                Value::DateTime(chrono::DateTime::<chrono::Utc>::MIN_UTC),
+            ),
+        ])
+    }
+}
 
 #[test]
 fn date_at_the_end_of_the_range_in_a_zone_is_an_error() {
+    let c = edge_ctx(chrono_tz::UTC);
     for f in ["YEAR", "DAY", "HOUR", "DATESTR", "TIMESTR", "WEEKNUM"] {
-        check_err(
-            &format!("{f}(SET_TIMEZONE({LAST_INSTANT}, \"Asia/Tokyo\"))"),
+        check_err_in(
+            &format!("{f}(SET_TIMEZONE({{Last}}, \"Asia/Tokyo\"))"),
+            &c,
             "out of range",
         );
-        check_err(
-            &format!("{f}(SET_TIMEZONE({FIRST_INSTANT}, \"America/New_York\"))"),
+        check_err_in(
+            &format!("{f}(SET_TIMEZONE({{First}}, \"America/New_York\"))"),
+            &c,
             "out of range",
         );
     }
-    check_err(
-        &format!("DATETIME_FORMAT(SET_TIMEZONE({LAST_INSTANT}, \"Asia/Tokyo\"), \"YYYY\")"),
+    check_err_in(
+        "DATETIME_FORMAT(SET_TIMEZONE({Last}, \"Asia/Tokyo\"), \"YYYY\")",
+        &c,
         "out of range",
     );
-    check_err(
-        &format!("IS_SAME(SET_TIMEZONE({LAST_INSTANT}, \"Asia/Tokyo\"), {LAST_INSTANT}, \"day\")"),
+    check_err_in(
+        "IS_SAME(SET_TIMEZONE({Last}, \"Asia/Tokyo\"), {Last}, \"day\")",
+        &c,
         "out of range",
     );
 }
 
 #[test]
 fn date_at_the_end_of_the_range_in_the_context_zone_is_an_error() {
-    let tokyo = Ctx {
-        tz: chrono_tz::Asia::Tokyo,
-        ..Ctx::default()
-    };
-    check_err_in(&format!("DAY({LAST_INSTANT})"), &tokyo, "out of range");
-    check_err_in(
-        &format!("DATEADD({LAST_INSTANT}, 1, \"day\")"),
-        &tokyo,
-        "out of range",
-    );
-    check_err_in(
-        &format!("WORKDAY({LAST_INSTANT}, 1)"),
-        &tokyo,
-        "out of range",
-    );
-    check_err_in(
-        &format!("WORKDAY_DIFF({LAST_INSTANT}, {LAST_INSTANT})"),
-        &tokyo,
-        "out of range",
-    );
-    check_err_in(
-        &format!("WORKDAY(\"2024-03-15\", 1, {LAST_INSTANT})"),
-        &tokyo,
-        "out of range",
-    );
+    let tokyo = edge_ctx(chrono_tz::Asia::Tokyo);
+    check_err_in("DAY({Last})", &tokyo, "out of range");
+    check_err_in("DATEADD({Last}, 1, \"day\")", &tokyo, "out of range");
+    check_err_in("WORKDAY({Last}, 1)", &tokyo, "out of range");
+    check_err_in("WORKDAY_DIFF({Last}, {Last})", &tokyo, "out of range");
+    check_err_in("WORKDAY(\"2024-03-15\", 1, {Last})", &tokyo, "out of range");
     let far = Ctx {
         now: utc("2024-03-15T12:30:45Z"),
         tz: chrono_tz::Asia::Tokyo,
         ..Ctx::default()
     };
     check_in("TODAY()", &far, date(2024, 3, 15));
+}
+
+#[test]
+fn formula_dates_stay_within_years_0_to_9999() {
+    // `Y` reads six digits and chrono's `%Y` takes a sign, so year 262142
+    // used to be writable in a formula.
+    check_err(
+        "DATETIME_PARSE(\"262142-12-31 23:00\", \"Y-MM-DD HH:mm\")",
+        "could not read",
+    );
+    check_err(
+        "DATETIME_PARSE(\"-262143-01-01 00:00\", \"Y-MM-DD HH:mm\")",
+        "could not read",
+    );
+    check_err(
+        "DATETIME_PARSE(\"+262142-12-31T23:59:59\")",
+        "could not read",
+    );
+    check_err(
+        "DATETIME_PARSE(\"253402300800000\", \"x\")",
+        "could not read",
+    );
+    check_err("DATEADD(\"9999-12-31\", 1, \"day\")", "out of range");
+    check_err(
+        "DATEADD(\"9999-12-31T00:00:00Z\", 1, \"year\")",
+        "out of range",
+    );
+    check_err(
+        "DATEADD(\"0000-01-01T00:00:00Z\", -1, \"ms\")",
+        "out of range",
+    );
+    check(
+        "DATETIME_PARSE(\"9999-12-31 23:59\", \"YYYY-MM-DD HH:mm\")",
+        dt("9999-12-31T23:59:00Z"),
+    );
 }
 
 #[test]
