@@ -235,7 +235,9 @@ test.describe("on a desktop", () => {
     await page.keyboard.press("Alt+ArrowDown");
     await expect(title(page)).toHaveText("Juniper Labs");
     await expect(previous).toBeEnabled();
+    // One step at a time: a second press that comes before the page has swapped records still sees the old neighbours.
     await page.keyboard.press("Alt+ArrowUp");
+    await expect(title(page)).toHaveText("Ibis Studio");
     await page.keyboard.press("Alt+ArrowUp");
     await expect(page).toHaveURL(new RegExp(`/r/${fx.records[0]}$`));
     await expect(title(page)).toHaveText("Harper & Co");

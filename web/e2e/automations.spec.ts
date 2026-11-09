@@ -1,5 +1,5 @@
 import type { APIRequestContext, Cookie, Page } from "@playwright/test";
-import { clickGrid, expect, newClientContext, newRecordButton, skipIntro, test, typeToEdit } from "./fixtures";
+import { expect, newClientContext, newRecordButton, skipIntro, test } from "./fixtures";
 
 /**
  * The automations journey against a live server: build "when a record is created in Table 1,
@@ -18,11 +18,6 @@ test.describe.configure({ mode: "serial" });
 const EMAIL = process.env["OPENBASE_E2E_EMAIL"] ?? "e2e-automations@example.com";
 const PASSWORD = process.env["OPENBASE_E2E_PASSWORD"] ?? "correct horse battery staple 42";
 const CSRF = { "X-OpenBase-CSRF": "1" };
-
-// Grid geometry (see grid.spec.ts): the Name column of a fresh table starts after the row marker.
-const MARKER_W = 56;
-const HEADER_H = 44;
-const ROW_H = 46;
 
 interface Fixture {
   baseId: string;
@@ -158,16 +153,11 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
     await expect(page.getByRole("button", { name: "View options" })).toBeVisible();
     await expect(page.getByText("0 items")).toBeVisible();
     await newRecordButton(page).click();
-    await expect(page.getByText("1 item")).toBeVisible();
-    // Name it, as a person would.
-    const canvas = page.locator("canvas[data-testid='data-grid-canvas']").first();
-    const box = (await canvas.boundingBox())!;
-    // Just inside the name column: it is fitted to its content, so only its header's width is sure.
-    const x = box.x + MARKER_W + 24;
-    const y = box.y + HEADER_H + ROW_H / 2;
-    await clickGrid(page, x, y);
-    await typeToEdit(page, "Alpha");
-    await page.keyboard.press("Enter");
+    // The header's New opens the new record as its page, with the title ready to type in (REC-8). Name it, as a person would.
+    await expect(page).toHaveURL(/\/r\/rec/);
+    const title = page.getByRole("main").getByRole("heading", { level: 1 }).getByRole("textbox");
+    await title.fill("Alpha");
+    await title.press("Enter");
     await expect.poll(async () => names(page, fx.table1)).toEqual(["Alpha"]);
   });
 

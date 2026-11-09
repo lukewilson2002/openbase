@@ -152,6 +152,8 @@ test("builds a form, shares it, and a stranger's submission shows up as a record
     await page.getByLabel("Submit button").fill("Sign me up");
     const nameRow = page.getByRole("listitem", { name: "Form field Name" });
     await nameRow.getByRole("switch", { name: "Required" }).click();
+    // A form saves as it is made: let the toggle land before the next edit, or a slow save's echo can show the old label (seen once under load).
+    await expect.poll(async () => (await table(page.request)).views.find((v) => v.id === formViewId)!.config.form.fields.find((f) => f.field_id === fx.fields.name)?.required).toBe(true);
     await nameRow.getByRole("button", { name: "Edit Name" }).click();
     await page.getByLabel("Label for Name").fill("Your name");
     await page.getByLabel("Help text for Name").fill("As on your ID");
