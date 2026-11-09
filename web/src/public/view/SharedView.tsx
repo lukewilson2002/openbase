@@ -5,9 +5,10 @@
  * the public page does not reuse them wholesale. It reuses what is presentational and pure
  * (cell display, card helpers, kanban stacking, the timeline chart, calendar date math) and puts
  * simple read-only layouts around it:
- *   - grid, list  -> a clean read-only table (grouped rows, click a header to sort, paging);
- *   - gallery     -> cards with the cover image;
- *   - kanban      -> read-only stacks;
+ *   - grid        -> a clean read-only table (grouped rows, click a header to sort, paging);
+ *   - list        -> the signed-in List's own outline (`ListOutline`), told it only shows;
+ *   - gallery     -> the signed-in gallery's card body in its grid;
+ *   - kanban      -> the signed-in board (`KanbanBoard`), told it only shows;
  *   - calendar    -> a month grid (one query per month);
  *   - timeline    -> the timeline chart with every editing gesture off.
  * A board, calendar or timeline whose configured field is not visible in the share falls back to
@@ -25,6 +26,7 @@ import { resolveDateFields } from "@/views/common/dateFields";
 import { stackKind } from "@/views/kanban/stacks";
 import { PublicCalendar } from "./PublicCalendar";
 import { PublicGallery, PublicKanban, cardFieldsFor } from "./PublicCards";
+import { PublicList } from "./PublicList";
 import { PublicTable } from "./PublicTable";
 import { PublicTimeline } from "./PublicTimeline";
 import { ShareProvider } from "./ShareContext";
@@ -144,6 +146,9 @@ function TableBody(p: BodyProps & { view: PublicView; offset: number; onOffset: 
         )}
       </Toolbar>
       {page.error && !data && <ErrorLine error={page.error} onRetry={page.refetch} />}
+      {p.view.type === "list" ? (
+        <PublicList fields={p.fields} records={data?.records ?? []} groups={data?.groups ?? []} colors={data?.colors ?? {}} descriptionField={p.fields.byId.get(p.view.config.description_field_id ?? "")} />
+      ) : (
       <PublicTable
         fields={p.fields.list}
         widths={p.view.config.field_widths}
@@ -155,6 +160,7 @@ function TableBody(p: BodyProps & { view: PublicView; offset: number; onOffset: 
         onSort={p.onSort}
         loading={page.loading}
       />
+      )}
     </>
   );
 }

@@ -94,6 +94,11 @@ export interface KanbanBoardProps {
   emails: ReadonlyMap<string, string>;
   colors: Readonly<Record<string, string>>;
   canEdit: boolean;
+  /**
+   * A board that only shows (a shared view): cards are not buttons and cannot be dragged, selected or given a menu, and a
+   * stack's header has only its fold. `canEdit` is false with it.
+   */
+  readOnly?: boolean;
   /** The view sorts: cards cannot be reordered by hand. */
   hasSorts: boolean;
   collapsed: ReadonlySet<string>;
@@ -575,7 +580,18 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
         <span aria-hidden>{ids.length.toLocaleString()}</span>
         <span className="sr-only">{itemsLabel(ids.length)}</span>
       </span>
-      {isCollapsed && (
+      {p.readOnly ? (
+        <button
+          type="button"
+          aria-expanded={!isCollapsed}
+          aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${stack.label}`}
+          onClick={() => p.onToggleCollapse(stack.key)}
+          className="inline-flex size-[30px] items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-fg pointer-coarse:size-11"
+        >
+          <ChevronDown aria-hidden className={cn("size-4", isCollapsed && "-rotate-90")} />
+        </button>
+      ) : null}
+      {isCollapsed && !p.readOnly && (
         <button
           type="button"
           aria-expanded={false}
@@ -586,7 +602,8 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
           <ChevronDown aria-hidden className="size-4 -rotate-90" />
         </button>
       )}
-      <DropdownMenu>
+      {!p.readOnly && (
+      <DropdownMenu title={stack.label}>
         <DropdownMenuTrigger asChild>
           <button type="button" aria-label={`Options for ${stack.label}`} className="inline-flex size-[30px] items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-fg data-[state=open]:bg-hover pointer-coarse:size-11">
             <MoreHorizontal aria-hidden className="size-4" />
@@ -625,6 +642,7 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+      )}
     </div>
   );
 
@@ -976,6 +994,13 @@ function KanbanCard({
   const hold = useHoldMenu((anchor) => onCardMenu(record.id, anchor));
   const title = cardTitle(p.primary, record, p.format);
   const selected = sel.has(record.id);
+  if (p.readOnly) {
+    return (
+      <article data-record-id={record.id} aria-label={title} className="relative shrink-0 overflow-hidden rounded-lg border border-line bg-surface text-left">
+        <CardBody record={record} primary={p.primary} fields={p.fields} coverField={p.coverField} descriptionField={p.descriptionField} coverFit={p.coverFit} limit={p.cardLimit} format={p.format} emails={p.emails} color={p.colors[record.id]} />
+      </article>
+    );
+  }
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     (listeners?.onKeyDown as ((ev: KeyboardEvent<HTMLDivElement>) => void) | undefined)?.(e);
     // Keys pressed on a link or button inside the card are that element's own (Enter follows the link).

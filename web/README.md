@@ -536,12 +536,15 @@ Date writes honour the field: a date-only field stores `YYYY-MM-DD`, a field wit
   `POST /api/public/forms/{token}/attachments`; after submitting: the success message, "submit another" and the redirect (http/https only).
   Link and user fields are never collected by public forms (server policy); the builder marks them "Not public", and a preview switch shows
   only what visitors get.
-- **Shared views** are read-only. The signed-in views are wired to the signed-in API, so the public page reuses only what is presentational
-  or pure (cell display, card helpers, kanban stacking, the timeline chart, calendar date math) with simple layouts around it: grid and list
-  are a clean read-only table (group header rows, click a header to sort, paging, search), gallery cards with covers, kanban read-only
-  stacks, calendar a month grid (one query per month), timeline the real chart with every editing gesture off. A board, calendar or
-  timeline whose configured field is hidden in the share falls back to the table and says so. Card titles use the first visible field (the
-  public view does not say which field is primary).
+- **Shared views** are read-only, drawn with the signed-in layout components where they can be given data that is not the signed-in API's
+  (APP-7): the board is `KanbanBoard` with `readOnly` (cards are articles, a stack's header has only its fold), gallery and board cards are
+  `CardBody` (its cover and attachments go through the share, `useCardThumb`, and `CellValue` draws a file through `PublicAttachments` inside
+  a share), the list is `ListOutline` with `canEdit` off, and the timeline is the real chart with every editing gesture off. Two layouts keep
+  a read-only drawing of their own because the signed-in ones are bound to the signed-in record API: the grid (a Glide canvas whose cells,
+  paging and editing are wired to `useGridData`) is a DOM table (group header rows, click a header to sort, paging, search), and the
+  calendar (FullCalendar over `useViewRecords`) is a month grid, one query per month. A board, calendar or timeline whose configured field
+  is hidden in the share falls back to the table and says so. Card titles use the first visible field (the public view does not say which
+  field is primary). Folding a stack or a group is the visitor's own and is saved nowhere.
 - **Attachments of a shared view** are authorised by `?share=<token>`; an `<img>` cannot send `X-Share-Password`, so for protected links the
   page fetches the bytes with the header and shows a blob URL (CSP allows `blob:`); open links use plain URLs.
 - **CSV**: export is `GET /api/views/{id}/export.csv?timezone=` saved from a blob under the server's file name; import maps columns by the

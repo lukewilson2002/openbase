@@ -5,13 +5,14 @@
  * shown from a blob URL (kept in memory only); open links use plain URLs.
  */
 import { useEffect, useState } from "react";
+import { attachmentsApi } from "@/api/records";
 import { publicApi } from "@/api/sharing";
 import type { AttachmentRef } from "@/api/types";
 import { FilePreview } from "@/components/record/FilePreview";
 import { hasPreview } from "@/lib/filePreview";
 import { saveBlob } from "@/lib/download";
 import { formatBytes } from "@/lib/format";
-import { useShare } from "./ShareContext";
+import { useShare, useShareOrNull, type ShareCtx } from "./ShareContext";
 
 /** Blob URLs by attachment, shared by every cell of the page (a few thumbnails are reused a lot). */
 const blobUrls = new Map<string, Promise<string>>();
@@ -30,11 +31,26 @@ function loadBlobUrl(token: string, password: string, file: AttachmentRef): Prom
 
 /** The `src` for a thumbnail: a plain URL for open links, a blob URL for password-protected ones. */
 export function useThumbSrc(file: AttachmentRef | undefined): string | null {
-  const { token, password } = useShare();
+  return useShareThumb(useShare(), file);
+}
+
+/**
+ * A card's cover: the share's own thumbnail on a shared page, the signed-in one anywhere else, so the card the signed-in
+ * views draw is the one a share draws too.
+ */
+export function useCardThumb(file: AttachmentRef | undefined): string | null {
+  const share = useShareOrNull();
+  const shared = useShareThumb(share, share ? file : undefined);
+  return share ? shared : file ? attachmentsApi.thumbUrl(file.id) : null;
+}
+
+function useShareThumb(share: ShareCtx | null, file: AttachmentRef | undefined): string | null {
+  const token = share?.token ?? "";
+  const password = share?.password ?? null;
   const [blob, setBlob] = useState<{ key: string; url: string } | null>(null);
   const key = file ? `${token}|${file.id}|${password ?? ""}` : "";
   useEffect(() => {
-    if (!file || password === null) return;
+    if (!file || !share || password === null) return;
     let live = true;
     loadBlobUrl(token, password, file)
       .then((url) => live && setBlob({ key, url }))
@@ -42,8 +58,8 @@ export function useThumbSrc(file: AttachmentRef | undefined): string | null {
     return () => {
       live = false;
     };
-  }, [file, token, password, key]);
-  if (!file) return null;
+  }, [file, share, token, password, key]);
+  if (!file || !share) return null;
   if (password === null) return publicApi.thumbUrl(token, file.id);
   return blob?.key === key ? blob.url : null;
 }

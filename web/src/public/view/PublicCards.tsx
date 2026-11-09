@@ -1,16 +1,12 @@
-/** Read-only cards of a shared gallery and board: cover image, title and the first few filled fields. */
+/** The cards of a shared gallery and board: the signed-in views' own `CardBody` and `KanbanBoard`, with nothing that edits. */
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Field, TableRecord } from "@/api/types";
-import { cardTitle, descriptionText, fieldsToShow, isDescriptionField } from "@/views/common/cardFields";
-import { DescriptionHover } from "@/views/common/description";
+import { CardBody } from "@/views/common/CardBody";
+import { cardTitle as cardTitleOf, isDescriptionField } from "@/views/common/cardFields";
+import { KanbanBoard } from "@/views/kanban/KanbanBoard";
 import { buildStacks, stackKind } from "@/views/kanban/stacks";
-import { cn } from "@/lib/cn";
-import { attachmentRefs, displayShapeOf } from "@/lib/cells/kinds";
-import { coverFile, previewAlignTop } from "@/lib/filePreview";
-import { swatchColor } from "@/lib/cells/palette";
-import { useThumbSrc } from "./PublicAttachments";
-import { PublicCell } from "./PublicCell";
+import { displayShapeOf } from "@/lib/cells/kinds";
 import { useShare } from "./ShareContext";
 
 export interface CardFields {
@@ -22,47 +18,7 @@ export interface CardFields {
   description?: Field;
 }
 
-function Cover({ record, field, fit, height }: { record: TableRecord; field: Field; fit: "cover" | "contain"; height: number }) {
-  const image = coverFile(attachmentRefs(record.values[field.id]));
-  const src = useThumbSrc(image);
-  const [broken, setBroken] = useState(false);
-  if (!image || broken) return null;
-  return (
-    <div className="overflow-hidden rounded-t-[inherit] bg-subtle" style={{ height }}>
-      {src && <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} className={cn("size-full", fit === "cover" ? "object-cover" : "object-contain", previewAlignTop(image) && "object-top")} />}
-    </div>
-  );
-}
-
-export function PublicCard({ record, fields, color, coverFit = "cover", coverHeight = 120, fieldLimit }: { record: TableRecord; fields: CardFields; color?: string; coverFit?: "cover" | "contain"; coverHeight?: number; fieldLimit?: number }) {
-  const { format } = useShare();
-  const shown = fieldsToShow(fields.rest, record, format, fieldLimit);
-  const descValue = fields.description ? record.values[fields.description.id] : undefined;
-  const description = useMemo(() => descriptionText(fields.description, descValue, format), [fields.description, descValue, format]);
-  return (
-    <article data-record-id={record.id} aria-label={cardTitle(fields.title, record, format)} className="relative overflow-hidden rounded-lg border border-line bg-surface text-left shadow-sm">
-      {color && <span aria-hidden data-row-color={color} className="absolute inset-y-0 left-0 z-[1] w-1" style={{ background: swatchColor(color) }} />}
-      {fields.cover && <Cover record={record} field={fields.cover} fit={coverFit} height={coverHeight} />}
-      <div className="flex flex-col gap-1.5 p-2.5">
-        <h3 className="line-clamp-2 break-words text-label font-semibold">{cardTitle(fields.title, record, format)}</h3>
-        {description && (
-          <DescriptionHover field={fields.description} record={record} title={cardTitle(fields.title, record, format)} format={format}>
-            <p data-card-description className="-mt-0.5 line-clamp-3 break-words text-label leading-[1.45] text-muted">
-              {description}
-            </p>
-          </DescriptionHover>
-        )}
-        {shown.map((f) => (
-          <div key={f.id} className="min-w-0">
-            <p className="truncate text-meta text-faint">{f.name}</p>
-            <PublicCell field={f} value={record.values[f.id] ?? null} compact className="line-clamp-3 text-meta" markdown={false} />
-          </div>
-        ))}
-      </div>
-    </article>
-  );
-}
-
+const NO_EMAILS: ReadonlyMap<string, string> = new Map();
 /**
  * Which fields a card shows: everything visible except the title, the cover, the description and
  * (on boards) the stack field. `list` holds only the shared fields, so a description the view hides
@@ -76,16 +32,21 @@ export function cardFieldsFor(list: readonly Field[], title: Field | undefined, 
 }
 
 const GALLERY_STEP = 60;
+/** The signed-in gallery's card limit and grid (views/gallery/GalleryView). */
+const GALLERY_FIELD_LIMIT = 5;
 
 export function PublicGallery({ records, fields, colors, fit }: { records: readonly TableRecord[]; fields: CardFields; colors: Readonly<Record<string, string>>; fit: "cover" | "contain" }) {
+  const { format } = useShare();
   const [shown, setShown] = useState(GALLERY_STEP);
   const visible = records.slice(0, shown);
   return (
     <div>
-      <ul aria-label="Records" className="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-3">
+      <ul aria-label="Records" className="grid list-none items-start gap-3.5 p-0" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))" }}>
         {visible.map((r) => (
           <li key={r.id}>
-            <PublicCard record={r} fields={fields} color={colors[r.id]} coverFit={fit} coverHeight={160} />
+            <article data-record-id={r.id} aria-label={cardTitleOf(fields.title, r, format)} className="relative block w-full overflow-hidden rounded-lg border border-line bg-surface text-left">
+              <CardBody record={r} primary={fields.title} fields={fields.rest} coverField={fields.cover} descriptionField={fields.description} coverFit={fit} coverHeight={132} layout="stacked" format={format} emails={NO_EMAILS} color={colors[r.id]} limit={GALLERY_FIELD_LIMIT} />
+            </article>
           </li>
         ))}
       </ul>
@@ -99,7 +60,9 @@ export function PublicGallery({ records, fields, colors, fit }: { records: reado
   );
 }
 
-/** A board of read-only stacks. The stack field must be a single select, single user or checkbox. */
+const noop = () => {};
+
+/** A board of read-only stacks: the signed-in board, told it only shows. The stack field must be a single select, single user or checkbox. */
 export function PublicKanban({ stackField, hideEmpty, stackOrder = [], hiddenStacks = [], cardFieldLimit, coverFit = false, records, fields, colors }: {
   stackField: Field;
   hideEmpty: boolean;
@@ -112,33 +75,38 @@ export function PublicKanban({ stackField, hideEmpty, stackOrder = [], hiddenSta
   fields: CardFields;
   colors: Readonly<Record<string, string>>;
 }) {
+  const { format } = useShare();
   const stacks = useMemo(
     () => (stackKind(stackField) ? buildStacks(stackField, records, { stackOrder, hideEmpty, hiddenStacks, people: [] }) : []),
     [stackField, records, hideEmpty, stackOrder, hiddenStacks],
   );
+  // Folding a stack is the visitor's own and nothing is saved.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   return (
-    <div role="list" aria-label="Stacks" className="flex items-start gap-3 overflow-x-auto pb-3">
-      {stacks.map((stack) => (
-        <section key={stack.key} role="listitem" aria-label={`Stack: ${stack.label}`} className="flex w-[min(18rem,85vw)] shrink-0 flex-col rounded-lg border border-line bg-subtle">
-          <div className="flex items-center gap-1.5 px-2.5 py-2">
-            {stack.color && <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: swatchColor(stack.color) }} />}
-            <h3 className="min-w-0 flex-1 truncate text-label font-semibold">{stack.label}</h3>
-            <span className="text-meta tabular-nums text-muted" aria-label={`${stack.records.length} cards`}>
-              {stack.records.length}
-            </span>
-          </div>
-          <ul className="flex flex-col gap-2 px-2 pb-2" aria-label={`Cards in ${stack.label}`}>
-            {stack.records.slice(0, 100).map((r) => (
-              <li key={r.id}>
-                <PublicCard record={r} fields={fields} color={colors[r.id]} coverFit={coverFit ? "contain" : "cover"} fieldLimit={cardFieldLimit} />
-              </li>
-            ))}
-            {stack.records.length === 0 && <li className="px-2 py-3 text-center text-meta text-faint">No cards</li>}
-            {stack.records.length > 100 && <li className="px-2 py-1 text-center text-meta text-muted">and {stack.records.length - 100} more</li>}
-          </ul>
-        </section>
-      ))}
-    </div>
+    <KanbanBoard
+      readOnly
+      stacks={stacks}
+      primary={fields.title}
+      fields={fields.rest}
+      coverField={fields.cover}
+      descriptionField={fields.description}
+      cardLimit={cardFieldLimit}
+      coverFit={coverFit ? "contain" : "cover"}
+      format={format}
+      emails={NO_EMAILS}
+      colors={colors}
+      canEdit={false}
+      hasSorts={false}
+      collapsed={collapsed}
+      onToggleCollapse={(key) => setCollapsed((cur) => (cur.has(key) ? new Set([...cur].filter((k) => k !== key)) : new Set([...cur, key])))}
+      onMoveStack={noop}
+      onDrop={noop}
+      onAddCard={noop}
+      newLabel=""
+      onOpen={noop}
+      onDeleteRecords={noop}
+      onDuplicateRecords={noop}
+      onMoveRecords={noop}
+    />
   );
 }
-

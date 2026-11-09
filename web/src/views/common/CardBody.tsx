@@ -4,9 +4,9 @@
  * has the width for a label above each value.
  */
 import { useMemo, useState } from "react";
-import { attachmentsApi } from "@/api/records";
 import type { Field, TableRecord } from "@/api/types";
 import { CellValue } from "@/components/record/CellValue";
+import { useCardThumb } from "@/public/view/PublicAttachments";
 import { cn } from "@/lib/cn";
 import type { FormatCtx } from "@/lib/cells/format";
 import { swatchColor } from "@/lib/cells/palette";
@@ -47,7 +47,8 @@ export function CardBody({ record, primary, fields, coverField, descriptionField
   const coverFile = coverOf(coverField, record);
   // A file without a preview (the server answers 404) shows no cover rather than a broken image.
   const [failedCover, setFailedCover] = useState<string | null>(null);
-  const cover = coverFile && failedCover !== coverFile.id ? attachmentsApi.thumbUrl(coverFile.id) : null;
+  const thumb = useCardThumb(coverFile && failedCover !== coverFile.id ? coverFile : undefined);
+  const cover = coverFile && failedCover !== coverFile.id ? thumb : null;
   const shown = fieldsToShow(fields, record, format, limit);
   const title = cardTitle(primary, record, format);
   const descValue = descriptionField ? record.values[descriptionField.id] : undefined;

@@ -10,6 +10,8 @@ import { attachmentRefs, displayShapeOf } from "@/lib/cells/kinds";
 import { chipItems, displayText, isFormulaError, type FormatCtx } from "@/lib/cells/format";
 import { hrefFor, isSafeLink } from "@/lib/cells/text";
 import { ratingTint } from "@/lib/cells/palette";
+import { PublicAttachments } from "@/public/view/PublicAttachments";
+import { useShareOrNull } from "@/public/view/ShareContext";
 import { Markdown } from "./Markdown";
 import { AttachmentThumb } from "./editors/AttachmentEditor";
 import { Pill } from "./editors/ChoiceEditor";
@@ -35,6 +37,8 @@ const CHIP_ROW_PX = 20;
 export function CellValue({ field, value, format, emails, className, markdown = true, linkFiles = false }: CellValueProps) {
   const shape = displayShapeOf(field);
   const linkCards = useLinkCards();
+  // On a shared page files are served through the share, so the cell that draws them there is the share's own.
+  const share = useShareOrNull();
   const text = displayText(field, value, format);
   const empty = <span className="text-faint">—</span>;
   const wrap = (children: React.ReactNode) => <div className={cn("min-w-0 text-[0.8125rem]", className)}>{children}</div>;
@@ -94,6 +98,7 @@ export function CellValue({ field, value, format, emails, className, markdown = 
     }
     case "attachment": {
       const files = attachmentRefs(value);
+      if (share) return wrap(<PublicAttachments files={files} compact />);
       return wrap(
         files.length ? (
           <ul className="flex flex-wrap gap-1.5">

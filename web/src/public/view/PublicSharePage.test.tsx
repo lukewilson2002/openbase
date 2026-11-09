@@ -128,7 +128,7 @@ describe("a shared grid", () => {
       { depth: 0, field_id: "f_status", key: "s1", label: "Todo", value: "s1", start: 0, count: 1 },
       { depth: 0, field_id: "f_status", key: "s2", label: "Done", value: "s2", start: 1, count: 2 },
     ];
-    open(view("list"), { "POST /api/public/shares/tok_s/query": queryHandler(RECORDS, [], { groups }) });
+    open(view("grid"), { "POST /api/public/shares/tok_s/query": queryHandler(RECORDS, [], { groups }) });
     const table = await screen.findByRole("table", { name: "Records" });
     await within(table).findByText("Task 1");
     expect(within(table).getByText("2 records")).toBeInTheDocument();
@@ -237,6 +237,55 @@ describe("shared views of other types", () => {
     expect(within(screen.getByRole("listitem", { name: "Stack: Uncategorized" })).getByRole("article", { name: "Task 3" })).toBeInTheDocument();
     // Read-only: no drag handles, no add buttons.
     expect(screen.queryByRole("button", { name: /Add card/ })).not.toBeInTheDocument();
+  });
+
+  it("draws the board with the signed-in board's own component, told it only shows: no card is a button, no stack has a menu, and a stack can be folded", async () => {
+    const user = userEvent.setup();
+    open(view("kanban", { kanban_stack_field_id: "f_status" }));
+    const todo = await screen.findByRole("listitem", { name: "Stack: Todo" });
+    // The signed-in board's stack and card (`data-stack-key`, `data-record-id`), not a second drawing of them.
+    expect(todo).toHaveAttribute("data-stack-key");
+    expect(within(todo).getByRole("article", { name: "Task 1" })).toHaveAttribute("data-record-id");
+    expect(screen.queryByRole("button", { name: "Task 1" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Options for/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Collapse Todo" }));
+    expect(within(todo).queryByRole("article", { name: "Task 1" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Expand Todo" }));
+    expect(within(todo).getByRole("article", { name: "Task 1" })).toBeInTheDocument();
+  });
+
+  it("draws a gallery's cards with the signed-in card body", async () => {
+    open(view("gallery", { gallery_cover_field_id: "f_cover" }));
+    const list = await screen.findByRole("list", { name: "Records" });
+    const card = await within(list).findByRole("article", { name: "Task 1" });
+    expect(card.querySelector("h3")).toHaveClass("line-clamp-2", "font-semibold");
+    expect(card.querySelector("img")).toHaveAttribute("src", expect.stringContaining("?share=tok_s"));
+  });
+
+  it("draws a list with the signed-in List's outline, its rows showing the title and the other values", async () => {
+    open(view("list"));
+    const tree = await screen.findByRole("tree");
+    const row = await within(tree).findByRole("treeitem", { name: /Task 1/ });
+    expect(row).toHaveAttribute("data-nav");
+    expect(row).toHaveTextContent("Todo");
+    expect(row).toHaveTextContent("Ada Lovelace");
+    // The table is the grid's, not the list's.
+    expect(screen.queryByRole("table", { name: "Records" })).not.toBeInTheDocument();
+    expect(screen.getByText(/of 3 records/)).toBeInTheDocument();
+  });
+
+  it("folds a list's groups, which are the visitor's own and saved nowhere", async () => {
+    const user = userEvent.setup();
+    const groups: GroupHeader[] = [
+      { depth: 0, field_id: "f_status", key: "s1", label: "Todo", value: "s1", start: 0, count: 1 },
+      { depth: 0, field_id: "f_status", key: "s2", label: "Done", value: "s2", start: 1, count: 2 },
+    ];
+    const { api } = open(view("list"), { "POST /api/public/shares/tok_s/query": queryHandler(RECORDS, [], { groups }) });
+    const tree = await screen.findByRole("tree");
+    await within(tree).findByRole("treeitem", { name: /Task 1/ });
+    await user.click(within(tree).getAllByRole("treeitem", { name: /^Todo/ })[0]!);
+    expect(within(tree).queryByRole("treeitem", { name: /Task 1/ })).not.toBeInTheDocument();
+    expect(api.calls.filter((c) => c.method !== "GET" && !c.path.endsWith("/query"))).toEqual([]);
   });
 
   it("follows the board's stack order and leaves its hidden stacks off", async () => {
