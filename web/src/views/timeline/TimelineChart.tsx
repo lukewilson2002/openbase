@@ -772,6 +772,7 @@ export function TimelineChart(props: TimelineChartProps) {
       tabIndex={0}
       className={cn("relative overflow-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring", props.fitContent ? "min-h-0 shrink" : "h-full")}
       data-testid="timeline-scroller"
+      data-scroll-restore="timeline"
     >
       <p id={helpId} className="sr-only">
         Keys: T goes to today, plus and minus zoom, [ and ] page earlier and later. On a bar: Enter or Space opens it, the arrow keys move it, Shift with Left or Right moves its end, Alt and Shift with Left or Right moves its start, Up and Down change swimlane, U takes it off the timeline, Delete deletes it

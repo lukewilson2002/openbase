@@ -13,6 +13,7 @@ import { rememberWorkspace } from "@/pages/workspace/lastWorkspace";
 import { AppShell } from "@/shell/AppShell";
 import { HomeShell } from "@/shell/HomeShell";
 import { NavDialogsProvider } from "@/shell/NavDialogs";
+import { RestoredScroll } from "@/record/scrollMemory";
 import { AddRecordProvider } from "@/views/common/addRecord";
 import { ViewHost } from "@/views/ViewHost";
 import { BaseDialogContext, BaseDialogs, type BaseDialog } from "./BaseDialogs";
@@ -109,9 +110,9 @@ export function BaseShell({ section }: { section?: "automations" }) {
     );
   } else {
     page = (
-      <div className="h-full overflow-auto">
+      <RestoredScroll className="h-full overflow-auto">
         <ViewHost schema={schema} table={table} view={view} />
-      </div>
+      </RestoredScroll>
     );
   }
 

@@ -89,9 +89,16 @@ function MoreButton({ actions }: { actions: PhoneAction[] }) {
 }
 
 /** The way back, naming the screen it leads to ("Clients", "Collections"): a link in the header's left corner. */
-export function PhoneBackLink({ to, label }: { to: string; label: string }) {
+export function PhoneBackLink({ to, label, onBack }: { to: string; label: string; /** Goes back in history instead of adding a step: a plain click calls this, the link still opens in a new tab. */ onBack?: () => void }) {
   return (
-    <Link to={to} className="-ml-1 flex min-h-control-touch max-w-[45%] shrink-0 items-center gap-0.5 rounded-md pl-1 pr-2 text-ui text-primary-text no-underline hover:bg-hover">
+    <Link
+      to={to}
+      onClick={(e) => {
+        if (!onBack || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        onBack();
+      }}
+      className="-ml-1 flex min-h-control-touch max-w-[45%] shrink-0 items-center gap-0.5 rounded-md pl-1 pr-2 text-ui text-primary-text no-underline hover:bg-hover">
       <Icon icon={ChevronLeft} />
       <span className="truncate">
         <span className="sr-only">Back to</span> {label}

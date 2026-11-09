@@ -223,7 +223,7 @@ function ListInner(props: ViewProps) {
         </>
       }
     >
-      <div className="min-h-0 overflow-y-auto max-md:flex-1">{body}</div>
+      <div data-scroll-restore="list" className="min-h-0 overflow-y-auto max-md:flex-1">{body}</div>
       {sel.count > 0 && <SelectionBar count={sel.count} onDuplicate={() => duplicateIds(sel.ids)} onDelete={() => actions.requestDelete(sel.ids, sel.clear)} onClear={sel.clear} />}
       <RecordMenu
         anchor={menu?.anchor ?? null}

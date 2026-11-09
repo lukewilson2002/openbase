@@ -415,7 +415,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
       accessibility={{ announcements, screenReaderInstructions: { draggable: SCREEN_READER_INSTRUCTIONS } }}
     >
       <div className="relative h-full">
-        <div ref={listRef} className="flex h-full items-start gap-3 overflow-x-auto p-3 md:p-4" role="list" aria-label="Stacks" onKeyDown={onBoardKeyDown} onFocus={(e) => { lastStack.current = e.target.closest<HTMLElement>("[data-stack-key]")?.dataset.stackKey ?? lastStack.current; }}>
+        <div ref={listRef} data-scroll-restore="board" className="flex h-full items-start gap-3 overflow-x-auto p-3 md:p-4" role="list" aria-label="Stacks" onKeyDown={onBoardKeyDown} onFocus={(e) => { lastStack.current = e.target.closest<HTMLElement>("[data-stack-key]")?.dataset.stackKey ?? lastStack.current; }}>
           <SortableContext items={shownStacks.map((s) => `${STACK_PREFIX}${s.key}`)} strategy={horizontalListSortingStrategy}>
             {shownStacks.map((stack, i) => (
               <StackColumn
@@ -659,7 +659,7 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
       {!isCollapsed && (
         <>
           <SortableContext items={visible} strategy={verticalListSortingStrategy}>
-            <div role="group" tabIndex={0} className="-mx-1 flex min-h-10 flex-col gap-2 overflow-y-auto px-1 py-px" aria-label={`Cards in ${stack.label}`}>
+            <div role="group" tabIndex={0} data-scroll-restore={`stack:${stack.key}`} className="-mx-1 flex min-h-10 flex-col gap-2 overflow-y-auto px-1 py-px" aria-label={`Cards in ${stack.label}`}>
               {visible.map((id) => {
                 const rec = recordsById.get(id);
                 return rec ? <KanbanCard key={id} record={rec} selection={selection} tabStop={id === stopId} onFocusCard={onFocusCard} onCardMenu={onCardMenu} {...p} /> : null;

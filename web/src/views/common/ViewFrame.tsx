@@ -82,7 +82,7 @@ export function ViewFrame({ setup, recordIds, features, layoutSettings, property
     );
   } else if (layout === "bare") {
     body = (
-      <div className="relative min-h-0 flex-1 overflow-auto">
+      <div data-scroll-restore="frame" className="relative min-h-0 flex-1 overflow-auto">
         {children}
         {footer && <div className="flex flex-wrap items-center gap-3 px-4 pb-4 text-label text-muted md:px-5 max-md:pb-[max(1rem,env(safe-area-inset-bottom))]">{footer}</div>}
       </div>

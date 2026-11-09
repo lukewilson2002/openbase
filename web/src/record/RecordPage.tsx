@@ -30,6 +30,7 @@ import { displayText, linkedColorIn, type FormatCtx } from "@/lib/cells/format";
 import { personColors } from "@/lib/colors";
 import { recordPath } from "@/lib/recordPath";
 import { atLeast } from "@/lib/roles";
+import { useUndoScope } from "@/lib/undo/registry";
 import { copyToClipboard } from "@/lib/format";
 import { SheetModeContext } from "@/shell/menuItems";
 import { PhoneBackLink, PhoneHeader, type PhoneAction } from "@/shell/PhoneHeader";
@@ -57,8 +58,10 @@ export interface RecordPageProps {
   onNavigate: (recordId: string) => void;
   /** Leaves for the collection the page was opened from (Escape, and after a delete). */
   onClose: () => void;
-  /** That collection screen's address: the breadcrumb's and the phone's back link. */
+  /** This record's own collection: the breadcrumb's link. */
   collectionHref: string;
+  /** The phone's back link: the collection screen the page was opened from, named for it (a linked record's page is a step on from where it began). Defaults to this record's collection. */
+  back?: { href: string; label: string };
   /** Opens a linked record's page. */
   onOpenLinked: (tableId: string, recordId: string) => void;
   emails: ReadonlyMap<string, string>;
@@ -84,8 +87,10 @@ function escapeIsTaken(e: KeyboardEvent): boolean {
   return !!document.querySelector("[role=dialog], [role=alertdialog], [role=menu], [role=listbox], [data-radix-popper-content-wrapper]");
 }
 
-export function RecordPage({ schema, table, role, recordId, layoutView = null, prevId = null, nextId = null, onNavigate, onClose, collectionHref, onOpenLinked, emails, timeZone, currentUserId, collaborators }: RecordPageProps) {
+export function RecordPage({ schema, table, role, recordId, layoutView = null, prevId = null, nextId = null, onNavigate, onClose, collectionHref, back, onOpenLinked, emails, timeZone, currentUserId, collaborators }: RecordPageProps) {
   const desktop = useMediaQuery(DESKTOP_QUERY);
+  // The collection's undo history waits while a page is open from it.
+  useUndoScope(schema.id);
   const qc = useQueryClient();
   const toast = useToast();
   const panelId = useId();
@@ -320,7 +325,7 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
           actions={actions}
         />
       ) : (
-        <PhoneHeader leading={<PhoneBackLink to={collectionHref} label={table.name} />} actions={phoneActions} search={false} />
+        <PhoneHeader leading={<PhoneBackLink to={back?.href ?? collectionHref} label={back?.label ?? table.name} onBack={onClose} />} actions={phoneActions} search={false} />
       )}
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-y-auto overscroll-contain">

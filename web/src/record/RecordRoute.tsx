@@ -57,7 +57,11 @@ export function RecordRoute() {
   const order = useRecordOrder({ table, view, recordId, timeZone, handed: nav.order });
 
   const collectionPath = `/base/${baseId}/${tableId}${view ? `/${view.id}` : ""}`;
-  const collectionHref = nav.origin(collectionPath);
+  // The crumb leads to this record's own collection; Escape and the phone's back link to where the trail began,
+  // which is another collection when this page was reached through a linked record.
+  const originHref = nav.origin(collectionPath);
+  const originTable = schema?.tables.find((t) => t.id === /^\/base\/[^/]+\/([^/?#]+)/.exec(originHref)?.[1]);
+  const back = useMemo(() => ({ href: originHref, label: (originTable ?? table)?.name ?? "" }), [originHref, originTable, table]);
   const onNavigate = useCallback((id: string) => nav.open({ baseId, tableId, recordId: id, viewId: view?.id }, { replace: true, fallbackFrom: collectionPath }), [nav, baseId, tableId, view?.id, collectionPath]);
   const onClose = useCallback(() => nav.close(collectionPath), [nav, collectionPath]);
   const onOpenLinked = useCallback((linkedTableId: string, linkedId: string) => nav.open({ baseId, tableId: linkedTableId, recordId: linkedId }, { fallbackFrom: collectionPath }), [nav, baseId, collectionPath]);
@@ -96,7 +100,8 @@ export function RecordRoute() {
           nextId={order.nextId}
           onNavigate={onNavigate}
           onClose={onClose}
-          collectionHref={collectionHref}
+          collectionHref={collectionPath}
+          back={back}
           onOpenLinked={onOpenLinked}
           emails={emails}
           timeZone={timeZone}

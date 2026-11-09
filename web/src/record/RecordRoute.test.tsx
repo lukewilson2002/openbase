@@ -1,7 +1,7 @@
 /** The record page's route (REC-1, REC-9): what the address says, the way in and out, and the old links that lead here. */
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, useLocation } from "react-router";
+import { MemoryRouter, useLocation, useNavigationType } from "react-router";
 import { afterEach, describe, expect, it } from "vitest";
 import { AppRoutes } from "@/App";
 import { setUnauthorizedHandler } from "@/api/client";
@@ -19,7 +19,11 @@ const rec = (id: string, title: string, table = "tbl1") => ({ ...makeRecord({ [t
 
 function Where() {
   const l = useLocation();
-  return <output data-testid="where">{l.pathname + l.search}</output>;
+  return (
+    <output data-testid="where" data-type={useNavigationType()}>
+      {l.pathname + l.search}
+    </output>
+  );
 }
 
 function open(route: string | { pathname: string; state: unknown }[], extra: Record<string, unknown> = {}, phone = false) {
@@ -37,7 +41,11 @@ function open(route: string | { pathname: string; state: unknown }[], extra: Rec
     "GET /api/records/rec1/comments": [],
     "GET /api/records/rec2/comments": [],
     "GET /api/records/recP/comments": [],
-    "POST /api/views/viw1/query": { total: 2, offset: 0, records: [rec("rec1", "Launch"), rec("rec2", "Ship it")], groups: [], colors: {} },
+    "POST /api/views/viw1/query": (call: { body: { neighbours_of?: string } }) => {
+      const order = ["rec1", "rec2"];
+      const at = order.indexOf(call.body.neighbours_of ?? "");
+      return { total: 2, offset: 0, records: [], groups: [], colors: {}, neighbours: { previous: order[at - 1] ?? null, next: at >= 0 ? (order[at + 1] ?? null) : null } };
+    },
     ...extra,
   } as never);
   const client = createQueryClient();
@@ -99,6 +107,33 @@ describe("the record route", () => {
     await screen.findByRole("heading", { level: 1, name: "Launch" });
     expect(screen.queryByRole("navigation", { name: "Main menu" })).not.toBeInTheDocument();
     expect(within(screen.getByRole("banner")).getByRole("link", { name: "Back to Tasks" })).toBeInTheDocument();
+  });
+});
+
+describe("the way back from a linked record's page", () => {
+  const linked = [
+    { pathname: "/base/app1/tbl1/viw1", state: null },
+    { pathname: "/base/app1/tbl1/viw1/r/rec1", state: { obRecord: { from: "/base/app1/tbl1/viw1", steps: 1 } } },
+    { pathname: "/base/app1/tbl2/r/recP", state: { obRecord: { from: "/base/app1/tbl1/viw1", steps: 2 } } },
+  ];
+
+  it("has a crumb that names this record's collection and goes to it, not to where the trail began", async () => {
+    open(linked);
+    await screen.findByRole("heading", { level: 1, name: "Grace" });
+    const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(within(crumbs).getByRole("link", { name: "People" })).toHaveAttribute("href", "/base/app1/tbl2/viw1");
+  });
+
+  it("has a phone back link that names the collection it leads to, and leads back to it", async () => {
+    const user = userEvent.setup();
+    open(linked, {}, true);
+    await screen.findByRole("heading", { level: 1, name: "Grace" });
+    const back = within(screen.getByRole("banner")).getByRole("link", { name: "Back to Tasks" });
+    expect(back).toHaveAttribute("href", "/base/app1/tbl1/viw1");
+    await user.click(back);
+    await waitFor(() => expect(where()).toHaveTextContent(/^\/base\/app1\/tbl1\/viw1$/));
+    // A step back in history, not a new entry on top of the pages (so the system's back goes on from the list).
+    expect(where()).toHaveAttribute("data-type", "POP");
   });
 });
 
