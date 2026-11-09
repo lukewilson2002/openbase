@@ -231,13 +231,13 @@ function MemberRow({
           </p>
           <p className="truncate text-label text-muted">{m.email}</p>
         </div>
-        <div className="flex items-center gap-3.5 max-sm:w-full">
+        <div className="flex items-center gap-3.5 max-sm:w-full max-sm:flex-wrap max-sm:justify-between">
           {canManage && !owner ? (
             <AccessButton open={open} controls={editorId} label={`Folder access for ${m.name}: ${summary}`} onClick={onToggle}>
               {summary}
             </AccessButton>
           ) : (
-            <span className={cn("text-ui text-muted max-sm:flex-1", ACCESS_COL)}>{summary}</span>
+            <span className={cn("text-ui text-muted max-sm:basis-full", ACCESS_COL)}>{summary}</span>
           )}
           {canManage && !owner ? (
             <div className={ROLE_COL}>
@@ -254,19 +254,21 @@ function MemberRow({
             <span className={cn("text-ui font-semibold", ROLE_COL)}>{roleLabel(m.role)}</span>
           )}
           {canManage || isMe ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <IconButton label={`Actions for ${m.name}`} noTooltip>
-                  <Ellipsis aria-hidden className="size-[18px]" />
-                </IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem danger disabled={cannotLeave} onSelect={onRemove}>
-                  <UserMinus aria-hidden className="size-4" /> {isMe ? "Leave workspace" : "Remove from workspace"}
-                </DropdownMenuItem>
-                {cannotLeave && <DropdownMenuLabel className="max-w-56 font-normal">You are the only owner. Make someone else an owner first.</DropdownMenuLabel>}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className={cn("flex justify-center", ACTIONS_COL)}>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <IconButton label={`Actions for ${m.name}`} noTooltip>
+                    <Ellipsis aria-hidden className="size-[18px]" />
+                  </IconButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem danger disabled={cannotLeave} onSelect={onRemove}>
+                    <UserMinus aria-hidden className="size-4" /> {isMe ? "Leave workspace" : "Remove from workspace"}
+                  </DropdownMenuItem>
+                  {cannotLeave && <DropdownMenuLabel className="max-w-56 font-normal">You are the only owner. Make someone else an owner first.</DropdownMenuLabel>}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           ) : (
             <span aria-hidden className={ACTIONS_COL} />
           )}
@@ -292,7 +294,7 @@ function AccessButton({ open, controls, label, onClick, children }: { open: bool
       aria-label={label}
       onClick={onClick}
       className={cn(
-        "inline-flex h-control-md min-w-0 items-center justify-between gap-2 rounded-md border border-line-strong bg-surface px-2.5 text-ui text-fg transition-colors hover:bg-hover max-md:h-control-touch max-sm:flex-1",
+        "inline-flex h-control-md min-w-0 items-center justify-between gap-2 rounded-md border border-line-strong bg-surface px-2.5 text-ui text-fg transition-colors hover:bg-hover max-md:h-control-touch max-sm:basis-full",
         ACCESS_COL,
       )}
     >
@@ -451,10 +453,10 @@ function InviteRow({
             </button>
           </p>
         </div>
-        <div className="flex items-center gap-3.5 max-sm:w-full">
+        <div className="flex items-center gap-3.5 max-sm:w-full max-sm:flex-wrap max-sm:justify-between">
           {/* An owner invite always gives every base: there is nothing to pick. */}
           {owner ? (
-            <span className={cn("text-ui text-muted max-sm:flex-1", ACCESS_COL)}>{summary}</span>
+            <span className={cn("text-ui text-muted max-sm:basis-full", ACCESS_COL)}>{summary}</span>
           ) : (
             <AccessButton open={open} controls={editorId} label={`Folder access for ${name}: ${summary}`} onClick={onToggle}>
               {summary}

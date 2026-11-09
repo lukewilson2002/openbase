@@ -77,10 +77,10 @@ export function TestPanel({ automationId, trigger, dirty }: TestPanelProps) {
   return (
     <div className="flex flex-col gap-3">
       <p className="text-label text-muted">
-        A test runs the saved automation once against {shape === "record" ? "a record of the trigger table" : shape === "webhook" ? "a sample webhook body" : "the current time"}. A dry run shows what each action would do and changes nothing.
+        A test runs the saved automation once against {shape === "record" ? "a record of the trigger's collection" : shape === "webhook" ? "a sample webhook body" : "the current time"}. A dry run shows what each action would do and changes nothing.
       </p>
       {shape === "record" && (
-        <Field label="Record id (optional)" hint="Leave empty to use the first record of the trigger table." className="max-w-sm">
+        <Field label="Record id (optional)" hint="Leave empty to use the first record of the trigger's collection." className="max-w-sm">
           {(ctl) => <Input {...ctl} value={recordId} onChange={(e) => setRecordId(e.target.value)} placeholder="rec…" className="font-mono text-meta" />}
         </Field>
       )}

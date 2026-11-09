@@ -33,7 +33,7 @@ function TableSelect({ label, value, onChange }: { label: string; value: string;
           {...ctl}
           value={value}
           onValueChange={onChange}
-          options={[...(known ? [] : [{ value, label: "(deleted table)" }]), ...schema.tables.map((t) => ({ value: t.id, label: t.name, hue: t.color, markName: t.name }))]}
+          options={[...(known ? [] : [{ value, label: "(deleted collection)" }]), ...schema.tables.map((t) => ({ value: t.id, label: t.name, hue: t.color, markName: t.name }))]}
         />
       )}
     </Field>
@@ -45,7 +45,7 @@ export function CreateRecordEditor({ action, onChange, ctx, error }: ActionEdito
   const table = schema.tables.find((t) => t.id === action.table_id);
   return (
     <div className="flex flex-col gap-4">
-      <TableSelect label="Table" value={action.table_id} onChange={(id) => onChange({ ...action, table_id: id, values: {} })} />
+      <TableSelect label="Collection" value={action.table_id} onChange={(id) => onChange({ ...action, table_id: id, values: {} })} />
       <div>
         <h4 className="mb-2 text-label font-medium">Property values</h4>
         <ValuesEditor table={table} values={action.values} onChange={(values) => onChange({ ...action, values })} ctx={ctx} error={error} />
@@ -59,7 +59,7 @@ export function UpdateRecordEditor({ action, onChange, ctx, error }: ActionEdito
   const table = schema.tables.find((t) => t.id === action.table_id);
   return (
     <div className="flex flex-col gap-4">
-      <TableSelect label="Table" value={action.table_id} onChange={(id) => onChange({ ...action, table_id: id, values: {} })} />
+      <TableSelect label="Collection" value={action.table_id} onChange={(id) => onChange({ ...action, table_id: id, values: {} })} />
       <TemplateField
         label="Record id"
         value={action.record_id}

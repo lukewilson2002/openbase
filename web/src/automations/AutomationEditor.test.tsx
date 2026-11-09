@@ -117,7 +117,7 @@ describe("saving and the draft", () => {
 describe("triggers round-trip into the update payload", () => {
   it("record_created: another table", async () => {
     const { api } = await setup(makeAutomation());
-    await chooseOption(screen.getByLabelText("Table"), "People");
+    await chooseOption(screen.getByLabelText("Collection"), "People");
     expect(await save(api)).toEqual({ name: "Flow", trigger: { type: "record_created", table_id: "tbl2" }, actions: [] });
   });
 
@@ -130,7 +130,7 @@ describe("triggers round-trip into the update payload", () => {
     expect((await save(api)).trigger).toEqual({ type: "record_updated", table_id: "tbl1", field_ids: ["fld2", "fld3"] });
     await userEvent.click(screen.getByRole("checkbox", { name: "Qty" }));
     expect((await save(api)).trigger).toEqual({ type: "record_updated", table_id: "tbl1", field_ids: ["fld3"] });
-    await chooseOption(screen.getByLabelText("Table"), "People");
+    await chooseOption(screen.getByLabelText("Collection"), "People");
     expect((await save(api)).trigger).toEqual({ type: "record_updated", table_id: "tbl2", field_ids: [] });
   });
 
@@ -222,7 +222,7 @@ describe("actions round-trip into the update payload", () => {
     const { api } = await setup(makeAutomation());
     await addAction("Create record");
     const c = card(1);
-    await chooseOption(within(c).getByLabelText("Table"), "People");
+    await chooseOption(within(c).getByLabelText("Collection"), "People");
     await userEvent.selectOptions(within(c).getByLabelText("Add a property"), "fld5");
     await paste(within(c).getByRole("textbox", { name: "Name" }), "{{trigger.record.fields.Name}}");
     await userEvent.selectOptions(within(c).getByLabelText("Add a property"), "fld6");
@@ -238,7 +238,7 @@ describe("actions round-trip into the update payload", () => {
     const { api } = await setup(makeAutomation({ trigger: { type: "webhook" } }));
     await addAction("Create record");
     const c = card(1);
-    await chooseOption(within(c).getByLabelText("Table"), "People");
+    await chooseOption(within(c).getByLabelText("Collection"), "People");
     await userEvent.selectOptions(within(c).getByLabelText("Add a property"), "fld6");
     await userEvent.click(within(c).getByRole("button", { name: "Template" }));
     await paste(within(c).getByRole("textbox", { name: "Score" }), "{{trigger.body.score}}");
@@ -265,7 +265,7 @@ describe("actions round-trip into the update payload", () => {
     const c = card(1);
     await userEvent.click(within(c).getByRole("button", { name: "Remove Score" }));
     expect((await save(api)).actions).toEqual([{ type: "create_record", table_id: "tbl2", values: { fld5: "x" } }]);
-    await chooseOption(within(c).getByLabelText("Table"), "Tasks");
+    await chooseOption(within(c).getByLabelText("Collection"), "Tasks");
     expect((await save(api)).actions).toEqual([{ type: "create_record", table_id: "tbl1", values: {} }]);
   });
 
@@ -287,7 +287,7 @@ describe("actions round-trip into the update payload", () => {
     await userEvent.clear(id);
     await userEvent.click(within(c).getByRole("button", { name: "Insert data into Record id" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: /record_id.*steps\.1\.record_id/ }));
-    await chooseOption(within(c).getByLabelText("Table"), "People");
+    await chooseOption(within(c).getByLabelText("Collection"), "People");
     await userEvent.selectOptions(within(c).getByLabelText("Add a property"), "fld5");
     await paste(within(c).getByRole("textbox", { name: "Name" }), "again");
     const actions = (await save(api)).actions;
@@ -376,7 +376,7 @@ describe("actions round-trip into the update payload", () => {
   it("changing the trigger table drops conditions that name the old table's fields", async () => {
     const withCondition: ActionStep = { type: "notify", user_ids: ["usr1"], message: "hi", condition: { conjunction: "and", items: [{ field_id: "fld4", op: "is", value: true }] } };
     const { api } = await setup(makeAutomation({ actions: [withCondition] }));
-    await chooseOption(screen.getAllByLabelText("Table")[0]!, "People");
+    await chooseOption(screen.getAllByLabelText("Collection")[0]!, "People");
     const body = await save(api);
     expect(body.trigger).toEqual({ type: "record_created", table_id: "tbl2" });
     expect(body.actions).toEqual([{ type: "notify", user_ids: ["usr1"], message: "hi" }]);
@@ -511,7 +511,7 @@ describe("collection marks in the automation editor", () => {
 
   it("shows the collection marks in the trigger's table select", async () => {
     await setup(makeAutomation(), markedEnv());
-    const select = screen.getByLabelText("Table");
+    const select = screen.getByLabelText("Collection");
     expect(select.querySelector(".ob-mark.ob-hue-blue")).toBeInTheDocument();
     expect(select.querySelector("svg.lucide-clipboard-list")).toBeNull();
     await userEvent.click(select);
@@ -522,7 +522,7 @@ describe("collection marks in the automation editor", () => {
 
   it("shows the collection mark in an action's table select", async () => {
     await setup(makeAutomation({ actions: [{ type: "create_record", table_id: "tbl2", values: {} }] }), markedEnv());
-    expect(within(card(1)).getByLabelText("Table").querySelector(".ob-mark.ob-hue-orange")).toBeInTheDocument();
+    expect(within(card(1)).getByLabelText("Collection").querySelector(".ob-mark.ob-hue-orange")).toBeInTheDocument();
   });
 
   it("marks the form's collection in the form trigger", async () => {

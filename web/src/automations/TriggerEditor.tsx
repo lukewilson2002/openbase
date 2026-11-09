@@ -57,13 +57,13 @@ export function TriggerEditor({ trigger, onChange, webhook, nextRunAt, nextRunNo
 function TriggerFields({ trigger, onChange, webhook, nextRunAt, nextRunNote, error }: TriggerEditorProps): ReactNode {
   const { schema, collaborators } = useAutomationEnv();
   const tableSelect = (tableId: string) => (
-    <Field label="Table" className="max-w-md">
+    <Field label="Collection" className="max-w-md">
       {(ctl) => (
         <EntitySelect
           {...ctl}
           value={tableId}
           onValueChange={(id) => onChange(withTriggerTable(trigger, id))}
-          options={[...(schema.tables.some((t) => t.id === tableId) ? [] : [{ value: tableId, label: "(deleted table)" }]), ...schema.tables.map((t) => ({ value: t.id, label: t.name, hue: t.color, markName: t.name }))]}
+          options={[...(schema.tables.some((t) => t.id === tableId) ? [] : [{ value: tableId, label: "(deleted collection)" }]), ...schema.tables.map((t) => ({ value: t.id, label: t.name, hue: t.color, markName: t.name }))]}
         />
       )}
     </Field>
@@ -123,7 +123,7 @@ function TriggerFields({ trigger, onChange, webhook, nextRunAt, nextRunNote, err
       const forms = formViews(schema);
       const known = forms.some((f) => f.view.id === trigger.view_id);
       return (
-        <Field label="Form" className="max-w-md" hint={forms.length === 0 ? "This project has no form views. Create one from a table's view sidebar." : undefined}>
+        <Field label="Form" className="max-w-md" hint={forms.length === 0 ? "This folder has no form views. Make one from a collection's Form layout." : undefined}>
           {(ctl) => (
             <EntitySelect
               {...ctl}

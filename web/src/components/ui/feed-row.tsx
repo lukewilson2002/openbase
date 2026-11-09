@@ -14,6 +14,8 @@ export interface FeedRowProps extends Omit<ComponentProps<"div">, "title"> {
   /** The collection's palette colour, drawn as an 8 px mark before `meta`. `null` takes the colour `metaMarkName` hashes to; leave it out for no mark. */
   metaHue?: string | null;
   metaMarkName?: string;
+  /** Lets `meta` run onto more lines, for a row whose facts (where, who, how long) must not be cut off on a phone. */
+  wrapMeta?: boolean;
   /** A date or time, display only: it sits under the row's open target. */
   trailing?: ReactNode;
   /** Opens the thing the row is about. The whole row is the target, so the title is the one tab stop. */
@@ -26,7 +28,7 @@ export interface FeedRowProps extends Omit<ComponentProps<"div">, "title"> {
 }
 
 /** One line of a feed (activity, tasks due, drafts): 44 px tall, 56 on phone. */
-export function FeedRow({ leading, title, meta, metaHue, metaMarkName, trailing, onOpen, href, className, ...props }: FeedRowProps) {
+export function FeedRow({ leading, title, meta, metaHue, metaMarkName, wrapMeta, trailing, onOpen, href, className, ...props }: FeedRowProps) {
   const openable = !!(href || onOpen);
   const text = (
     <>
@@ -34,7 +36,7 @@ export function FeedRow({ leading, title, meta, metaHue, metaMarkName, trailing,
       {(meta != null || metaHue !== undefined) && (
         <span className="flex min-w-0 items-center gap-1.5 text-meta text-muted">
           {metaHue !== undefined && <ColorMark hue={metaHue} size={8} name={metaMarkName} />}
-          <span className="truncate">{meta}</span>
+          <span className={wrapMeta ? "min-w-0" : "truncate"}>{meta}</span>
         </span>
       )}
     </>
@@ -43,7 +45,7 @@ export function FeedRow({ leading, title, meta, metaHue, metaMarkName, trailing,
   const body = "min-w-0 flex-1 text-left text-fg no-underline after:absolute after:inset-0 focus-visible:after:rounded-md";
   return (
     <div
-      className={cn("relative flex min-h-row-feed items-center gap-3 px-2 max-md:min-h-row-feed-phone", openable && "hover:bg-hover", className)}
+      className={cn("relative flex min-h-row-feed items-center gap-3 px-2 max-md:min-h-row-feed-phone", wrapMeta && "py-2", openable && "hover:bg-hover", className)}
       {...props}
     >
       {leading != null && <div className="relative z-10 flex shrink-0 items-center">{leading}</div>}

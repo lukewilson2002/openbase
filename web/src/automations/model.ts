@@ -45,7 +45,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
 };
 
 export const ACTION_HINTS: Record<ActionType, string> = {
-  create_record: "Add a record to a table, with values that can use data from the trigger.",
+  create_record: "Add a record to a collection, with values that can use data from the trigger.",
   update_record: "Change properties of an existing record, such as the one that fired the trigger.",
   send_email: "Send a plain-text email. Needs SMTP to be configured on the server.",
   http_request: "Call an external URL (GET, POST, PUT, PATCH or DELETE).",
@@ -78,7 +78,7 @@ export function formViews(schema: BaseSchema): { table: Table; view: View }[] {
   return schema.tables.flatMap((table) => table.views.filter((v) => v.type === "form").map((view) => ({ table, view })));
 }
 
-/** The table whose records the trigger provides (null for schedule and webhook, or a deleted table). */
+/** The table whose records the trigger provides (null for schedule and webhook, or a deleted collection). */
 export function triggerTable(trigger: Trigger, schema: BaseSchema): Table | null {
   switch (trigger.type) {
     case "record_created":
@@ -116,7 +116,7 @@ export function newTrigger(type: TriggerType, schema: BaseSchema, timeZone: stri
 /** Why a trigger type cannot be chosen yet, or null. */
 export function triggerUnavailableReason(type: TriggerType, schema: BaseSchema): string | null {
   if (type === "form_submitted" && formViews(schema).length === 0) return "Create a form view first";
-  if (type.startsWith("record") && schema.tables.length === 0) return "Create a table first";
+  if (type.startsWith("record") && schema.tables.length === 0) return "Create a collection first";
   return null;
 }
 
@@ -170,7 +170,7 @@ export function withCondition(step: ActionStep, condition: Filter | null): Actio
 // ----------------------------------------------------------------- summaries
 
 export function triggerSummary(trigger: Trigger, schema: BaseSchema): string {
-  const tableName = (id: string) => schema.tables.find((t) => t.id === id)?.name ?? "a deleted table";
+  const tableName = (id: string) => schema.tables.find((t) => t.id === id)?.name ?? "a deleted collection";
   switch (trigger.type) {
     case "record_created":
       return `A record is created in ${tableName(trigger.table_id)}`;
@@ -193,7 +193,7 @@ export function triggerSummary(trigger: Trigger, schema: BaseSchema): string {
 }
 
 export function actionSummary(action: Action, schema: BaseSchema): string {
-  const tableName = (id: string) => schema.tables.find((t) => t.id === id)?.name ?? "a deleted table";
+  const tableName = (id: string) => schema.tables.find((t) => t.id === id)?.name ?? "a deleted collection";
   switch (action.type) {
     case "create_record":
       return `Create a record in ${tableName(action.table_id)}`;

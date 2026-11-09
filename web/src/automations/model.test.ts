@@ -134,7 +134,7 @@ describe("summaries", () => {
     expect(triggerSummary({ type: "form_submitted", view_id: "viw9" }, schema)).toBe('The form "Signup form" is submitted');
     expect(triggerSummary({ type: "schedule", cron: "0 9 * * 1", timezone: "UTC" }, schema)).toBe("Every Monday at 09:00 (UTC)");
     expect(triggerSummary({ type: "webhook" }, schema)).toBe("A webhook is called");
-    expect(triggerSummary({ type: "record_created", table_id: "gone" }, schema)).toContain("deleted table");
+    expect(triggerSummary({ type: "record_created", table_id: "gone" }, schema)).toContain("deleted collection");
   });
 
   it("describes actions", () => {

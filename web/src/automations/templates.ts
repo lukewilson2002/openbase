@@ -78,7 +78,7 @@ export function templateGroups(ctx: TemplateContext): TokenGroup[] {
     groups.push({
       id: "record",
       label: "Trigger record",
-      tokens: [{ label: "Record id", token: braces("trigger.record.id") }, { label: "Table id", token: braces("trigger.record.table_id") }, ...ctx.fields.map((f) => ({ label: f.name || f.id, token: fieldToken(f) }))],
+      tokens: [{ label: "Record id", token: braces("trigger.record.id") }, { label: "Collection id", token: braces("trigger.record.table_id") }, ...ctx.fields.map((f) => ({ label: f.name || f.id, token: fieldToken(f) }))],
     });
   }
   if (ctx.shape === "webhook") groups.push({ id: "body", label: "Webhook body", tokens: [], bodyPath: true });

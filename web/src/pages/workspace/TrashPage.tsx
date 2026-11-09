@@ -135,6 +135,7 @@ function TrashList({ items, topLevel }: { items: TrashItem[]; topLevel: Readonly
               <FeedRow
                 leading={<ColorMark hue={trashItemHue(item)} name={name} size={14} />}
                 title={name}
+                wrapMeta
                 // On a phone the days left have no column of their own, so they lead the line.
                 meta={
                   <>

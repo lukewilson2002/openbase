@@ -73,7 +73,7 @@ export function ValuesEditor({ table, values, onChange, ctx, error }: ValuesEdit
     [env, table?.id],
   );
 
-  if (!table) return <p className="text-label text-danger">The table no longer exists. Choose another one.</p>;
+  if (!table) return <p className="text-label text-danger">The collection no longer exists. Choose another one.</p>;
   const fields = writableFields(table);
   const byId = new Map(table.fields.map((f) => [f.id, f] as const));
   const rows = Object.keys(values);
@@ -199,7 +199,7 @@ function ValueRow({ field, value, onChange, ctx, timeZone, collaborators }: { fi
             ))}
           </div>
         )}
-        {mode === "template" && field.type === "link" && <p className="mt-1 text-meta text-muted">A record id, the text of its first field, or a template such as {"{{steps.1.record_id}}"}.</p>}
+        {mode === "template" && field.type === "link" && <p className="mt-1 text-meta text-muted">A record id, the text of its first property, or a template such as {"{{steps.1.record_id}}"}.</p>}
       </div>
     </>
   );
