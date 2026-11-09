@@ -59,7 +59,7 @@ export function TemplateInput({ value, onChange, ctx, label, multiline, rows = 4
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(e.target.value),
     onSelect: remember,
     onBlur: remember,
-    className: cn("min-w-0 flex-1", mono && "font-mono text-xs"),
+    className: cn("min-w-0 flex-1", mono && "font-mono text-meta"),
   };
 
   return (
@@ -85,14 +85,14 @@ function TokenMenu({ ctx, onPick }: { ctx: TemplateContext; onPick: (token: stri
   const pathId = useId();
   const token = bodyToken(path);
   return (
-    <div role="menu" aria-label="Insert data" className="flex flex-col gap-2 text-[0.8125rem]">
+    <div role="menu" aria-label="Insert data" className="flex flex-col gap-2 text-label">
       {groups.map((g) => (
         <section key={g.id} aria-label={g.label}>
-          <h4 className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted">{g.label}</h4>
+          <h4 className="px-2 py-1 text-meta font-semibold uppercase tracking-wide text-muted">{g.label}</h4>
           {g.bodyPath ? (
             <div className="flex items-end gap-1.5 px-2 pb-1">
               <div className="min-w-0 flex-1">
-                <label htmlFor={pathId} className="text-xs text-muted">
+                <label htmlFor={pathId} className="text-meta text-muted">
                   Path in the JSON body, e.g. order.items.0.sku
                 </label>
                 <Input id={pathId} value={path} onChange={(e) => setPath(e.target.value)} placeholder="customer.email" className="mt-0.5 h-7" />
@@ -107,7 +107,7 @@ function TokenMenu({ ctx, onPick }: { ctx: TemplateContext; onPick: (token: stri
                 <li key={t.token}>
                   <button type="button" role="menuitem" onClick={() => onPick(t.token)} className="flex w-full items-baseline justify-between gap-3 rounded px-2 py-1.5 text-left hover:bg-hover focus-visible:bg-hover focus-visible:outline-none">
                     <span className="min-w-0 truncate">{t.label}</span>
-                    <code className="shrink-0 truncate text-[0.6875rem] text-muted">{t.token}</code>
+                    <code className="shrink-0 truncate text-meta text-muted">{t.token}</code>
                   </button>
                 </li>
               ))}

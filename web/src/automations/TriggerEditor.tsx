@@ -80,8 +80,8 @@ function TriggerFields({ trigger, onChange, webhook, nextRunAt, nextRunNote, err
         <>
           {tableSelect(trigger.table_id)}
           <fieldset>
-            <legend className="mb-1 text-[0.8125rem] font-medium">Watched properties</legend>
-            <p className="mb-2 text-xs text-muted">{chosen.size === 0 ? "Any property: the automation runs for every edit." : "Runs when at least one of the ticked properties changes."}</p>
+            <legend className="mb-1 text-label font-medium">Watched properties</legend>
+            <p className="mb-2 text-meta text-muted">{chosen.size === 0 ? "Any property: the automation runs for every edit." : "Runs when at least one of the ticked properties changes."}</p>
             <ul className="grid gap-1.5 sm:grid-cols-2">
               {watchable.map((f) => (
                 <li key={f.id}>
@@ -93,7 +93,7 @@ function TriggerFields({ trigger, onChange, webhook, nextRunAt, nextRunNote, err
                 </li>
               ))}
             </ul>
-            {watchable.length === 0 && <p className="text-xs text-muted">This collection has no editable properties.</p>}
+            {watchable.length === 0 && <p className="text-meta text-muted">This collection has no editable properties.</p>}
           </fieldset>
         </>
       );
@@ -104,8 +104,8 @@ function TriggerFields({ trigger, onChange, webhook, nextRunAt, nextRunNote, err
         <>
           {tableSelect(trigger.table_id)}
           <div>
-            <h4 className="mb-1 text-[0.8125rem] font-medium">Conditions</h4>
-            <p className="mb-2 text-xs text-muted">Runs when a record starts matching: created matching, or edited from not matching to matching.</p>
+            <h4 className="mb-1 text-label font-medium">Conditions</h4>
+            <p className="mb-2 text-meta text-muted">Runs when a record starts matching: created matching, or edited from not matching to matching.</p>
             <FilterBuilder
               value={trigger.filter.items.length > 0 ? trigger.filter : null}
               onChange={(filter) => onChange({ ...trigger, filter: filter ?? { conjunction: "and", items: [] } })}

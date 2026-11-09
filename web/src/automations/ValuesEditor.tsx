@@ -73,7 +73,7 @@ export function ValuesEditor({ table, values, onChange, ctx, error }: ValuesEdit
     [env, table?.id],
   );
 
-  if (!table) return <p className="text-[0.8125rem] text-danger">The table no longer exists. Choose another one.</p>;
+  if (!table) return <p className="text-label text-danger">The table no longer exists. Choose another one.</p>;
   const fields = writableFields(table);
   const byId = new Map(table.fields.map((f) => [f.id, f] as const));
   const rows = Object.keys(values);
@@ -87,7 +87,7 @@ export function ValuesEditor({ table, values, onChange, ctx, error }: ValuesEdit
 
   return (
     <div className="flex flex-col gap-3">
-      {rows.length === 0 && <p className="text-[0.8125rem] text-muted">No property values yet. Properties you leave out are left empty (create) or unchanged (update).</p>}
+      {rows.length === 0 && <p className="text-label text-muted">No property values yet. Properties you leave out are left empty (create) or unchanged (update).</p>}
       <EditorEnvProvider value={editorEnv}>
         <ul className="flex flex-col gap-3">
           {rows.map((fieldId) => {
@@ -122,7 +122,7 @@ export function ValuesEditor({ table, values, onChange, ctx, error }: ValuesEdit
         </Select>
       </div>
       {error && (
-        <p role="alert" className="text-xs text-danger">
+        <p role="alert" className="text-meta text-danger">
           {error}
         </p>
       )}
@@ -132,7 +132,7 @@ export function ValuesEditor({ table, values, onChange, ctx, error }: ValuesEdit
 
 function MissingField({ fieldId }: { fieldId: string }) {
   return (
-    <p className="text-[0.8125rem] text-danger sm:col-span-2">
+    <p className="text-label text-danger sm:col-span-2">
       The field {fieldId} no longer exists in this table. Remove this row.
     </p>
   );
@@ -169,7 +169,7 @@ function ValueRow({ field, value, onChange, ctx, timeZone, collaborators }: { fi
     <>
       <div className="col-span-2 flex min-w-0 items-start gap-1.5 sm:col-span-1 sm:pt-1.5">
         <FieldTypeIcon type={field.type} className="mt-0.5" />
-        <span id={labelId} className="truncate text-[0.8125rem] font-medium" title={field.name}>
+        <span id={labelId} className="truncate text-label font-medium" title={field.name}>
           {field.name}
         </span>
       </div>
@@ -180,12 +180,12 @@ function ValueRow({ field, value, onChange, ctx, timeZone, collaborators }: { fi
           <FieldEditor key={`${field.id}:${JSON.stringify(value)}`} field={field} value={value} variant="form" labelledBy={labelId} onCommit={commit} onCancel={() => {}} />
         )}
         {error && (
-          <p role="alert" className="mt-1 text-xs text-danger">
+          <p role="alert" className="mt-1 text-meta text-danger">
             {error}
           </p>
         )}
         {switchable && (
-          <div className="mt-1 flex gap-1 text-xs" role="group" aria-label={`${field.name} input mode`}>
+          <div className="mt-1 flex gap-1 text-meta" role="group" aria-label={`${field.name} input mode`}>
             {(["value", "template"] as const).map((m) => (
               <button
                 key={m}
@@ -199,7 +199,7 @@ function ValueRow({ field, value, onChange, ctx, timeZone, collaborators }: { fi
             ))}
           </div>
         )}
-        {mode === "template" && field.type === "link" && <p className="mt-1 text-xs text-muted">A record id, the text of its first field, or a template such as {"{{steps.1.record_id}}"}.</p>}
+        {mode === "template" && field.type === "link" && <p className="mt-1 text-meta text-muted">A record id, the text of its first field, or a template such as {"{{steps.1.record_id}}"}.</p>}
       </div>
     </>
   );

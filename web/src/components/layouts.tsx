@@ -52,8 +52,8 @@ export function Section({ title, description, children, className }: { title: st
   return (
     <section className={cn("rounded-lg border border-line bg-surface", className)}>
       <div className="border-b border-line px-4 py-3">
-        <h2 className="text-[0.9375rem]">{title}</h2>
-        {description && <p className="mt-0.5 text-[0.8125rem] text-muted">{description}</p>}
+        <h2 className="text-h3">{title}</h2>
+        {description && <p className="mt-0.5 text-label text-muted">{description}</p>}
       </div>
       <div className="p-4">{children}</div>
     </section>
@@ -66,7 +66,7 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "error" | 
     <div
       role={tone === "error" ? "alert" : "status"}
       className={cn(
-        "rounded-md border px-3 py-2 text-[0.8125rem]",
+        "rounded-md border px-3 py-2 text-label",
         tone === "error" && "border-danger/40 bg-danger-soft text-danger",
         tone === "success" && "border-success/40 bg-success-soft text-success",
         tone === "warning" && "border-line-strong bg-warning-soft",

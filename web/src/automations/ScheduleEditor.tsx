@@ -63,11 +63,11 @@ export function ScheduleEditor({ cron, timezone, onChange, nextRunAt, nextRunNot
 
       <PresetFields preset={preset} onChange={emit} error={error} />
 
-      <div className="rounded-md bg-subtle px-3 py-2 text-[0.8125rem]" aria-live="polite">
+      <div className="rounded-md bg-subtle px-3 py-2 text-label" aria-live="polite">
         <p>
           <span className="font-medium">{describeCron(cron)}</span> <span className="text-muted">in {timezone || "UTC"}</span>
         </p>
-        <p className="mt-0.5 text-xs text-muted">
+        <p className="mt-0.5 text-meta text-muted">
           Cron expression <code>{cron.trim() || "(empty)"}</code>
           {nextRunAt ? <> · next run {formatDateTime(nextRunAt, timezone)}</> : nextRunNote ? <> · {nextRunNote}</> : null}
         </p>

@@ -37,7 +37,7 @@ export function RunsTab({ automation, timeZone }: { automation: Pick<Automation,
   }
   if (q.isError) {
     return (
-      <div role="alert" className="flex flex-col items-center gap-2 py-8 text-center text-[0.8125rem]">
+      <div role="alert" className="flex flex-col items-center gap-2 py-8 text-center text-label">
         <p className="text-muted">Could not load the runs: {errorMessage(q.error)}</p>
         <Button size="sm" onClick={() => void q.refetch()}>
           Try again
@@ -66,7 +66,7 @@ export function RunsTab({ automation, timeZone }: { automation: Pick<Automation,
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[0.8125rem] text-muted">
+        <p className="text-label text-muted">
           {total} {total === 1 ? "run" : "runs"}, newest first. Finished runs are kept for 30 days.
         </p>
         <Button size="sm" onClick={() => void q.refetch()} loading={q.isRefetching}>
@@ -106,20 +106,20 @@ function RunRow({ run, timeZone }: { run: AutomationRun; timeZone: string }) {
       >
         {open ? <ChevronDown aria-hidden className="size-4 text-muted" /> : <ChevronRight aria-hidden className="size-4 text-muted" />}
         <StatusBadge status={run.status} />
-        <span className="min-w-0 truncate text-[0.8125rem]">
+        <span className="min-w-0 truncate text-label">
           <span className="font-medium">{triggerName(info.type)}</span>
-          {info.test && <span className="ml-1.5 rounded bg-subtle px-1 text-xs text-muted">test</span>}
-          {info.recordId && <span className="ml-1.5 font-mono text-xs text-muted">{info.recordId}</span>}
+          {info.test && <span className="ml-1.5 rounded bg-subtle px-1 text-meta text-muted">test</span>}
+          {info.recordId && <span className="ml-1.5 font-mono text-meta text-muted">{info.recordId}</span>}
         </span>
-        <span className="col-start-3 text-xs text-muted sm:col-start-auto" title={formatDateTime(started, timeZone)}>
+        <span className="col-start-3 text-meta text-muted sm:col-start-auto" title={formatDateTime(started, timeZone)}>
           {isActive(run.status) && !run.started_at ? "Waiting to start" : `Started ${relativeTime(started)}`}
         </span>
-        <span className="hidden text-right text-xs text-muted sm:block">{duration === null ? (isActive(run.status) ? "…" : "") : formatDuration(duration)}</span>
+        <span className="hidden text-right text-meta text-muted sm:block">{duration === null ? (isActive(run.status) ? "…" : "") : formatDuration(duration)}</span>
       </button>
       <div id={panelId} hidden={!open} className="flex flex-col gap-3 border-t border-line bg-subtle/40 px-4 py-3">
         {open && (
           <>
-            <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_1fr]">
+            <dl className="grid gap-x-4 gap-y-1 text-meta sm:grid-cols-[auto_1fr]">
               <dt className="text-muted">Started</dt>
               <dd>{formatDateTime(started, timeZone)}</dd>
               <dt className="text-muted">Duration</dt>
@@ -129,7 +129,7 @@ function RunRow({ run, timeZone }: { run: AutomationRun; timeZone: string }) {
             </dl>
             {run.error && <Notice tone="error">{run.error}</Notice>}
             <StepLogView log={run.log} empty={isActive(run.status) ? "No step has finished yet." : "No actions ran."} />
-            <details className="text-xs">
+            <details className="text-meta">
               <summary className="cursor-pointer text-muted">Trigger data</summary>
               <pre className="mt-1 max-h-60 overflow-auto rounded bg-subtle p-2">{prettyJson(run.trigger_data)}</pre>
             </details>

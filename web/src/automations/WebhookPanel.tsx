@@ -29,25 +29,25 @@ export function WebhookPanel({ saved, token, enabled, onRotate, canRotate }: Web
             <strong>Copy this URL now.</strong> It contains the secret token, which is shown only once; the server keeps just a hash of it. Anyone with the URL can trigger this automation.
           </Notice>
           <CopyField label="Webhook URL" value={webhookUrl(token, origin)} />
-          <p className="text-xs text-muted">
+          <p className="text-meta text-muted">
             Send a JSON <code>POST</code> (up to 1 MB). Use the body in actions with <code>{"{{trigger.body.some.path}}"}</code>.
           </p>
-          <pre className="overflow-x-auto rounded-md bg-subtle p-2 text-xs">{`curl -X POST ${webhookUrl(token, origin)} \\\n  -H 'Content-Type: application/json' \\\n  -d '{"hello": "world"}'`}</pre>
+          <pre className="overflow-x-auto rounded-md bg-subtle p-2 text-meta">{`curl -X POST ${webhookUrl(token, origin)} \\\n  -H 'Content-Type: application/json' \\\n  -d '{"hello": "world"}'`}</pre>
         </>
       ) : saved ? (
-        <p className="text-[0.8125rem] text-muted">
+        <p className="text-label text-muted">
           The webhook URL looks like <code>{origin}/api/hooks/&lt;token&gt;</code>. The token was shown once when it was created and cannot be shown again. If you lost it, rotate the token to get a new URL.
         </p>
       ) : (
-        <p className="text-[0.8125rem] text-muted">Save the automation to get its private webhook URL.</p>
+        <p className="text-label text-muted">Save the automation to get its private webhook URL.</p>
       )}
-      {!enabled && saved && <p className="text-xs text-muted">The automation is off, so calls to its webhook answer 404 until you turn it on.</p>}
+      {!enabled && saved && <p className="text-meta text-muted">The automation is off, so calls to its webhook answer 404 until you turn it on.</p>}
       {saved && (
         <div>
           <Button size="sm" disabled={!canRotate} onClick={() => setConfirming(true)}>
             <RefreshCw aria-hidden className="size-3.5" /> Rotate token
           </Button>
-          {!canRotate && <p className="mt-1 text-xs text-muted">Save or discard your changes first.</p>}
+          {!canRotate && <p className="mt-1 text-meta text-muted">Save or discard your changes first.</p>}
         </div>
       )}
       <ConfirmDialog

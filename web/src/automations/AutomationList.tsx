@@ -86,11 +86,11 @@ export function AutomationList({ baseId, automations, activeId, onNew, onDeleted
           const last = lastRuns[i]?.data?.runs[0];
           const active = a.id === activeId;
           return (
-            <li key={a.id} className={cn("group/item flex items-start gap-2 rounded-md border px-3 py-2", active ? "border-primary bg-primary-soft/40" : "border-line bg-surface hover:bg-hover")}>
+            <li key={a.id} className={cn("group/item flex items-start gap-2 rounded-lg border px-3 py-2.5", active ? "border-primary-soft-line bg-primary-soft" : "border-line bg-surface hover:bg-hover")}>
               <Link to={`/base/${baseId}/automations/${a.id}`} aria-current={active ? "page" : undefined} className="min-w-0 flex-1 text-inherit no-underline">
-                <span className="block truncate text-[0.8125rem] font-medium">{a.name}</span>
-                <span className="block truncate text-xs text-muted">{triggerSummary(a.trigger, schema)}</span>
-                <span className="mt-1 flex items-center gap-1.5 text-xs text-muted">
+                <span className={cn("block truncate text-ui", active ? "font-semibold text-primary-ink" : "font-medium")}>{a.name}</span>
+                <span className="block truncate text-meta text-muted">{triggerSummary(a.trigger, schema)}</span>
+                <span className="mt-1 flex items-center gap-1.5 text-meta text-muted">
                   {last ? (
                     <>
                       <StatusBadge status={last.status} />

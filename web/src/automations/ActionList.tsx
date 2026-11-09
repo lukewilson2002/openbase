@@ -49,8 +49,8 @@ export function ActionList({ trigger, steps, errors, onChange, onAdd }: ActionLi
     <div className="flex flex-col gap-3">
       {steps.length === 0 ? (
         <div className="rounded-md border border-dashed border-line-strong px-4 py-6 text-center">
-          <p className="text-[0.8125rem] font-medium">No actions yet</p>
-          <p className="mt-1 text-xs text-muted">An automation needs at least one action before it can be turned on. Add what should happen when the trigger fires.</p>
+          <p className="text-label font-medium">No actions yet</p>
+          <p className="mt-1 text-meta text-muted">An automation needs at least one action before it can be turned on. Add what should happen when the trigger fires.</p>
         </div>
       ) : (
         <ol className="flex flex-col gap-3" aria-label="Actions">
@@ -99,14 +99,14 @@ function AddActionMenu({ count, onAdd }: { count: number; onAdd: (type: ActionTy
                 <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />
                 <span className="flex flex-col">
                   <span className="font-medium">{ACTION_LABELS[t]}</span>
-                  <span className="text-xs text-muted">{blocked ? "Unavailable: email is not configured on this server" : ACTION_HINTS[t]}</span>
+                  <span className="text-meta text-muted">{blocked ? "Unavailable: email is not configured on this server" : ACTION_HINTS[t]}</span>
                 </span>
               </DropdownMenuItem>
             );
           })}
         </DropdownMenuContent>
       </DropdownMenu>
-      <span className="text-xs text-muted">
+      <span className="text-meta text-muted">
         {count} of {MAX_ACTIONS} actions{full ? ": the limit is reached" : ""}
       </span>
     </div>
@@ -162,12 +162,12 @@ function ActionCard({ index, count, step, ctx, error, hasRecord, fields, onChang
       <div className="flex items-center gap-2 px-3 py-2">
         <button type="button" aria-expanded={open} aria-controls={bodyId} aria-label={`${open ? "Collapse" : "Expand"} action ${index + 1}`} onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 items-center gap-2 rounded text-left">
           {open ? <ChevronDown aria-hidden className="size-4 shrink-0 text-muted" /> : <ChevronRight aria-hidden className="size-4 shrink-0 text-muted" />}
-          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-subtle text-xs font-semibold" aria-hidden>
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-subtle text-meta font-semibold" aria-hidden>
             {index + 1}
           </span>
           <Icon aria-hidden className="size-4 shrink-0 text-muted" />
-          <span className="shrink-0 text-[0.8125rem] font-medium">{label}</span>
-          <span className="min-w-0 truncate text-xs text-muted">{summary}</span>
+          <span className="shrink-0 text-label font-medium">{label}</span>
+          <span className="min-w-0 truncate text-meta text-muted">{summary}</span>
         </button>
         <IconButton label={`Move action ${index + 1} up`} size="sm" disabled={index === 0} onClick={() => onMove(-1)}>
           <ArrowUp aria-hidden className="size-4" />
@@ -181,7 +181,7 @@ function ActionCard({ index, count, step, ctx, error, hasRecord, fields, onChang
       </div>
       <div id={bodyId} hidden={!open} className="flex flex-col gap-4 border-t border-line px-4 py-4">
         {error && !errorInEditor && (
-          <p role="alert" className="text-[0.8125rem] text-danger">
+          <p role="alert" className="text-label text-danger">
             {error}
           </p>
         )}
@@ -206,7 +206,7 @@ function ConditionEditor({ condition, fields, hasRecord, onChange }: { condition
         }}
         label="Only run this action when the trigger record matches conditions"
       />
-      {!hasRecord && <p className="mt-1 text-xs text-muted">Conditions need a record or form trigger: schedules and webhooks have no record to test.</p>}
+      {!hasRecord && <p className="mt-1 text-meta text-muted">Conditions need a record or form trigger: schedules and webhooks have no record to test.</p>}
       {on && hasRecord && (
         <div className="mt-3">
           <FilterBuilder

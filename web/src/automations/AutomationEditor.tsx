@@ -134,14 +134,14 @@ export function AutomationEditor({ automation, tab, onTabChange, webhookToken, o
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-48 flex-1">
-          <label htmlFor="automation-name" className="mb-1 block text-[0.8125rem] font-medium">
+          <label htmlFor="automation-name" className="mb-1 block text-label font-medium">
             Name
           </label>
           <Input id="automation-name" value={draft.name} maxLength={255} onChange={(e) => edit((d) => ({ ...d, name: e.target.value }))} />
         </div>
         <Switch checked={automation.enabled} disabled={toggle.isPending} onCheckedChange={(on) => toggle.mutate(on)} label={automation.enabled ? "On" : "Off"} className="pb-1.5" />
         <div className="flex items-center gap-2">
-          {dirty && <span className="text-xs text-muted">Unsaved changes</span>}
+          {dirty && <span className="text-meta text-muted">Unsaved changes</span>}
           <Button onClick={discard} disabled={!dirty || save.isPending}>
             <Undo2 aria-hidden className="size-4" /> Discard
           </Button>

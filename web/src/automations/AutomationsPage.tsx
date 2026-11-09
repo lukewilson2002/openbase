@@ -78,13 +78,13 @@ export function AutomationsPage({ schema }: { schema: BaseSchema }) {
 
   return (
     <AutomationEnvProvider value={env}>
-      <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-4 px-4 py-5">
+      <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-4 px-4 py-6 md:px-10">
         <div className={cn("flex-wrap items-center justify-between gap-3", automationId ? "hidden md:flex" : "flex")}>
           <div>
-            <h2 className="flex items-center gap-2 text-xl">
+            <h2 className="flex items-center gap-2 text-h2">
               <Zap aria-hidden className="size-5 text-muted" /> Automations
             </h2>
-            <p className="mt-0.5 text-[0.8125rem] text-muted">
+            <p className="mt-0.5 text-label text-muted">
               Do things automatically when records change, forms arrive, on a schedule or from a webhook. Reference: <code>docs/automations.md</code>.
             </p>
           </div>
@@ -100,7 +100,7 @@ export function AutomationsPage({ schema }: { schema: BaseSchema }) {
             <Spinner className="size-6" label="Loading automations" />
           </div>
         ) : automations.isError ? (
-          <div role="alert" className="flex flex-col items-center gap-2 py-12 text-center text-[0.8125rem]">
+          <div role="alert" className="flex flex-col items-center gap-2 py-12 text-center text-label">
             <p className="text-muted">Could not load the automations: {errorMessage(automations.error)}</p>
             <Button size="sm" onClick={() => void automations.refetch()}>
               Try again
@@ -109,14 +109,14 @@ export function AutomationsPage({ schema }: { schema: BaseSchema }) {
         ) : list.length === 0 ? (
           <AutomationList baseId={schema.id} automations={list} activeId={undefined} onNew={() => setCreating(true)} onDeleted={() => {}} />
         ) : (
-          <div className="grid gap-5 md:grid-cols-[20rem_minmax(0,1fr)]">
+          <div className="grid gap-6 md:grid-cols-[20rem_minmax(0,1fr)]">
             <div className={cn(automationId && "hidden md:block")}>
               <AutomationList baseId={schema.id} automations={list} activeId={automationId} onNew={() => setCreating(true)} onDeleted={(id) => id === automationId && navigate(base, { replace: true })} />
             </div>
             <div className={cn("min-w-0", !automationId && "hidden md:block")}>
               {automationId ? (
                 <>
-                  <Button asChild variant="ghost" size="sm" className="mb-3 md:hidden">
+                  <Button asChild variant="ghost" className="mb-3 md:hidden">
                     <Link to={base}>
                       <ArrowLeft aria-hidden className="size-4" /> All automations
                     </Link>
@@ -135,7 +135,7 @@ export function AutomationsPage({ schema }: { schema: BaseSchema }) {
                   )}
                 </>
               ) : (
-                <EmptyState icon={<Zap />} title="Select an automation" description="Choose one from the list to edit it, test it or see its runs." className="rounded-lg border border-dashed border-line-strong" />
+                <EmptyState icon={<Zap />} title="Select an automation" description="Choose one from the list to edit it, test it or see its runs." className="rounded-lg border border-dashed border-line-strong max-md:rounded-xl" />
               )}
             </div>
           </div>

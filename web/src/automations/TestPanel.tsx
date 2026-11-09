@@ -76,17 +76,17 @@ export function TestPanel({ automationId, trigger, dirty }: TestPanelProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-[0.8125rem] text-muted">
+      <p className="text-label text-muted">
         A test runs the saved automation once against {shape === "record" ? "a record of the trigger table" : shape === "webhook" ? "a sample webhook body" : "the current time"}. A dry run shows what each action would do and changes nothing.
       </p>
       {shape === "record" && (
         <Field label="Record id (optional)" hint="Leave empty to use the first record of the trigger table." className="max-w-sm">
-          {(ctl) => <Input {...ctl} value={recordId} onChange={(e) => setRecordId(e.target.value)} placeholder="rec…" className="font-mono text-xs" />}
+          {(ctl) => <Input {...ctl} value={recordId} onChange={(e) => setRecordId(e.target.value)} placeholder="rec…" className="font-mono text-meta" />}
         </Field>
       )}
       {shape === "webhook" && (
         <Field label="Sample webhook body (JSON)" hint="What the placeholders {{trigger.body…}} will see.">
-          {(ctl) => <Textarea {...ctl} value={body} onChange={(e) => setBody(e.target.value)} rows={4} className="font-mono text-xs" spellCheck={false} />}
+          {(ctl) => <Textarea {...ctl} value={body} onChange={(e) => setBody(e.target.value)} rows={4} className="font-mono text-meta" spellCheck={false} />}
         </Field>
       )}
       <Checkbox checked={real} onCheckedChange={setReal} label="Run for real: write records, send emails and make requests" />
@@ -112,7 +112,7 @@ export function TestPanel({ automationId, trigger, dirty }: TestPanelProps) {
         <section aria-label="Test result" className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={result.status} />
-            <span className="text-[0.8125rem]">
+            <span className="text-label">
               {result.dry_run ? "Dry run: nothing was written, sent or requested." : `Real run${result.run_id ? `, recorded as run #${result.run_id}` : ""}.`}
             </span>
           </div>
