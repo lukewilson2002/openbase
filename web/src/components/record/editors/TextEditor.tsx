@@ -146,7 +146,7 @@ export function TextEditor({ field, value, initialText, variant, autoFocus, trai
   );
 
   return (
-    <div className={cn("relative flex items-start text-[0.8125rem]", box)} style={variant === "cell" ? { minWidth: "100%" } : undefined}>
+    <div className={cn("relative flex items-start text-label", box)} style={variant === "cell" ? { minWidth: "100%" } : undefined}>
       {isLong ? (
         <textarea {...common} rows={variant === "cell" ? 4 : 5} className={cn("min-h-[5.5rem] w-full resize-y bg-transparent px-2 py-1.5 outline-none", renderFullScreen && "pb-9")} style={variant === "cell" ? { minWidth: 280 } : undefined} />
       ) : (
@@ -154,7 +154,7 @@ export function TextEditor({ field, value, initialText, variant, autoFocus, trai
           {...common}
           type="text"
           inputMode={field.type === "number" || field.type === "currency" || field.type === "percent" ? "decimal" : undefined}
-          className="h-8 w-full min-w-0 bg-transparent px-2 outline-none"
+          className={cn("h-8 w-full min-w-0 bg-transparent px-2 outline-none", variant === "form" && "max-md:h-control-touch")}
         />
       )}
       {trailing}

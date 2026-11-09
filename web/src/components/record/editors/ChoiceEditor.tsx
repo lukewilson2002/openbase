@@ -6,6 +6,7 @@ import { keys } from "@/api/keys";
 import type { Field, SelectChoice } from "@/api/types";
 import { createChoice, isSelectField } from "@/components/fields/choices";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { StatusChip } from "@/components/ui/status-chip";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
@@ -151,7 +152,7 @@ export function ChoiceEditor({ field, value, variant, target, initialText, onCha
         return (
           <>
       <div className="border-b border-line p-2">
-        <input
+        <Input
           data-autofocus
           autoFocus
           value={query}
@@ -162,14 +163,15 @@ export function ChoiceEditor({ field, value, variant, target, initialText, onCha
           }}
           onKeyDown={onKey}
           role="combobox"
-          aria-expanded
-          aria-controls={listId}
+          aria-expanded={rows > 0}
+          aria-controls={rows > 0 ? listId : undefined}
           aria-activedescendant={rows > 0 ? `${listId}-${active}` : undefined}
           aria-label={`Find an option in ${field.name}`}
           placeholder={env.canCreateOptions ? "Find or create an option" : "Find an option"}
-          className="h-8 w-full rounded-md border border-line-strong bg-surface px-2 text-[0.8125rem] outline-none focus:border-ring"
+          className="px-2 text-label"
         />
       </div>
+      {rows > 0 && (
       <ul id={listId} role="listbox" aria-multiselectable={multiple} aria-label={field.name} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1">
         {filtered.map((c, i) => {
           const on = selected.includes(c.id);
@@ -180,7 +182,7 @@ export function ChoiceEditor({ field, value, variant, target, initialText, onCha
                 tabIndex={-1}
                 onMouseEnter={() => setActive(i)}
                 onClick={() => pick(c)}
-                className={cn("flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left", i === active && "bg-hover")}
+                className={cn("flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left max-md:min-h-control-touch pointer-coarse:min-h-control-touch", i === active && "bg-hover")}
               >
                 <Pill choice={c} />
                 {on && <Check aria-hidden className="size-4 text-primary-mark" />}
@@ -196,15 +198,21 @@ export function ChoiceEditor({ field, value, variant, target, initialText, onCha
               disabled={busy}
               onMouseEnter={() => setActive(filtered.length)}
               onClick={() => void create()}
-              className={cn("flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[0.8125rem]", active === filtered.length && "bg-hover")}
+              className={cn("flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-label max-md:min-h-control-touch pointer-coarse:min-h-control-touch", active === filtered.length && "bg-hover")}
             >
               <Plus aria-hidden className="size-4 text-muted" />
               Create <Pill choice={{ name: query.trim(), color: "gray" }} />
             </button>
           </li>
         )}
-        {rows === 0 && <li className="px-2 py-3 text-center text-[0.8125rem] text-muted">{choices.length === 0 ? "This property has no options yet." : "No matching options."}</li>}
       </ul>
+      )}
+      {/* A listbox with no option in it is invalid, so the message stands outside one. */}
+      {rows === 0 && (
+        <p role="status" className="px-2 py-3 text-center text-label text-muted">
+          {choices.length === 0 ? "This property has no options yet." : "No matching options."}
+        </p>
+      )}
       <div className="flex items-center justify-between gap-2 border-t border-line p-2">
         <Button size="sm" variant="ghost" onClick={clear} disabled={selected.length === 0}>
           Clear

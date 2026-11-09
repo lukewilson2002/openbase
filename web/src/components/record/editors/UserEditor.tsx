@@ -4,6 +4,7 @@ import { Check } from "lucide-react";
 import type { Field } from "@/api/types";
 import { Avatar, avatarColor } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import { choiceClass } from "@/lib/colors";
 import { stringItems } from "@/lib/cells/kinds";
@@ -23,7 +24,7 @@ export function UserChip({ name, email, color }: { name: string; email?: string;
   const own = color ?? avatarColor(email || name);
   return (
     <span data-person-color={own} className={cn("inline-flex max-w-full items-center gap-1 rounded-full py-0.5 pl-0.5 pr-2 text-xs", choiceClass(own))}>
-      <Avatar name={name} email={email} color={own} size="sm" className="size-4 text-[0.5rem]" />
+      <Avatar name={name} email={email} color={own} size="sm" className="size-4 text-initial-xs" />
       <span className="truncate">{name}</span>
     </span>
   );
@@ -132,7 +133,7 @@ export function UserEditor({ field, value, variant, target, initialText, onChang
         return (
           <>
             <div className="border-b border-line p-2">
-              <input
+              <Input
                 data-autofocus
                 autoFocus
                 value={query}
@@ -143,20 +144,21 @@ export function UserEditor({ field, value, variant, target, initialText, onChang
                 }}
                 onKeyDown={onKey}
                 role="combobox"
-                aria-expanded
-                aria-controls={listId}
+                aria-expanded={people.length > 0}
+                aria-controls={people.length > 0 ? listId : undefined}
                 aria-activedescendant={people.length > 0 ? `${listId}-${active}` : undefined}
                 aria-label={`Find a person for ${field.name}`}
                 placeholder="Find a person"
-                className="h-8 w-full rounded-md border border-line-strong bg-surface px-2 text-[0.8125rem] outline-none focus:border-ring"
+                className="px-2 text-label"
               />
             </div>
+            {people.length > 0 && (
             <ul id={listId} role="listbox" aria-multiselectable={multiple} aria-label="People" className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1">
               {people.map((u, i) => {
                 const on = selected.includes(u.id);
                 return (
                   <li key={u.id} id={`${listId}-${i}`} role="option" aria-selected={on}>
-                    <button type="button" tabIndex={-1} onMouseEnter={() => setActive(i)} onClick={() => toggle(u.id)} className={cn("flex w-full items-center gap-2 rounded px-2 py-1.5 text-left", i === active && "bg-hover")}>
+                    <button type="button" tabIndex={-1} onMouseEnter={() => setActive(i)} onClick={() => toggle(u.id)} className={cn("flex w-full items-center gap-2 rounded px-2 py-1.5 text-left max-md:min-h-control-touch pointer-coarse:min-h-control-touch", i === active && "bg-hover")}>
                       <Avatar name={u.name} email={u.email} color={env.format.userColor?.(u.id)} size="sm" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{u.name}</span>
@@ -167,8 +169,14 @@ export function UserEditor({ field, value, variant, target, initialText, onChang
                   </li>
                 );
               })}
-              {people.length === 0 && <li className="px-2 py-3 text-center text-[0.8125rem] text-muted">No matching people.</li>}
             </ul>
+            )}
+            {/* A listbox with no option in it is invalid, so the message stands outside one. */}
+            {people.length === 0 && (
+              <p role="status" className="px-2 py-3 text-center text-label text-muted">
+                No matching people.
+              </p>
+            )}
             <div className="flex items-center justify-between gap-2 border-t border-line p-2">
               <Button size="sm" variant="ghost" onClick={clear} disabled={selected.length === 0}>
                 Clear

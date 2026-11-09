@@ -239,8 +239,8 @@ export function LinkEditor({ field, value, variant, target, initialText, addAnch
                 }}
                 onKeyDown={onKey}
                 role="combobox"
-                aria-expanded
-                aria-controls={listId}
+                aria-expanded={total > 0}
+                aria-controls={total > 0 ? listId : undefined}
                 aria-activedescendant={total > 0 ? `${listId}-${active}` : undefined}
                 aria-label={`Search ${field.name}`}
                 placeholder="Search records"
@@ -248,7 +248,8 @@ export function LinkEditor({ field, value, variant, target, initialText, addAnch
               />
               {results.isFetching && <Spinner className={cn("absolute top-1/2 size-3.5 -translate-y-1/2", sheet ? "right-6" : "right-4")} label="Searching" />}
             </div>
-            <div id={listId} role="listbox" aria-multiselectable={!single} aria-label="Records" className={cn("min-h-0 flex-1 p-1.5", sheet ? "px-0" : "overflow-y-auto overscroll-contain")}>
+            {/* A listbox with no option in it is invalid: with none, the box is a plain region holding the message. */}
+            <div id={listId} {...(total > 0 ? { role: "listbox", "aria-multiselectable": !single, "aria-label": "Records" } : {})} className={cn("min-h-0 flex-1 p-1.5", sheet ? "px-0" : "overflow-y-auto overscroll-contain")}>
               {candidates.map((r, i) => {
                 const rec = records.get(r.id);
                 const name = <span className="max-w-full truncate text-ui font-medium">{r.name || "Untitled"}</span>;

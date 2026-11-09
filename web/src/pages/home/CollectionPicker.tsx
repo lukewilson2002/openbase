@@ -86,8 +86,8 @@ function List({ options, loading, value, withInbox, onPick }: Pick<CollectionPic
     <div className="flex flex-col gap-1">
       <input
         role="combobox"
-        aria-expanded
-        aria-controls={`${uid}-list`}
+        aria-expanded={rows.length > 0}
+        aria-controls={rows.length > 0 ? `${uid}-list` : undefined}
         aria-activedescendant={nav.activeId}
         aria-label="Search collections"
         placeholder="Search collections"
@@ -107,7 +107,8 @@ function List({ options, loading, value, withInbox, onPick }: Pick<CollectionPic
         // 16 px on touch: anything smaller makes iOS zoom the page on focus.
         className="h-control-lg rounded-md border border-line-strong bg-surface px-2.5 text-ui placeholder:text-faint focus-visible:border-ring max-md:h-control-touch max-md:text-read-phone"
       />
-      <div id={`${uid}-list`} role="listbox" aria-label="Collections" className="flex flex-col">
+      {/* A listbox with no option in it is invalid: with none, the box is a plain region holding the message. */}
+      <div id={`${uid}-list`} {...(rows.length > 0 ? { role: "listbox", "aria-label": "Collections" } : {})} className="flex flex-col">
         {rows.map((r, i) => (
           <ListboxOption
             key={r.id}

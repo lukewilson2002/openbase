@@ -122,8 +122,8 @@ export function CommandPalette({ open, onOpenChange, query, onQueryChange, group
                 else if (inputRef) inputRef.current = el;
               }}
               role="combobox"
-              aria-expanded
-              aria-controls={`${uid}-list`}
+              aria-expanded={flat.length > 0}
+              aria-controls={flat.length > 0 ? `${uid}-list` : undefined}
               aria-activedescendant={active?.domId}
               aria-autocomplete="list"
               aria-label="Search"
@@ -161,7 +161,8 @@ export function CommandPalette({ open, onOpenChange, query, onQueryChange, group
               {error}
             </p>
           )}
-          <div id={`${uid}-list`} role="listbox" aria-label="Results" aria-busy={busy} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
+          {/* A listbox with no option in it is invalid: with no results the box is a plain region holding the message. */}
+          <div id={`${uid}-list`} {...(flat.length > 0 ? { role: "listbox", "aria-label": "Results", "aria-busy": busy } : {})} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
             {shown.map((g) => (
               <div key={g.id} role="group" aria-labelledby={`${uid}-${g.id}`}>
                 <div id={`${uid}-${g.id}`} className="px-2.5 pb-1 pt-2 text-meta font-medium text-muted">

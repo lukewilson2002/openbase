@@ -6,6 +6,7 @@
 import { useId, useRef } from "react";
 import { CalendarDays } from "lucide-react";
 import type { DateOptions, Field } from "@/api/types";
+import { cn } from "@/lib/cn";
 import { fieldZone, fromInputValue, toInputValue } from "@/lib/cells/dates";
 import { dateOptionsOf } from "@/lib/cells/kinds";
 import { formatStoredDate } from "@/lib/cells/dates";
@@ -57,7 +58,7 @@ export function DateEditor({ field, value, initialText, variant, autoFocus, onCh
             el.focus();
           }
         }}
-        className="flex h-8 w-8 shrink-0 items-center justify-center text-muted hover:text-fg"
+        className={cn("flex h-8 w-8 shrink-0 items-center justify-center text-muted hover:text-fg", variant === "form" && "max-md:size-control-touch")}
       >
         <CalendarDays aria-hidden className="size-4" />
       </button>

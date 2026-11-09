@@ -307,7 +307,10 @@ describe("the palette on a desktop", () => {
     renderPalette();
     await openPalette(user);
     await user.keyboard("zzz");
-    expect(await within(screen.getByRole("listbox")).findByText("No matches for “zzz”")).toBeInTheDocument();
+    expect(await screen.findByText("No matches for “zzz”", { selector: "p" })).toBeInTheDocument();
+    // With nothing to list there is no listbox: an empty one is invalid (A11Y-7), and the box that says so is no listbox.
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Search" })).not.toHaveAttribute("aria-controls");
     api.set("GET /api/search", apiError(500, "internal", "Database is busy"));
     await user.keyboard("y");
     expect(await screen.findByRole("alert")).toHaveTextContent("Search is unavailable: Database is busy");
@@ -396,9 +399,8 @@ describe("actions", () => {
     renderPalette({ workspaceId: "wsp1" });
     await openPalette(user);
     await user.keyboard("new");
-    await waitFor(() => expect(screen.getByRole("listbox")).toHaveAttribute("aria-busy", "false"));
+    expect(await screen.findByText("No matches for “new”", { selector: "p" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /^New / })).not.toBeInTheDocument();
-    expect(within(screen.getByRole("listbox")).getByText("No matches for “new”")).toBeInTheDocument();
   });
 
   it("opens the New collection dialog for the workspace's top level", async () => {
@@ -448,7 +450,7 @@ describe("scopes", () => {
 
     await user.click(within(scopes).getByRole("button", { name: "This folder" }));
     expect(within(scopes).getByRole("button", { name: "This folder" })).toHaveAttribute("aria-pressed", "true");
-    expect(await within(screen.getByRole("listbox")).findByText("No matches for “cho” in Chore archive")).toBeInTheDocument();
+    expect(await screen.findByText("No matches for “cho” in Chore archive", { selector: "p" })).toBeInTheDocument();
     expect(api.callsTo("GET /api/search").at(-1)!.query.get("base")).toBe("app1");
     // The click kept focus in the field, so typing goes on.
     expect(screen.getByRole("combobox", { name: "Search" })).toHaveFocus();
