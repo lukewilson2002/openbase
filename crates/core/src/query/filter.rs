@@ -13,7 +13,9 @@ use super::{FieldLookup, Kind, QueryCtx, Row, is_cell_empty, kind_of};
 use crate::cell::parse::parse_number;
 use crate::cell::{NameResolver, display_text, to_value};
 use crate::field::{COLORS, Field, FieldKind};
-use crate::limits::{MAX_FILTER_CONDITIONS, MAX_FILTER_DEPTH};
+use crate::limits::{
+    MAX_CHOICES_PER_FIELD, MAX_FILTER_CONDITIONS, MAX_FILTER_DEPTH, MAX_FILTER_OPERAND_IDS,
+};
 use crate::value::Value;
 use crate::view::{Conjunction, DateOperand, Filter, FilterItem, FilterOp, RowColor};
 
@@ -137,14 +139,16 @@ enum Test {
     /// Single-valued membership (select, single user): `negate` for
     /// is_not / is_none_of.
     OneOf {
-        ids: Vec<String>,
+        ids: HashSet<String>,
         me: bool,
         negate: bool,
     },
     /// Multi-valued set comparison on ids (multi select, link, multi user).
+    /// The operand is a set built once at compile time, so a row costs about
+    /// as much as its own cell, not as much as the operand.
     Set {
         op: SetOp,
-        ids: Vec<String>,
+        ids: HashSet<String>,
         me: bool,
     },
     /// Substring search over item names (link names, attachment
@@ -156,7 +160,7 @@ enum Test {
     /// Set comparison over computed array element texts.
     ItemSet {
         op: SetOp,
-        items: Vec<String>,
+        items: HashSet<String>,
     },
     Day(DayOp, DateOperand),
     Within(DateOperand),
@@ -205,19 +209,27 @@ pub fn compile_filter<F: FieldLookup + ?Sized>(
     filter: &Filter,
     fields: &F,
 ) -> Result<CompiledFilter, String> {
-    let mut count = 0;
-    let root = compile_group(filter, fields, 1, &mut count)?.unwrap_or(Group {
+    let mut budget = Budget::default();
+    let root = compile_group(filter, fields, 1, &mut budget)?.unwrap_or(Group {
         conjunction: filter.conjunction,
         items: Vec::new(),
     });
     Ok(CompiledFilter { root })
 }
 
+/// What one filter has used so far of its overall limits.
+#[derive(Default)]
+struct Budget {
+    conditions: usize,
+    /// Ids and items named by id-list operands, over every condition.
+    operand_ids: usize,
+}
+
 fn compile_group<F: FieldLookup + ?Sized>(
     filter: &Filter,
     fields: &F,
     depth: usize,
-    count: &mut usize,
+    budget: &mut Budget,
 ) -> Result<Option<Group>, String> {
     if depth > MAX_FILTER_DEPTH {
         return Err(format!(
@@ -228,8 +240,8 @@ fn compile_group<F: FieldLookup + ?Sized>(
     for item in &filter.items {
         match item {
             FilterItem::Condition(c) => {
-                *count += 1;
-                if *count > MAX_FILTER_CONDITIONS {
+                budget.conditions += 1;
+                if budget.conditions > MAX_FILTER_CONDITIONS {
                     return Err(format!(
                         "filters can have at most {MAX_FILTER_CONDITIONS} conditions"
                     ));
@@ -237,7 +249,7 @@ fn compile_group<F: FieldLookup + ?Sized>(
                 let field = fields
                     .field(&c.field_id)
                     .ok_or_else(|| format!("filter refers to unknown field {}", c.field_id))?;
-                if let Some(test) = compile_test(field, c.op, &c.value)? {
+                if let Some(test) = compile_test(field, c.op, &c.value, budget)? {
                     items.push(Node::Cond(Box::new(Cond {
                         field: field.clone(),
                         test,
@@ -245,7 +257,7 @@ fn compile_group<F: FieldLookup + ?Sized>(
                 }
             }
             FilterItem::Group(g) => {
-                if let Some(group) = compile_group(g, fields, depth + 1, count)? {
+                if let Some(group) = compile_group(g, fields, depth + 1, budget)? {
                     items.push(Node::Group(group));
                 }
             }
@@ -277,28 +289,49 @@ fn text_operand(field: &Field, v: &Json) -> Result<Option<String>, String> {
 }
 
 /// Read an id-list operand (a string or array of strings). Empty → `None`.
-fn ids_operand(field: &Field, v: &Json) -> Result<Option<Vec<String>>, String> {
+/// A list is limited per condition and, through `budget`, per filter: the
+/// request body limit alone would let one condition carry a million ids.
+fn ids_operand(
+    field: &Field,
+    v: &Json,
+    budget: &mut Budget,
+) -> Result<Option<HashSet<String>>, String> {
     let bad = || format!("filter on \"{}\" needs an id or a list of ids", field.name);
-    let ids: Vec<String> = match v {
-        Json::Null => Vec::new(),
-        Json::String(s) => vec![s.clone()],
-        Json::Array(items) => items
-            .iter()
-            .map(|i| match i {
-                Json::String(s) => Ok(s.clone()),
-                _ => Err(bad()),
-            })
-            .collect::<Result<_, _>>()?,
+    let ids: HashSet<String> = match v {
+        Json::Null => HashSet::new(),
+        Json::String(s) => HashSet::from([s.clone()]),
+        Json::Array(items) => {
+            // Checked before any element is copied.
+            if items.len() > MAX_CHOICES_PER_FIELD {
+                return Err(format!(
+                    "filter on \"{}\" can list at most {MAX_CHOICES_PER_FIELD} values",
+                    field.name
+                ));
+            }
+            items
+                .iter()
+                .map(|i| match i {
+                    Json::String(s) => Ok(s.clone()),
+                    _ => Err(bad()),
+                })
+                .collect::<Result<_, _>>()?
+        }
         _ => return Err(bad()),
     };
-    let ids: Vec<String> = ids.into_iter().filter(|s| !s.trim().is_empty()).collect();
+    budget.operand_ids += ids.len();
+    if budget.operand_ids > MAX_FILTER_OPERAND_IDS {
+        return Err(format!(
+            "a filter can list at most {MAX_FILTER_OPERAND_IDS} values in all"
+        ));
+    }
+    let ids: HashSet<String> = ids.into_iter().filter(|s| !s.trim().is_empty()).collect();
     Ok((!ids.is_empty()).then_some(ids))
 }
 
 /// Split the "me" marker out of user ids.
-fn split_me(ids: Vec<String>) -> (Vec<String>, bool) {
-    let me = ids.iter().any(|i| i == ME);
-    (ids.into_iter().filter(|i| i != ME).collect(), me)
+fn split_me(mut ids: HashSet<String>) -> (HashSet<String>, bool) {
+    let me = ids.remove(ME);
+    (ids, me)
 }
 
 fn date_operand(field: &Field, op: FilterOp, v: &Json) -> Result<Option<DateOperand>, String> {
@@ -356,7 +389,12 @@ fn text_op(op: FilterOp) -> Option<TextOp> {
 }
 
 /// Compile one condition. `Ok(None)` = empty operand (ignored).
-fn compile_test(field: &Field, op: FilterOp, v: &Json) -> Result<Option<Test>, String> {
+fn compile_test(
+    field: &Field,
+    op: FilterOp,
+    v: &Json,
+    budget: &mut Budget,
+) -> Result<Option<Test>, String> {
     let kind = kind_of(field);
     if !ops_for_kind(kind).contains(&op) {
         return Err(format!(
@@ -402,7 +440,7 @@ fn compile_test(field: &Field, op: FilterOp, v: &Json) -> Result<Option<Test>, S
             _ => return Err(format!("filter on \"{}\" needs true or false", field.name)),
         },
         Kind::Select | Kind::User { multiple: false } => {
-            let Some(ids) = ids_operand(field, v)? else {
+            let Some(ids) = ids_operand(field, v, budget)? else {
                 return Ok(None);
             };
             if matches!(op, FilterOp::Is | FilterOp::IsNot) && ids.len() > 1 {
@@ -426,7 +464,7 @@ fn compile_test(field: &Field, op: FilterOp, v: &Json) -> Result<Option<Test>, S
             if set_op(op).is_some() =>
         {
             let sop = set_op(op).ok_or("unsupported operator")?;
-            let Some(ids) = ids_operand(field, v)? else {
+            let Some(ids) = ids_operand(field, v, budget)? else {
                 return Ok(None);
             };
             match kind {
@@ -513,28 +551,34 @@ fn cell_ids(stored: Option<&Json>) -> Vec<&str> {
     }
 }
 
-fn set_matches<T: AsRef<str>>(op: SetOp, cell: &[&str], wanted: &[T]) -> bool {
-    let has = |w: &T| cell.contains(&w.as_ref());
-    match op {
-        SetOp::HasAny => wanted.iter().any(has),
-        SetOp::HasAll => wanted.iter().all(has),
-        SetOp::HasNone => !wanted.iter().any(has),
-        SetOp::Exactly => {
-            let a: HashSet<&str> = cell.iter().copied().collect();
-            let b: HashSet<&str> = wanted.iter().map(AsRef::as_ref).collect();
-            a == b
-        }
+/// The viewer's id when the operand named "me" and someone is signed in.
+fn me_id(me: bool, ctx: &QueryCtx) -> Option<&str> {
+    if me {
+        ctx.current_user_id.as_deref()
+    } else {
+        None
     }
 }
 
-fn with_me<'a>(ids: &'a [String], me: bool, ctx: &'a QueryCtx) -> Vec<&'a str> {
-    let mut out: Vec<&str> = ids.iter().map(String::as_str).collect();
-    if me {
-        if let Some(u) = ctx.current_user_id.as_deref() {
-            out.push(u);
+/// Compare a cell's ids with the wanted set (`ids` plus the viewer, if `extra`).
+/// Every branch walks the cell, not the wanted set, so a long operand costs
+/// nothing per row; only `HasAll` can walk the operand, and it stops at the
+/// first id the cell lacks.
+fn set_matches(op: SetOp, cell: &[&str], wanted: &HashSet<String>, extra: Option<&str>) -> bool {
+    let wants = |id: &str| wanted.contains(id) || extra == Some(id);
+    match op {
+        SetOp::HasAny => cell.iter().any(|c| wants(c)),
+        SetOp::HasNone => !cell.iter().any(|c| wants(c)),
+        SetOp::HasAll => {
+            let in_cell = |w: &str| cell.contains(&w);
+            wanted.iter().all(|w| in_cell(w)) && extra.is_none_or(in_cell)
+        }
+        SetOp::Exactly => {
+            let a: HashSet<&str> = cell.iter().copied().collect();
+            let b_len = wanted.len() + usize::from(extra.is_some_and(|e| !wanted.contains(e)));
+            a.len() == b_len && a.iter().all(|c| wants(c))
         }
     }
-    out
 }
 
 /// Texts of a multi-valued cell's items (link names, filenames, elements).
@@ -596,18 +640,20 @@ fn eval_cond(c: &Cond, row: &dyn Row, ctx: &QueryCtx, names: &dyn NameResolver) 
         },
         Test::Bool(want) => to_value(field, stored, names).truthy() == *want,
         Test::OneOf { ids, me, negate } => {
-            let wanted = with_me(ids, *me, ctx);
-            let hit = cell_ids(stored).iter().any(|id| wanted.contains(id));
+            let extra = me_id(*me, ctx);
+            let hit = cell_ids(stored)
+                .iter()
+                .any(|id| ids.contains(*id) || extra == Some(*id));
             hit != *negate
         }
         Test::Set { op, ids, me } => {
-            let wanted = with_me(ids, *me, ctx);
-            if wanted.is_empty() {
+            let extra = me_id(*me, ctx);
+            if ids.is_empty() && extra.is_none() {
                 // "me" with no signed-in viewer: nothing can match except none-of.
                 return *op == SetOp::HasNone
                     || (*op == SetOp::Exactly && cell_ids(stored).is_empty());
             }
-            set_matches(*op, &cell_ids(stored), &wanted)
+            set_matches(*op, &cell_ids(stored), ids, extra)
         }
         Test::ItemText { negate, needle } => {
             let hit = item_texts(field, stored, ctx, names)
@@ -618,7 +664,7 @@ fn eval_cond(c: &Cond, row: &dyn Row, ctx: &QueryCtx, names: &dyn NameResolver) 
         Test::ItemSet { op, items } => {
             let texts = item_texts(field, stored, ctx, names);
             let refs: Vec<&str> = texts.iter().map(String::as_str).collect();
-            set_matches(*op, &refs, items)
+            set_matches(*op, &refs, items, None)
         }
         Test::Day(op, operand) => {
             let today = ctx.now.with_timezone(&ctx.timezone).date_naive();

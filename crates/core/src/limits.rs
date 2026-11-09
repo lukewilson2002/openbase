@@ -18,6 +18,9 @@ pub const MAX_RECORDS_PER_BATCH: usize = 1_000;
 pub const MAX_COMMENT_LEN: usize = 10_000;
 pub const MAX_FILTER_DEPTH: usize = 3;
 pub const MAX_FILTER_CONDITIONS: usize = 100;
+/// Ids one filter may name in its id-list operands, all conditions together. One condition
+/// is also held to `MAX_CHOICES_PER_FIELD`.
+pub const MAX_FILTER_OPERAND_IDS: usize = 5_000;
 pub const MAX_SORTS: usize = 10;
 pub const MAX_GROUPS: usize = 3;
 /// Longest grid search text, in characters.

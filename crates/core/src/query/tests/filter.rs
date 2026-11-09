@@ -873,3 +873,90 @@ fn validation_errors() {
     );
     assert!(compile_err("fldDate", Is, json!(5)).contains("invalid date"));
 }
+
+fn ids(n: usize) -> Json {
+    Json::Array((0..n).map(|i| json!(format!("id{i}"))).collect())
+}
+
+#[test]
+fn an_id_list_is_capped_per_condition_and_per_filter() {
+    use crate::limits::{MAX_CHOICES_PER_FIELD, MAX_FILTER_OPERAND_IDS};
+    use FilterOp::*;
+    // One condition: the cap is checked before any id is copied, for every id-list operand.
+    for (field, op) in [
+        ("fldSel", IsAnyOf),
+        ("fldMulti", HasAnyOf),
+        ("fldMulti", IsExactly),
+        ("fldUsers", HasAllOf),
+        ("fldLink", HasNoneOf),
+    ] {
+        compile_filter(&cond(field, op, ids(MAX_CHOICES_PER_FIELD)), &table())
+            .unwrap_or_else(|e| panic!("{field} {op:?}: {e}"));
+        let e = compile_err(field, op, ids(MAX_CHOICES_PER_FIELD + 1));
+        assert!(e.contains("at most"), "{field} {op:?}: {e}");
+    }
+    // All conditions together.
+    let each = MAX_CHOICES_PER_FIELD;
+    let conditions = |n: usize| Filter {
+        conjunction: Conjunction::And,
+        items: (0..n)
+            .map(|_| {
+                FilterItem::Condition(Condition {
+                    field_id: "fldMulti".into(),
+                    op: HasAnyOf,
+                    value: ids(each),
+                })
+            })
+            .collect(),
+    };
+    let fits = MAX_FILTER_OPERAND_IDS / each;
+    assert!(compile_filter(&conditions(fits), &table()).is_ok());
+    let e = compile_filter(&conditions(fits + 1), &table()).unwrap_err();
+    assert!(e.contains("in all"), "{e}");
+}
+
+#[test]
+fn id_sets_compare_like_the_lists_they_replaced() {
+    use FilterOp::*;
+    // Repeated ids and the viewer named twice (as "me" and by id) change nothing.
+    let cells = json!({"fldUsers": ["usr1", "usr2"]});
+    assert!(m(
+        "fldUsers",
+        IsExactly,
+        json!(["usr1", "usr2", "usr2"]),
+        cells.clone()
+    ));
+    assert!(m(
+        "fldUsers",
+        IsExactly,
+        json!(["me", "usr1", "usr2"]),
+        cells.clone()
+    ));
+    assert!(!m("fldUsers", IsExactly, json!(["me"]), cells.clone()));
+    assert!(m(
+        "fldUsers",
+        HasAllOf,
+        json!(["me", "usr1", "usr2"]),
+        cells.clone()
+    ));
+    assert!(!m(
+        "fldUsers",
+        HasAllOf,
+        json!(["me", "usr3"]),
+        cells.clone()
+    ));
+    assert!(m(
+        "fldUsers",
+        HasAnyOf,
+        json!(["usr9", "usr2"]),
+        cells.clone()
+    ));
+    assert!(!m(
+        "fldUsers",
+        HasNoneOf,
+        json!(["usr9", "usr2"]),
+        cells.clone()
+    ));
+    // A cell with more ids than the operand is not "exactly" it.
+    assert!(!m("fldUsers", IsExactly, json!(["usr1"]), cells));
+}
