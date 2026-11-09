@@ -7,12 +7,7 @@ import { RequireAdmin, RequireAuth } from "@/auth/guards";
 import { BaseShell } from "@/base/BaseShell";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { ErrorState } from "@/components/ErrorState";
-import { RecordRoute } from "@/record/RecordRoute";
 import { RootRoute } from "@/pages/RootRoute";
-import { NotificationsPage } from "@/pages/NotificationsPage";
-import { CollectionsPage } from "@/pages/workspace/CollectionsPage";
-import { WorkspaceAutomationsPage } from "@/pages/workspace/WorkspaceAutomationsPage";
-import { HomePage } from "@/pages/home/HomePage";
 import { IntroGate, IntroProvider } from "@/onboarding/IntroContext";
 import { LoginPage } from "@/pages/LoginPage";
 import { TwoFactorLoginPage } from "@/pages/TwoFactorLoginPage";
@@ -20,6 +15,13 @@ import { PageSpinner } from "@/components/ui/spinner";
 import { useForgetUndoOutsideFolder } from "@/lib/undo/registry";
 
 // Rarely visited pages load on demand to keep the first paint small.
+// Home, a record page, the notifications list and the two workspace lists bring the record editors, the Markdown renderer and the
+// automation model with them: a collection opens without any of it (DONE-10).
+const HomePage = lazy(() => import("@/pages/home/HomePage").then((m) => ({ default: m.HomePage })));
+const RecordRoute = lazy(() => import("@/record/RecordRoute").then((m) => ({ default: m.RecordRoute })));
+const NotificationsPage = lazy(() => import("@/pages/NotificationsPage").then((m) => ({ default: m.NotificationsPage })));
+const CollectionsPage = lazy(() => import("@/pages/workspace/CollectionsPage").then((m) => ({ default: m.CollectionsPage })));
+const WorkspaceAutomationsPage = lazy(() => import("@/pages/workspace/WorkspaceAutomationsPage").then((m) => ({ default: m.WorkspaceAutomationsPage })));
 const AccountPage = lazy(() => import("@/pages/account/AccountPage").then((m) => ({ default: m.AccountPage })));
 // The page an app's "connect" request lands on (opened by the server's /oauth/authorize).
 const OAuthConsentPage = lazy(() => import("@/pages/oauth/OAuthConsentPage").then((m) => ({ default: m.OAuthConsentPage })));
