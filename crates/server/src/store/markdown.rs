@@ -2,7 +2,16 @@
 //! changes (`fields_engine::convert_column`). The other way, plain text
 //! becoming Rich text, is [`crate::store::comments::plain_to_markdown`].
 
+use ob_core::limits::MAX_TEXT_CELL_LEN;
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
+
+/// Levels of list nesting that are indented. The parser nests as deep as the input has `- `
+/// markers (50,000 in a 100,000 character cell) and each level adds its indent to every item
+/// below it, so the output grew with the square of the depth.
+const MAX_INDENT_LEVELS: usize = 32;
+/// Bytes of output after which reading stops. The caller keeps `MAX_TEXT_CELL_LEN`
+/// characters of it, so what is dropped here would have been dropped there.
+const MAX_OUTPUT: usize = MAX_TEXT_CELL_LEN * 4;
 
 /// The text of `md` without its markup, keeping its lines: paragraphs and
 /// headings are separated by a blank line, list items start with `- ` (or
@@ -21,6 +30,9 @@ pub fn to_plain(md: &str) -> String {
     // Where the text of the image being read starts, and its address.
     let mut image: Option<(usize, String)> = None;
     for event in Parser::new_ext(md, options) {
+        if out.len() > MAX_OUTPUT {
+            break;
+        }
         match event {
             Event::Text(t) | Event::Code(t) => out.push_str(&t),
             Event::SoftBreak | Event::HardBreak => out.push('\n'),
@@ -42,7 +54,7 @@ pub fn to_plain(md: &str) -> String {
             }
             Event::Start(Tag::Item) => {
                 line_break(&mut out);
-                out.push_str(&"  ".repeat(lists.len().saturating_sub(1)));
+                out.push_str(&"  ".repeat(lists.len().saturating_sub(1).min(MAX_INDENT_LEVELS)));
                 match lists.last_mut() {
                     Some(Some(n)) => {
                         out.push_str(&format!("{n}. "));
@@ -194,5 +206,23 @@ mod tests {
             let md = crate::store::comments::plain_to_markdown(text);
             assert_eq!(to_plain(&md), text, "{md}");
         }
+    }
+
+    #[test]
+    fn deeply_nested_lists_do_not_blow_up_the_output() {
+        // 49,999 levels on one line, the largest a cell can hold: unbounded this indents each
+        // level by its depth, gigabytes of spaces.
+        let md = format!("{}x", "- ".repeat(49_999));
+        let started = std::time::Instant::now();
+        let text = to_plain(&md);
+        assert!(
+            text.len() <= super::MAX_OUTPUT + 200,
+            "{} bytes",
+            text.len()
+        );
+        assert!(text.starts_with('-'));
+        assert!(started.elapsed().as_secs() < 5);
+        // Nesting within the indented levels reads as before.
+        assert_eq!(to_plain("- a\n  - b\n    - c"), "- a\n  - b\n    - c");
     }
 }
