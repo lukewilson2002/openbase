@@ -258,6 +258,15 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Security
 
+- **PDF previews, automation templates, trashed bases and CSV cells are bounded.** A PDF is
+  rendered by a child process with its memory capped, so a file that states a huge image cannot end the
+  server (it gets no preview). An automation action stops at 4 MB of copied values instead of copying a
+  large webhook body once per placeholder. In an HTTP request URL a placeholder value of `.` or `..` is
+  refused (it would move the request to a parent path), and Azure's platform address 168.63.129.16 is
+  refused like other cloud-metadata addresses. (Behaviour change.) In a `send_email` recipient list a
+  placeholder whose value holds a comma or semicolon fails the action; separators written in the
+  template still split the list. Webhooks, schedules and queued runs of a base or workspace in the trash
+  stop until it is restored. CSV export also guards a formula that follows a `;` inside a cell.
 - **An API token can no longer make an administrator or re-point outgoing mail.** (Behaviour change, REST and
   MCP.) `is_admin: true` in `POST /api/admin/users` and `PATCH /api/admin/users/{id}` (and so in
   `admin_create_user` and `admin_update_user`) answers 403 for an API token or OAuth grant, and the MCP tools

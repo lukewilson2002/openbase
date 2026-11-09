@@ -753,7 +753,9 @@ Airtable's, need the same bearer token (or a signed-in session) to download.
 `thumbnails` (images, PDFs and videos) has `small` and `large` pointing at OpenBase's
 single 400 px preview (an image scaled down, a PDF's first page, a video's first frame)
 and `full` at the original, each with `url`, `width`, `height`. A PDF's `width` and
-`height` are its first page's size in points; a video's, its frame's in pixels.
+`height` are its first page's size in points; a video's, its frame's in pixels. A PDF is rendered by a
+child process of the server with its memory capped at 1 GiB and a 30 second limit; one that needs more
+(or a malformed one) simply gets no preview.
 
 ### 2.6 Writing records
 
@@ -919,7 +921,8 @@ text is left out.
   while it streams cannot repeat or skip rows).
   UTF-8 with a BOM, CRLF, RFC 4180 quoting. Cells (and headers) starting with
   `=`, `+`, `-`, `@`, TAB or CR get a leading `'` so spreadsheets do not run
-  them as formulas (numbers keep their sign). The file name is the view name,
+  them as formulas (numbers keep their sign); the same `'` goes after every `;` inside a cell that is
+  followed by one of those characters, for spreadsheets that split a line on `;`. The file name is the view name,
   sanitized.
 - `POST /api/tables/{id}/import` (Editor): multipart `file` (CSV, at most 20 MB,
   100,000 rows, 500 columns and 3,000,000 cells, counting every row as padded

@@ -70,7 +70,13 @@ record values (numbers stay numbers, arrays stay arrays).
 Substituted text is escaped for where it lands: percent-encoded in URLs,
 JSON-string-escaped in JSON request bodies (explicit JSON `Content-Type`, or a
 body starting with `{` or `[`), form-encoded for
-`application/x-www-form-urlencoded`.
+`application/x-www-form-urlencoded`. A value that is only dots (`.`, `..`) is refused where it
+would be percent-encoded for a URL, because URL parsing reads it as a path step and would send the
+request (with the action's headers) to a parent path. In a `send_email` recipient list, commas and
+semicolons written in the template separate the addresses, but a substituted value is one address:
+one that holds a comma or semicolon fails the action. All the values one action copies out of a
+webhook body or earlier step, together with the text it renders, are limited to 4 MB in all; beyond
+that the action fails.
 
 ## Runs
 
@@ -87,6 +93,9 @@ and writes a step log after every step.
   (resuming after their last logged step); a second interruption fails them.
 * **No loops.** Records written by an automation do not fire record triggers.
 * **Disabled automations never run**; turning one off cancels its queued runs.
+* **A base or workspace in the trash runs nothing.** Its webhook URLs answer 404, its schedules
+  do not fire and runs already queued or waiting to be retried fail with "the base is in the
+  trash". Restoring it brings the webhooks back; a schedule that fell due meanwhile fires once.
 * **Retention.** Finished runs older than 30 days are deleted. A finished
   webhook run keeps at most the first 16,384 characters of its request body
   (`trigger_data.body` becomes `{"truncated": true, "preview": "..."}`). At most 5,000
@@ -97,7 +106,7 @@ and writes a step log after every step.
 
 Only `http` / `https` URLs without credentials. The host is resolved by the
 server and every address must be public: loopback, RFC 1918, link-local
-(including 169.254.169.254), CGNAT, multicast, unspecified, reserved and
+(including 169.254.169.254 and Azure's 168.63.129.16), CGNAT, multicast, unspecified, reserved and
 unique-local IPv6 ranges, and IPv6 forms embedding an IPv4 address are
 refused. The connection is pinned to the vetted address (DNS rebinding cannot
 swap it), redirects are not followed, the system proxy is ignored, requests

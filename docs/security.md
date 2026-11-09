@@ -429,6 +429,10 @@ ceremony state (not the credentials) is kept in memory, which suits the single-n
 | CSV import | 20 MB, 100,000 rows, 500 columns, **3,000,000 cells** (rows x widest row), two imports at a time server-wide; bad rows are found by bisection, at most 50 are reported |
 | Webhook calls (`/api/hooks/{token}`) | body up to 1 MB; 60 per minute per automation and 30 per minute with unknown tokens per client address; 200 queued runs per automation; a finished run keeps the first 16,384 characters of the body, runs are deleted after 30 days |
 | Body of a public share query (`POST /api/public/shares/{token}/query`) | 64 KiB (413 beyond), read before the token is checked; the rest of the API takes 4 MB |
+| PDF previews | rendered by a child process (`openbase preview-pdf`, started through `sh -c "ulimit -v 1048576"`) capped at 1 GiB of address space and killed after 30 seconds, one at a time; a file that states a huge image or inflates without bound fails the child, not the server. The cap is enforced on Linux (the Docker image needs `sh`); macOS refuses the limit and only gets the separate process |
+| Automation templates | the values copied out of a webhook body or earlier step plus rendered text: 4 MB per action (each is measured before it is copied); one rendered string 1 MB; a dot-only value in a URL and a comma or semicolon in a recipient value are refused |
+| Automations of a trashed base or workspace | webhook tokens answer 404, schedules do not fire, queued and retried runs fail until it is restored |
+| CSV export | a cell gets a leading `'` when it starts with `=`, `+`, `-`, `@`, tab or CR, and one after each inner `;` followed by such a character (spreadsheets with `;` as list separator) |
 | Group headers in a public share response | 1,000, key/label cut to 200 characters, raw value never sent, user-field keys replaced by placeholders |
 
 ### What a share link exposes
