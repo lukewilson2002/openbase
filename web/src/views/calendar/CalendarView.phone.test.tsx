@@ -44,6 +44,22 @@ describe("CalendarView on a phone", () => {
     await waitFor(() => expect(screen.queryByRole("complementary", { name: "Unscheduled records" })).not.toBeInTheDocument());
   });
 
+  it("opens a day's \"+N more\" as a bottom sheet of its records, not FullCalendar's pop-over (PH-3)", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const crowded = Array.from({ length: 6 }, (_, i) => rec(`c${i}`, { [F.start.id]: "2026-03-10" }));
+    setup({ "POST /api/views/viw1/query": queryHandler({ records: crowded }) });
+    const more = await waitFor(() => {
+      const el = document.querySelector<HTMLElement>(".fc-more-link");
+      if (!el) throw new Error("no more link yet");
+      return el;
+    });
+    await user.click(more);
+    const sheet = await screen.findByRole("dialog", { name: /Tuesday.*10|10.*Tuesday/ });
+    expect(document.querySelector(".fc-popover")).toBeNull();
+    // All six records are listed, not only the ones the day had no room for.
+    expect(within(sheet).getAllByRole("button", { name: /^C\d$/ })).toHaveLength(6);
+  });
+
   it("adds on the month on screen, not on today", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const made = rec("rnew", {});

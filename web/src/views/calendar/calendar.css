@@ -173,6 +173,18 @@
   .ob-calendar .fc-dayGridMonth-view .fc-daygrid-day-frame {
     min-height: 3.25rem;
   }
+  /* "+N more" is a 15 px line: a layer around it makes it a 44 px target (PH-6); it opens the day's sheet. */
+  .ob-calendar .fc-more-link {
+    position: relative;
+    z-index: 4;
+    /* FullCalendar clips its link to its own box, which would clip the layer too; "+N more" is too short to need an ellipsis. */
+    overflow: visible;
+  }
+  .ob-calendar .fc-more-link::after {
+    content: "";
+    position: absolute;
+    inset: -15px -6px;
+  }
 }
 /* Week and day layouts of date-only fields: a row of tall day cells, with the room the hourly grid would use. */
 .ob-calendar .fc-dayGridWeek-view .fc-daygrid-day-top,

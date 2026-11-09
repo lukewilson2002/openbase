@@ -88,7 +88,7 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, desc
           type="button"
           onClick={onToggle}
           aria-expanded={false}
-          className={cn("absolute bottom-3 left-3 z-10 flex h-10 items-center gap-2 rounded-pill border border-line bg-surface px-3.5 text-label font-semibold shadow-pop", dropActive && dropClass)}
+          className={cn("absolute bottom-3 left-3 z-10 flex h-control-touch items-center gap-2 rounded-pill border border-line bg-surface px-3.5 text-label font-semibold shadow-pop", dropActive && dropClass)}
         >
           <Inbox aria-hidden className="size-4 text-muted" />
           Unscheduled{count === null ? "" : ` · ${count}`}

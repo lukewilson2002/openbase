@@ -21,7 +21,7 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import listPlugin from "@fullcalendar/list";
 import interactionPlugin, { Draggable, type DateClickArg, type DropArg } from "@fullcalendar/interaction";
-import type { DatesSetArg, DayCellContentArg, EventClickArg, EventContentArg, EventDropArg, EventMountArg } from "@fullcalendar/core";
+import type { DatesSetArg, DayCellContentArg, EventClickArg, EventContentArg, EventDropArg, EventMountArg, MoreLinkArg } from "@fullcalendar/core";
 import type { EventResizeDoneArg } from "@fullcalendar/interaction";
 import { ChevronLeft, ChevronRight, Info } from "lucide-react";
 import type { DateRange, Field, TableRecord, ViewConfig } from "@/api/types";
@@ -29,6 +29,7 @@ import { FIELD_TYPE_LABELS } from "@/components/ui/field-type-icon";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Field as FormField, Select } from "@/components/ui/input";
+import { SheetMenu, SheetMenuGroup, SheetMenuRow } from "@/components/ui/sheet-menu";
 import { Spinner } from "@/components/ui/spinner";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
@@ -153,6 +154,32 @@ function DayNumber({ arg }: { arg: DayCellContentArg }) {
   return arg.isToday ? <span className="ob-cal-today">{d}</span> : <span>{text}</span>;
 }
 
+/** A day's records, for the sheet a "+N more" opens on a phone (PH-3), where FullCalendar's own pop-over is too small to tap in. */
+interface DayList {
+  title: string;
+  items: { id: string; title: string; time?: string }[];
+}
+
+const DAY_TITLE = new Intl.DateTimeFormat(undefined, { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+const CLOCK = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone: "UTC" });
+
+function dayListOf(arg: MoreLinkArg): DayList {
+  return {
+    title: DAY_TITLE.format(arg.date),
+    items: arg.allSegs.map((seg) => ({
+      id: String(seg.event.extendedProps.recordId),
+      title: seg.event.title || "Untitled",
+      time: !seg.event.allDay && seg.event.start ? CLOCK.format(seg.event.start) : undefined,
+    })),
+  };
+}
+
+/**
+ * FullCalendar opens its pop-over for an empty or "popover" answer and zooms to a view for a string; any other answer does
+ * nothing, which is what a function that has opened its own sheet wants. (Its types only know the first two.)
+ */
+const NO_FURTHER_ACTION = true as unknown as string;
+
 /** Why events cannot be moved, when the date fields are computed (null when they can be). */
 function readOnlyReason(fields: { start: Field; end: Field | null }): string | null {
   const kind = (f: Field) => (f.type === "created_time" || f.type === "last_modified_time" ? `a ${FIELD_TYPE_LABELS[f.type]} property, which fills itself in` : `a ${FIELD_TYPE_LABELS[f.type]} property, which is worked out from other properties`);
@@ -174,6 +201,11 @@ function CalendarInner(props: ViewProps) {
   const primary = table.fields.find((f) => f.id === table.primary_field_id);
   const [visible, setVisible] = useState<{ from: string; to: string } | null>(null);
   const [title, setTitle] = useState("");
+  const [dayList, setDayList] = useState<DayList | null>(null);
+  const onMoreLink = (arg: MoreLinkArg) => {
+    setDayList(dayListOf(arg));
+    return NO_FURTHER_ACTION;
+  };
   // Where the view was left last time; FullCalendar reads it when it starts (and again if the date field's kind changes).
   const remembered = useMemo(() => loadCalendarState(view.id), [view.id]);
   const [layout, setLayout] = useState<Layout>(remembered?.layout ?? "month");
@@ -460,7 +492,8 @@ function CalendarInner(props: ViewProps) {
               {reason}
             </p>
           )}
-          <div ref={box} className="ob-calendar relative min-h-0 flex-1" onKeyDown={onKeyDown}>
+          {/* On a phone the closed Unscheduled pill floats over the foot of the view: room is left for it, or it would sit over the last week's "+N more". */}
+          <div ref={box} className={cn("ob-calendar relative min-h-0 flex-1", !desktop && !unscheduledOpen && "pb-14")} onKeyDown={onKeyDown}>
             <FullCalendar
               // A different kind of date field draws weeks and days differently: start over in the same layout.
               key={grid}
@@ -480,6 +513,8 @@ function CalendarInner(props: ViewProps) {
               fixedWeekCount={false}
               views={VIEW_OPTIONS}
               dayMaxEvents
+              // A desktop gets FullCalendar's pop-over; a phone gets the day's records in a bottom sheet.
+              moreLinkClick={desktop ? "popover" : onMoreLink}
               // FullCalendar gives the "+N more" link aria-expanded and no role, which a link does not allow.
               moreLinkDidMount={(arg) => arg.el.setAttribute("role", "button")}
               scrollTime="08:00:00"
@@ -517,6 +552,15 @@ function CalendarInner(props: ViewProps) {
             />
           </div>
         </div>
+        <SheetMenu open={!!dayList} onOpenChange={(open) => !open && setDayList(null)} title={dayList?.title ?? ""}>
+          <SheetMenuGroup>
+            {dayList?.items.map((item, i) => (
+              <SheetMenuRow key={`${item.id}-${i}`} hint={item.time} onSelect={() => setup.openRecord(item.id)}>
+                {item.title}
+              </SheetMenuRow>
+            ))}
+          </SheetMenuGroup>
+        </SheetMenu>
         <UnscheduledList
           open={unscheduledOpen}
           onToggle={toggleUnscheduled}

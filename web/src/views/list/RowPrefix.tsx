@@ -69,8 +69,10 @@ export function RowPrefix({ field, value, title, canEdit, onChange, people, emai
           if (canEdit) onChange(checked ? null : true);
         }}
         className={cn(
-          // The box is what is drawn; the pseudo-element grows the target to 44 px on a touch screen (PH-6).
-          "relative flex size-5 shrink-0 items-center justify-center rounded border pointer-coarse:size-7 pointer-coarse:after:absolute pointer-coarse:after:-inset-2",
+          // The box is what is drawn; the pseudo-element grows the target to 44 px on a touch screen (PH-6): 28 less the 1 px
+          // border on each side is 26, and 9 px more on each side makes 44. It is raised over the title and the description
+          // beside it, which are later in the row and would otherwise take a tap that lands just outside the box.
+          "relative z-10 flex size-5 shrink-0 items-center justify-center rounded border pointer-coarse:size-7 pointer-coarse:after:absolute pointer-coarse:after:-inset-[9px]",
           checked ? "border-primary bg-primary text-primary-fg" : "border-line-strong bg-surface text-transparent",
           canEdit ? "cursor-pointer hover:border-primary" : "cursor-default",
         )}
@@ -87,7 +89,7 @@ export function RowPrefix({ field, value, title, canEdit, onChange, people, emai
   const choice = !isUser ? choices.find((c) => c.id === current) : undefined;
   const shown: ReactNode = isUser ? (
     person ? (
-      <Avatar name={person.name} email={emails.get(person.id)} color={format.userColor?.(person.id)} size="sm" className="size-5 text-[0.5625rem]" />
+      <Avatar name={person.name} email={emails.get(person.id)} color={format.userColor?.(person.id)} size="sm" className="size-5 text-initial-xs" />
     ) : (
       <Plus aria-hidden className="size-3 text-faint" />
     )
@@ -126,7 +128,7 @@ export function RowPrefix({ field, value, title, canEdit, onChange, people, emai
             {isUser
               ? people.map((u) => (
                   <DropdownMenuItem key={u.id} onSelect={() => set([u.id])}>
-                    <Avatar name={u.name} email={emails.get(u.id)} color={format.userColor?.(u.id)} size="sm" className="size-5 text-[0.5625rem]" />
+                    <Avatar name={u.name} email={emails.get(u.id)} color={format.userColor?.(u.id)} size="sm" className="size-5 text-initial-xs" />
                     <span className="min-w-0 flex-1 truncate">{u.name}</span>
                     {u.id === current && <Check aria-hidden className="size-3.5" />}
                   </DropdownMenuItem>

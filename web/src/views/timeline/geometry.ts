@@ -21,8 +21,13 @@ export const PX_PER_DAY: Record<TimelineScale, number> = { day: 112, week: 56, m
 /** Days shown on each side of the centre when a window is first built (and added per extension). */
 const HALF_SPAN_DAYS: Record<TimelineScale, number> = { day: 45, week: 150, month: 400, quarter: 1100, year: 3000 };
 
-export const ROW_HEIGHT = 34;
-export const BAR_HEIGHT = 28;
+/**
+ * A bar is a tap target (open the record) and a drag handle, so on a touch screen it is 44 px tall (PH-6) in a row of 48. These
+ * are constants the drag maths read everywhere, so they are set once when the page loads: a finger does not become a mouse.
+ */
+const TOUCH = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+export const ROW_HEIGHT = TOUCH ? 48 : 34;
+export const BAR_HEIGHT = TOUCH ? 44 : 28;
 export const LANE_PAD = 6;
 export const MILESTONE_SIZE = 16;
 export const MIN_BAR_WIDTH = 8;
