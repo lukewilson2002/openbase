@@ -44,7 +44,7 @@ function Toolbar({ search, onSearch, summary, children }: { search: string; onSe
         <Search aria-hidden className="pointer-events-none absolute left-2 top-2 size-4 text-muted" />
         <Input type="search" aria-label="Search records" placeholder="Search records" value={search} onChange={(e) => onSearch(e.target.value)} className="h-8 w-56 pl-8" />
       </div>
-      <span className="text-[0.8125rem] text-muted" aria-live="polite">
+      <span className="text-label text-muted" aria-live="polite">
         {summary}
       </span>
       <div className="ml-auto flex items-center gap-2">{children}</div>
@@ -56,7 +56,7 @@ const count = (n: number) => `${n.toLocaleString()} record${n === 1 ? "" : "s"}`
 
 function ErrorLine({ error, onRetry }: { error: Error; onRetry: () => void }) {
   return (
-    <div role="alert" className="mb-3 flex items-center gap-3 rounded-md border border-danger/40 bg-danger-soft px-3 py-2 text-[0.8125rem] text-danger">
+    <div role="alert" className="mb-3 flex items-center gap-3 rounded-md border border-danger/40 bg-danger-soft px-3 py-2 text-label text-danger">
       <span className="flex-1">Could not load records: {error.message}</span>
       <Button size="sm" onClick={onRetry}>
         Try again
@@ -94,7 +94,7 @@ export function SharedView({ token, password, view }: SharedViewProps) {
   return (
     <ShareProvider value={{ token, password, format }}>
       {fallback && (
-        <p className="mb-3 rounded-md bg-subtle px-3 py-2 text-[0.8125rem] text-muted">
+        <p className="mb-3 rounded-md bg-subtle px-3 py-2 text-label text-muted">
           This {type} needs a field that is not shared, so its records are shown as a table.
         </p>
       )}
@@ -167,7 +167,7 @@ function GalleryBody(p: BodyProps & { coverId: string | null | undefined; descri
       </Toolbar>
       {all.error && !data && <ErrorLine error={all.error} onRetry={all.refetch} />}
       {data && <PublicGallery records={data.records} fields={card} colors={data.colors} fit="cover" />}
-      {data?.truncated && <p className="mt-3 text-xs text-muted">Showing the first {data.records.length.toLocaleString()} of {data.total.toLocaleString()} records.</p>}
+      {data?.truncated && <p className="mt-3 text-meta text-muted">Showing the first {data.records.length.toLocaleString()} of {data.total.toLocaleString()} records.</p>}
     </>
   );
 }
@@ -184,7 +184,7 @@ function KanbanBody(p: BodyProps & { stackFieldId: string; hideEmpty: boolean; s
       </Toolbar>
       {all.error && !data && <ErrorLine error={all.error} onRetry={all.refetch} />}
       {data && <PublicKanban stackField={stackField} hideEmpty={p.hideEmpty} stackOrder={p.stackOrder} hiddenStacks={p.hiddenStacks} cardFieldLimit={p.cardFieldLimit} coverFit={p.coverFit} records={data.records} fields={card} colors={data.colors} />}
-      {data?.truncated && <p className="mt-3 text-xs text-muted">Showing the first {data.records.length.toLocaleString()} of {data.total.toLocaleString()} cards.</p>}
+      {data?.truncated && <p className="mt-3 text-meta text-muted">Showing the first {data.records.length.toLocaleString()} of {data.total.toLocaleString()} cards.</p>}
     </>
   );
 }

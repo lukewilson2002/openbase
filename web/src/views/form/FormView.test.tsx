@@ -209,7 +209,7 @@ describe("filling in the form as a signed-in editor", () => {
     const { api } = setup("editor", formView({}, { locked: true }));
     await screen.findByRole("textbox", { name: "Your name" });
     await user.click(screen.getByRole("button", { name: "Submit" }));
-    expect(await screen.findByText("This field is required.")).toBeInTheDocument();
+    expect(await screen.findByText("This question is required.")).toBeInTheDocument();
     expect(screen.getByText(/Some answers need attention/)).toBeInTheDocument();
     expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(0);
   });
@@ -357,7 +357,7 @@ describe("Fill in form from the keyboard", () => {
     const { api } = setup("editor", formView({ fields: [entry(F.name.id, { required: true }), entry(F.effort.id), entry(F.status.id, { required: true })] }, { locked: true }), post);
     await user.type(await screen.findByRole("textbox", { name: "Name" }), "Ada");
     await user.click(screen.getByRole("button", { name: "Submit" }));
-    await screen.findAllByText("This field is required.");
+    await screen.findAllByText("This question is required.");
     expect(document.activeElement?.closest("[data-field-id]")?.getAttribute("data-field-id")).toBe(F.status.id);
     expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(0);
     // The first field is the one when it is the one missing.
@@ -433,7 +433,7 @@ describe("the builder preview", () => {
     const { api } = setup("creator", withFiles());
     const preview = await screen.findByRole("region", { name: "Form preview" });
     await user.click(within(preview).getByRole("button", { name: "Submit" }));
-    expect(await within(preview).findByText("This field is required.")).toBeInTheDocument();
+    expect(await within(preview).findByText("This question is required.")).toBeInTheDocument();
     await user.type(within(preview).getByRole("textbox", { name: "Name" }), "Ada");
     await user.click(within(preview).getByRole("button", { name: "Submit" }));
     expect(await screen.findByText("All done")).toBeInTheDocument();

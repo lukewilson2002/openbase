@@ -58,7 +58,7 @@ describe("resolving what was typed into a form", () => {
       { f_link: { json: [] } },
       ctx,
     );
-    expect(errors).toEqual({ f_text: "This field is required.", f_done: "This box must be checked.", f_link: "This field is required." });
+    expect(errors).toEqual({ f_text: "This question is required.", f_done: "This box must be checked.", f_link: "This question is required." });
   });
 
   it("ignores text typed for a link field", () => {
@@ -84,6 +84,6 @@ describe("defaults and show-if conditions in the internal form", () => {
     expect(shownItems(items, drafts, ctx)).toEqual(new Set(["f_status", "blk1", "f_org"]));
     const entries = [status, withDefault].map((f) => ({ field: f, required: f.id === "f_org" }));
     expect(resolveForm(entries, {}, ctx, shownItems(items, {}, ctx))).toEqual({ values: {}, errors: {} });
-    expect(resolveForm(entries, drafts, ctx, shownItems(items, drafts, ctx)).errors).toEqual({ f_org: "This field is required." });
+    expect(resolveForm(entries, drafts, ctx, shownItems(items, drafts, ctx)).errors).toEqual({ f_org: "This question is required." });
   });
 });

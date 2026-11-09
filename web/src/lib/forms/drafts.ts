@@ -87,7 +87,7 @@ export function resolveForm(entries: readonly FormEntry[], drafts: Drafts, ctx: 
       continue;
     }
     if (isEmptyValue(res.value)) {
-      if (required) errors[field.id] = field.type === "checkbox" ? "This box must be checked." : "This field is required.";
+      if (required) errors[field.id] = field.type === "checkbox" ? "This box must be checked." : "This question is required.";
       continue;
     }
     values[field.id] = toWire(field, res.value);

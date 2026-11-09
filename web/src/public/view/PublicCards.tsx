@@ -1,5 +1,6 @@
 /** Read-only cards of a shared gallery and board: cover image, title and the first few filled fields. */
 import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import type { Field, TableRecord } from "@/api/types";
 import { cardTitle, descriptionText, fieldsToShow, isDescriptionField } from "@/views/common/cardFields";
 import { DescriptionHover } from "@/views/common/description";
@@ -43,18 +44,18 @@ export function PublicCard({ record, fields, color, coverFit = "cover", coverHei
       {color && <span aria-hidden data-row-color={color} className="absolute inset-y-0 left-0 z-[1] w-1" style={{ background: swatchColor(color) }} />}
       {fields.cover && <Cover record={record} field={fields.cover} fit={coverFit} height={coverHeight} />}
       <div className="flex flex-col gap-1.5 p-2.5">
-        <h3 className="line-clamp-2 break-words text-[0.8125rem] font-semibold">{cardTitle(fields.title, record, format)}</h3>
+        <h3 className="line-clamp-2 break-words text-label font-semibold">{cardTitle(fields.title, record, format)}</h3>
         {description && (
           <DescriptionHover field={fields.description} record={record} title={cardTitle(fields.title, record, format)} format={format}>
-            <p data-card-description className="-mt-0.5 line-clamp-3 break-words text-[0.8125rem] leading-[1.45] text-muted">
+            <p data-card-description className="-mt-0.5 line-clamp-3 break-words text-label leading-[1.45] text-muted">
               {description}
             </p>
           </DescriptionHover>
         )}
         {shown.map((f) => (
           <div key={f.id} className="min-w-0">
-            <p className="truncate text-[0.6875rem] uppercase tracking-wide text-faint">{f.name}</p>
-            <PublicCell field={f} value={record.values[f.id] ?? null} compact className="line-clamp-3 text-xs" markdown={false} />
+            <p className="truncate text-meta text-faint">{f.name}</p>
+            <PublicCell field={f} value={record.values[f.id] ?? null} compact className="line-clamp-3 text-meta" markdown={false} />
           </div>
         ))}
       </div>
@@ -88,12 +89,10 @@ export function PublicGallery({ records, fields, colors, fit }: { records: reado
           </li>
         ))}
       </ul>
-      {records.length === 0 && <p className="py-10 text-center text-[0.8125rem] text-muted">No records to show.</p>}
+      {records.length === 0 && <p className="py-10 text-center text-label text-muted">No records to show.</p>}
       {records.length > shown && (
         <div className="mt-4 text-center">
-          <button type="button" onClick={() => setShown((n) => n + GALLERY_STEP)} className="rounded-md border border-line-strong px-3 py-1.5 text-[0.8125rem] hover:bg-hover">
-            Show more ({records.length - shown} left)
-          </button>
+          <Button onClick={() => setShown((n) => n + GALLERY_STEP)}>Show more ({records.length - shown} left)</Button>
         </div>
       )}
     </div>
@@ -123,8 +122,8 @@ export function PublicKanban({ stackField, hideEmpty, stackOrder = [], hiddenSta
         <section key={stack.key} role="listitem" aria-label={`Stack: ${stack.label}`} className="flex w-[min(18rem,85vw)] shrink-0 flex-col rounded-lg border border-line bg-subtle">
           <div className="flex items-center gap-1.5 px-2.5 py-2">
             {stack.color && <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: swatchColor(stack.color) }} />}
-            <h3 className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold">{stack.label}</h3>
-            <span className="text-xs tabular-nums text-muted" aria-label={`${stack.records.length} cards`}>
+            <h3 className="min-w-0 flex-1 truncate text-label font-semibold">{stack.label}</h3>
+            <span className="text-meta tabular-nums text-muted" aria-label={`${stack.records.length} cards`}>
               {stack.records.length}
             </span>
           </div>
@@ -134,8 +133,8 @@ export function PublicKanban({ stackField, hideEmpty, stackOrder = [], hiddenSta
                 <PublicCard record={r} fields={fields} color={colors[r.id]} coverFit={coverFit ? "contain" : "cover"} fieldLimit={cardFieldLimit} />
               </li>
             ))}
-            {stack.records.length === 0 && <li className="px-2 py-3 text-center text-xs text-faint">No cards</li>}
-            {stack.records.length > 100 && <li className="px-2 py-1 text-center text-xs text-muted">and {stack.records.length - 100} more</li>}
+            {stack.records.length === 0 && <li className="px-2 py-3 text-center text-meta text-faint">No cards</li>}
+            {stack.records.length > 100 && <li className="px-2 py-1 text-center text-meta text-muted">and {stack.records.length - 100} more</li>}
           </ul>
         </section>
       ))}

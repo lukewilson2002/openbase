@@ -46,7 +46,7 @@ describe("a public form", () => {
     expect(await screen.findByRole("heading", { name: "Join the waitlist" })).toBeInTheDocument();
     expect(screen.getByText("We will write back within a day.")).toBeInTheDocument();
     expect(screen.getByText("As on your ID")).toBeInTheDocument();
-    expect(screen.getByText("Fields marked * are required.")).toBeInTheDocument();
+    expect(screen.getByText("Questions marked * are required.")).toBeInTheDocument();
     for (const label of ["Your name", "Email", "Team size", "Plan", "Start date", "Agree to terms"]) expect(screen.getByLabelText(new RegExp(label))).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /Interests/ })).toBeInTheDocument();
     expect(screen.getByRole("radiogroup", { name: "Rating" })).toBeInTheDocument();
@@ -99,7 +99,7 @@ describe("a public form", () => {
     await user.type(await screen.findByLabelText("Team size"), "lots");
     await user.click(screen.getByRole("button", { name: "Sign me up" }));
     expect(await screen.findByText(/not a number/)).toBeInTheDocument();
-    expect(screen.getByText("This field is required.")).toBeInTheDocument();
+    expect(screen.getByText("This question is required.")).toBeInTheDocument();
     expect(screen.getByText("This box must be checked.")).toBeInTheDocument();
     expect(screen.getByText(/Some answers need attention/)).toBeInTheDocument();
     expect(api.callsTo("POST /api/public/forms/tok_abc/submit")).toHaveLength(0);
@@ -107,7 +107,7 @@ describe("a public form", () => {
     expect(screen.getByLabelText(/Your name/)).toHaveFocus();
     // Fixing a field clears its message.
     await user.type(screen.getByLabelText(/Your name/), "Ada");
-    expect(screen.queryByText("This field is required.")).not.toBeInTheDocument();
+    expect(screen.queryByText("This question is required.")).not.toBeInTheDocument();
   });
 
   it("keeps the answers and explains a refusal by the server", async () => {
@@ -246,21 +246,21 @@ describe("the redirect after submitting", () => {
   });
 });
 
-describe("icons on a public form", () => {
-  it("shows the base and table with their icons above the title", async () => {
-    open({}, { ...form, base_icon: "store", table_icon: "clipboard-list" });
+describe("the collection's color mark on a public form", () => {
+  it("shows a color mark beside the title and no icons", async () => {
+    open({}, { ...form, base_icon: "store", table_icon: "clipboard-list", table_color: "teal" });
     await screen.findByRole("heading", { name: "Join the waitlist" });
     const header = document.querySelector("form header")!;
-    expect(header.querySelector("svg.lucide-store")).toBeInTheDocument();
-    expect(header.querySelector("svg.lucide-clipboard-list")).toBeInTheDocument();
+    expect(header.querySelector(".ob-mark")).toBeInTheDocument();
+    expect(header.querySelector("svg")).toBeNull();
     expect(header).toHaveTextContent("Studio / Leads");
   });
 
-  it("shows just the names without icons", async () => {
+  it("keeps the form in a 640 px column with a submit button as wide as it on a phone", async () => {
     open();
     await screen.findByRole("heading", { name: "Join the waitlist" });
-    expect(document.querySelector("form header svg")).toBeNull();
-    expect(document.querySelector("form header")).toHaveTextContent("Studio / Leads");
+    expect(document.querySelector("main")).toHaveClass("max-w-[calc(40rem+2rem)]");
+    expect(screen.getByRole("button", { name: "Sign me up" })).toHaveClass("w-full");
   });
 });
 
@@ -297,7 +297,7 @@ describe("sections and conditional questions", () => {
     expect(screen.getByRole("heading", { name: "About Pro" })).toBeInTheDocument();
     expect(screen.getByText("Pro includes priority support.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Sign me up" }));
-    expect(await screen.findByText("This field is required.")).toBeInTheDocument();
+    expect(await screen.findByText("This question is required.")).toBeInTheDocument();
     await user.type(screen.getByLabelText(/Why Pro/), "Speed");
     await user.click(screen.getByRole("button", { name: "Sign me up" }));
     await screen.findByText("You are on the list!");

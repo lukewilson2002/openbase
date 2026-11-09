@@ -7,7 +7,7 @@
 import { useParams } from "react-router";
 import type { PublicView } from "@/api/types";
 import { publicApi } from "@/api/sharing";
-import { EntityLabel } from "@/components/icons/EntityIcon";
+import { ColorMark } from "@/components/ui/color-mark";
 import { PasswordPrompt, PublicLoading, PublicProblemScreen, PublicShell } from "../PublicShell";
 import { usePublicLoad } from "../usePublicLoad";
 import { SharedView } from "./SharedView";
@@ -23,10 +23,11 @@ export default function PublicSharePage() {
   return (
     <PublicShell
       title={view.name}
+      mark={<ColorMark hue={view.table_color} name={view.table_name} size={24} />}
       subtitle={
-        <span className="inline-flex flex-wrap items-center gap-x-1.5">
-          <EntityLabel icon={view.table_icon}>{view.table_name}</EntityLabel> <span aria-hidden>·</span> <EntityLabel icon={view.base_icon}>{view.base_name}</EntityLabel> <span aria-hidden>·</span> <span>read-only</span>
-        </span>
+        <>
+          {view.table_name} <span aria-hidden>·</span> {view.base_name} <span aria-hidden>·</span> read-only
+        </>
       }
       wide
     >

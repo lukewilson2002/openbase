@@ -10,6 +10,7 @@ import type { AttachmentRef, PublicFormField } from "@/api/types";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
+import { AUTH_INPUT } from "@/components/layouts";
 import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
 import { ratingTint } from "@/lib/cells/palette";
@@ -40,25 +41,25 @@ function Frame({ field, id, error, group, children }: { field: PublicFormField; 
     </>
   );
   const help = field.help?.trim() ? (
-    <p id={`${id}-help`} className="whitespace-pre-wrap text-[0.8125rem] text-muted">
+    <p id={`${id}-help`} className="whitespace-pre-wrap text-label text-muted">
       {field.help}
     </p>
   ) : null;
   const err = error ? (
-    <p id={`${id}-err`} role="alert" className="text-xs text-danger">
+    <p id={`${id}-err`} role="alert" className="text-meta text-danger">
       {error}
     </p>
   ) : null;
   return group ? (
     <fieldset className="flex min-w-0 flex-col gap-1.5" data-field-id={field.id} aria-describedby={error ? `${id}-err` : help ? `${id}-help` : undefined}>
-      <legend className="mb-1.5 text-[0.875rem] font-medium">{label}</legend>
+      <legend className="mb-1.5 text-ui font-medium">{label}</legend>
       {help}
       {children}
       {err}
     </fieldset>
   ) : (
     <div className="flex min-w-0 flex-col gap-1.5" data-field-id={field.id}>
-      <label htmlFor={id} className="text-[0.875rem] font-medium">
+      <label htmlFor={id} className="text-ui font-medium">
         {label}
       </label>
       {help}
@@ -78,14 +79,14 @@ export function PublicFieldInput({ field, value, error, disabled, onChange, uplo
     case "textarea":
       return (
         <Frame field={field} id={id} error={error} group={false}>
-          <Textarea {...aria} rows={4} value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)} />
+          <Textarea {...aria} rows={4} className="text-read-phone" value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)} />
         </Frame>
       );
     case "select": {
       const choices = choicesOfInput(field);
       return (
         <Frame field={field} id={id} error={error} group={false}>
-          <Select {...aria} value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)}>
+          <Select {...aria} className={AUTH_INPUT} value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)}>
             <option value="">Choose…</option>
             {choices.map((c) => (
               <option key={c.id} value={c.id}>
@@ -102,13 +103,13 @@ export function PublicFieldInput({ field, value, error, disabled, onChange, uplo
         <Frame field={field} id={id} error={error} group>
           <div className="flex flex-col gap-1">
             {choicesOfInput(field).map((c) => (
-              <label key={c.id} className="flex min-h-8 items-center gap-2 text-[0.875rem]">
+              <label key={c.id} className="flex min-h-control-touch items-center gap-3 text-ui">
                 <input
                   type="checkbox"
                   disabled={disabled}
                   checked={chosen.includes(c.id)}
                   onChange={(e) => onChange(e.target.checked ? [...chosen, c.id] : chosen.filter((x) => x !== c.id))}
-                  className="size-4 accent-[var(--primary)]"
+                  className="size-5 accent-[var(--primary)]"
                 />
                 {c.name}
               </label>
@@ -120,8 +121,8 @@ export function PublicFieldInput({ field, value, error, disabled, onChange, uplo
     case "checkbox":
       return (
         <Frame field={field} id={id} error={error} group={false}>
-          <label className="flex min-h-8 items-center gap-2 text-[0.875rem]">
-            <input {...aria} type="checkbox" checked={value === true} onChange={(e) => onChange(e.target.checked)} className="size-4 accent-[var(--primary)]" />
+          <label className="flex min-h-control-touch items-center gap-3 text-ui">
+            <input {...aria} type="checkbox" checked={value === true} onChange={(e) => onChange(e.target.checked)} className="size-5 accent-[var(--primary)]" />
             Yes
           </label>
         </Frame>
@@ -143,8 +144,8 @@ export function PublicFieldInput({ field, value, error, disabled, onChange, uplo
       const opts = dateOptionsOfInput(field);
       return (
         <Frame field={field} id={id} error={error} group={false}>
-          <Input {...aria} type={kind === "datetime" ? "datetime-local" : "date"} value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)} />
-          {kind === "datetime" && <p className="text-xs text-muted">{opts.timezone ? `Time zone: ${opts.timezone}` : "In your time zone."}</p>}
+          <Input {...aria} className={AUTH_INPUT} type={kind === "datetime" ? "datetime-local" : "date"} value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)} />
+          {kind === "datetime" && <p className="text-meta text-muted">{opts.timezone ? `Time zone: ${opts.timezone}` : "In your time zone."}</p>}
         </Frame>
       );
     }
@@ -154,6 +155,7 @@ export function PublicFieldInput({ field, value, error, disabled, onChange, uplo
         <Frame field={field} id={id} error={error} group={false}>
           <Input
             {...aria}
+            className={AUTH_INPUT}
             type={type}
             inputMode={kind === "number" ? "decimal" : undefined}
             autoComplete={kind === "email" ? "email" : kind === "tel" ? "tel" : "off"}
@@ -183,7 +185,7 @@ function PublicRating({ field, value, disabled, onChange }: { field: PublicFormF
           aria-label={`${n} of ${max}`}
           // Choosing the current rating again clears it.
           onClick={() => onChange(n === value ? 0 : n)}
-          className="inline-flex size-8 items-center justify-center rounded hover:bg-hover max-md:size-control-touch"
+          className="inline-flex size-control-touch items-center justify-center rounded-md hover:bg-hover"
         >
           <Icon aria-hidden className="size-6" style={{ color: tint }} fill={n <= value ? "currentColor" : "none"} />
         </button>
@@ -225,11 +227,11 @@ function PublicFiles({ field, files, disabled, onChange, upload }: { field: Publ
       {files.length > 0 && (
         <ul aria-label={`Files for ${field.label}`} className="flex flex-col gap-1">
           {files.map((f) => (
-            <li key={f.id} className="flex items-center gap-2 rounded-md border border-line px-2 py-1 text-[0.8125rem]">
+            <li key={f.id} className="flex items-center gap-2 rounded-md border border-line py-0.5 pl-3 pr-1 text-label">
               <Paperclip aria-hidden className="size-4 shrink-0 text-muted" />
               <span className="min-w-0 flex-1 truncate">{f.filename}</span>
-              <span className="text-xs text-muted">{formatBytes(f.size)}</span>
-              <button type="button" aria-label={`Remove ${f.filename}`} disabled={disabled} onClick={() => onChange(files.filter((x) => x.id !== f.id))} className="rounded p-1 text-muted hover:bg-hover hover:text-fg">
+              <span className="text-meta text-muted">{formatBytes(f.size)}</span>
+              <button type="button" aria-label={`Remove ${f.filename}`} disabled={disabled} onClick={() => onChange(files.filter((x) => x.id !== f.id))} className="inline-flex size-control-touch items-center justify-center rounded-md text-muted hover:bg-hover hover:text-fg">
                 <X aria-hidden className="size-4" />
               </button>
             </li>
@@ -249,18 +251,18 @@ function PublicFiles({ field, files, disabled, onChange, upload }: { field: Publ
             e.target.value = "";
           }}
         />
-        <Button size="sm" disabled={disabled || busy > 0} onClick={() => inputRef.current?.click()} className={cn(busy > 0 && "opacity-80")}>
+        <Button disabled={disabled || busy > 0} onClick={() => inputRef.current?.click()} className={cn(busy > 0 && "opacity-80")}>
           <Upload aria-hidden className="size-4" /> {files.length > 0 ? "Add more files" : "Choose files"}
         </Button>
         {busy > 0 && (
-          <span className="inline-flex items-center gap-1.5 text-[0.8125rem] text-muted">
+          <span className="inline-flex items-center gap-1.5 text-label text-muted">
             <Spinner className="size-3.5" label="Uploading" /> Uploading {busy} file{busy === 1 ? "" : "s"}…
           </span>
         )}
-        <span className="text-xs text-muted">Up to {formatBytes(PUBLIC_UPLOAD_MAX_BYTES)} each.</span>
+        <span className="text-meta text-muted">Up to {formatBytes(PUBLIC_UPLOAD_MAX_BYTES)} each.</span>
       </div>
       {errors.length > 0 && (
-        <ul role="alert" className="text-xs text-danger">
+        <ul role="alert" className="text-meta text-danger">
           {errors.map((e) => (
             <li key={e}>{e}</li>
           ))}

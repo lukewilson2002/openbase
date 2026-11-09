@@ -123,7 +123,7 @@ export function PublicTimeline({ fields, dates, groupField, search, transient }:
           Timeline scale
         </label>
         <span className="w-28">
-          <Select id="public-timeline-scale" value={scale} onChange={(e) => setScale(e.target.value as TimelineScale)} className="h-7 text-[0.8125rem]">
+          <Select id="public-timeline-scale" value={scale} onChange={(e) => setScale(e.target.value as TimelineScale)} className="h-7 text-label">
             {SCALES.map((s) => (
               <option key={s} value={s}>
                 {SCALE_LABELS[s]}
@@ -141,11 +141,11 @@ export function PublicTimeline({ fields, dates, groupField, search, transient }:
           <CalendarCheck aria-hidden className="size-4" /> Today
         </Button>
         {records.fetching && <Spinner className="size-4" label="Loading records" />}
-        <span className="ml-auto text-xs text-muted" aria-live="polite">
+        <span className="ml-auto text-meta text-muted" aria-live="polite">
           {barCount.toLocaleString()} record{barCount === 1 ? "" : "s"} with dates
         </span>
       </div>
-      {records.error && !data && <p role="alert" className="text-[0.8125rem] text-danger">Could not load records: {records.error.message}</p>}
+      {records.error && !data && <p role="alert" className="text-label text-danger">Could not load records: {records.error.message}</p>}
       <div className="relative h-[min(36rem,70dvh)] overflow-hidden rounded-lg border border-line bg-surface">
         <TimelineChart
           axis={axis}
@@ -167,7 +167,7 @@ export function PublicTimeline({ fields, dates, groupField, search, transient }:
           }}
         />
       </div>
-      {data?.truncated && <p className="text-xs text-muted">Showing the first {data.records.length.toLocaleString()} of {data.total.toLocaleString()} records.</p>}
+      {data?.truncated && <p className="text-meta text-muted">Showing the first {data.records.length.toLocaleString()} of {data.total.toLocaleString()} records.</p>}
     </section>
   );
 }

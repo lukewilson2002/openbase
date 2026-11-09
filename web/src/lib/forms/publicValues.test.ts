@@ -85,7 +85,7 @@ describe("building the submission", () => {
   it("flags required fields that are empty, unchecked or cleared", () => {
     const fields = [f("a", "text", {}, { required: true }), f("ok", "checkbox", {}, { required: true }), { ...tags, required: true }, f("n", "number", { precision: 0, allow_negative: true }, { required: true })];
     const { errors } = buildSubmission(fields, { a: "  ", ok: false, tags: [], n: "" }, ctx);
-    expect(errors).toEqual({ a: "This field is required.", ok: "This box must be checked.", tags: "This field is required.", n: "This field is required." });
+    expect(errors).toEqual({ a: "This question is required.", ok: "This box must be checked.", tags: "This question is required.", n: "This question is required." });
   });
 
   it("explains values a field cannot hold", () => {
@@ -147,7 +147,7 @@ describe("headings, paragraphs and show-if conditions", () => {
 
   it("asks for it once it is shown", () => {
     expect(shownFields(form, { name: "A", status: "c1" }, ctx)).toEqual(new Set(["name", "status", "h", "why", "t"]));
-    expect(buildSubmission(form, { name: "A", status: "c1" }, ctx).errors).toEqual({ why: "This field is required." });
+    expect(buildSubmission(form, { name: "A", status: "c1" }, ctx).errors).toEqual({ why: "This question is required." });
     expect(buildSubmission(form, { name: "A", status: "c1", why: "Because" }, ctx).values).toEqual({ name: "A", status: "c1", why: "Because" });
   });
 

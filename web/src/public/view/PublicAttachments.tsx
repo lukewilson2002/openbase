@@ -60,12 +60,12 @@ function FileLink({ file }: { file: AttachmentRef }) {
   const label = (
     <>
       {file.filename}
-      <span className="ml-1.5 text-xs text-muted">{formatBytes(file.size)}</span>
+      <span className="ml-1.5 text-meta text-muted">{formatBytes(file.size)}</span>
     </>
   );
   if (password === null) {
     return (
-      <a href={publicApi.attachmentUrl(token, file.id, file.filename)} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate text-[0.8125rem]">
+      <a href={publicApi.attachmentUrl(token, file.id, file.filename)} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate text-label">
         {label}
       </a>
     );
@@ -73,7 +73,7 @@ function FileLink({ file }: { file: AttachmentRef }) {
   return (
     <button
       type="button"
-      className="min-w-0 truncate text-left text-[0.8125rem] text-primary-text underline underline-offset-2 hover:no-underline"
+      className="min-w-0 truncate text-left text-label text-primary-text underline underline-offset-2 hover:no-underline"
       onClick={() => {
         setFailed(false);
         publicApi
@@ -83,7 +83,7 @@ function FileLink({ file }: { file: AttachmentRef }) {
       }}
     >
       {label}
-      {failed && <span className="ml-1 text-xs text-danger">Could not download</span>}
+      {failed && <span className="ml-1 text-meta text-danger">Could not download</span>}
     </button>
   );
 }

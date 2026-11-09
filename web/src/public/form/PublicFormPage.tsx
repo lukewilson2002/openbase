@@ -5,14 +5,16 @@
  * ends with the success message and an optional "Submit another response", or, when the form has a
  * redirect address, goes straight there (the address may carry the new record's id).
  */
-import { EntityLabel } from "@/components/icons/EntityIcon";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useLocation, useParams } from "react-router";
 import { publicApi } from "@/api/sharing";
 import type { AttachmentRef, PublicForm } from "@/api/types";
 import { FormDone } from "@/components/forms/FormDone";
 import { Button } from "@/components/ui/button";
-import { Notice } from "@/components/layouts";
+import { Card } from "@/components/ui/card";
+import { ColorMark } from "@/components/ui/color-mark";
+import { AUTH_BUTTON, Notice } from "@/components/layouts";
+import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { describeSubmitError } from "@/lib/publicErrors";
 import { browserTimeZone } from "@/lib/format";
 import { DEFAULT_SUBMIT_LABEL, DEFAULT_SUCCESS_MESSAGE, redirectAfterSubmit } from "@/lib/forms/formConfig";
@@ -49,6 +51,7 @@ function FilledForm({ token, password, form }: { token: string; password: string
   // Set once the answers were sent: the id of the new record (it can be part of the redirect address).
   const [done, setDone] = useState<{ recordId: string | null } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const desktop = useMediaQuery(DESKTOP_QUERY);
   const redirect = done ? redirectAfterSubmit(form.redirect_url, done.recordId) : null;
 
   // A form with a redirect address sends people there at once, in place of the message.
@@ -111,11 +114,11 @@ function FilledForm({ token, password, form }: { token: string; password: string
       setDone(null);
     };
     return (
-      <PublicShell>
+      <PublicShell title={form.title} hideHeader>
         {redirect ? (
-          <FormDone level={1} className="mt-6 rounded-lg shadow-sm" message="Taking you on…" note={<a href={redirect} className="text-primary-text underline">Continue</a>} />
+          <FormDone level={1} className="mt-6 rounded-lg max-md:rounded-xl" message="Taking you on…" note={<a href={redirect} className="text-primary-text underline">Continue</a>} />
         ) : (
-          <FormDone level={1} className="mt-6 rounded-lg shadow-sm" message={form.success_message.trim() || DEFAULT_SUCCESS_MESSAGE} onAnother={form.show_submit_another ? another : undefined} />
+          <FormDone level={1} className="mt-6 rounded-lg max-md:rounded-xl" message={form.success_message.trim() || DEFAULT_SUCCESS_MESSAGE} onAnother={form.show_submit_another ? another : undefined} />
         )}
       </PublicShell>
     );
@@ -128,40 +131,45 @@ function FilledForm({ token, password, form }: { token: string; password: string
   const questions = form.fields.filter((f) => !f.block);
   const anyRequired = visible.some((f) => !f.block && f.required);
   return (
-    <PublicShell>
-      <form ref={formRef} onSubmit={(e) => void submit(e)} noValidate aria-label={form.title} className="flex flex-col gap-6 rounded-lg border border-line bg-surface p-5 shadow-sm sm:p-7">
-        <header className="flex flex-col gap-1.5">
-          <p className="inline-flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
-            <EntityLabel icon={form.base_icon}>{form.base_name}</EntityLabel> <span aria-hidden>/</span> <EntityLabel icon={form.table_icon}>{form.table_name}</EntityLabel>
-          </p>
-          <h1 className="text-2xl">{form.title}</h1>
-          {form.description.trim() && <p className="whitespace-pre-wrap text-[0.9375rem] text-muted">{form.description}</p>}
-          {anyRequired && <p className="text-xs text-muted">Fields marked * are required.</p>}
-        </header>
-        {questions.length === 0 ? (
-          <Notice>This form has no questions yet.</Notice>
-        ) : (
-          <div className="flex flex-col gap-5">
-            {visible.map((f) =>
-              f.block ? <PublicFormBlock key={f.id} field={f} /> : <PublicFieldInput key={f.id} field={f} value={inputs[f.id]} error={errors[f.id]} disabled={submitting} onChange={(v) => set(f.id, v)} upload={upload} />,
-            )}
+    <PublicShell title={form.title} hideHeader>
+      <Card className="p-5 sm:p-7">
+        <form ref={formRef} onSubmit={(e) => void submit(e)} noValidate aria-label={form.title} className="flex flex-col gap-6">
+          <header className="flex flex-col gap-2">
+            <h1 className="flex min-w-0 items-center gap-2.5 text-title max-md:text-h2">
+              <ColorMark hue={form.table_color} name={form.table_name} size={desktop ? 28 : 24} />
+              <span className="min-w-0 break-words">{form.title}</span>
+            </h1>
+            <p className="text-meta text-muted">
+              {form.base_name} / {form.table_name}
+            </p>
+            {form.description.trim() && <p className="whitespace-pre-wrap text-read text-muted max-md:text-read-phone">{form.description}</p>}
+            {anyRequired && <p className="text-meta text-muted">Questions marked * are required.</p>}
+          </header>
+          {questions.length === 0 ? (
+            <Notice>This form has no questions yet.</Notice>
+          ) : (
+            <div className="flex flex-col gap-5">
+              {visible.map((f) =>
+                f.block ? <PublicFormBlock key={f.id} field={f} /> : <PublicFieldInput key={f.id} field={f} value={inputs[f.id]} error={errors[f.id]} disabled={submitting} onChange={(v) => set(f.id, v)} upload={upload} />,
+              )}
+            </div>
+          )}
+          {failure && <Notice tone="error">{failure}</Notice>}
+          {Object.keys(errors).length > 0 && <Notice tone="error">Some answers need attention. Check the questions marked above.</Notice>}
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+            <Button type="submit" variant="primary" size="lg" className={`${AUTH_BUTTON} sm:w-auto`} loading={submitting} disabled={questions.length === 0 || uploading > 0}>
+              {form.submit_label.trim() || DEFAULT_SUBMIT_LABEL}
+            </Button>
+            {uploading > 0 && <span role="status" className="text-label text-muted">Waiting for the upload to finish…</span>}
           </div>
-        )}
-        {failure && <Notice tone="error">{failure}</Notice>}
-        {Object.keys(errors).length > 0 && <Notice tone="error">Some answers need attention. Check the fields marked above.</Notice>}
-        <div className="flex items-center gap-3">
-          <Button type="submit" variant="primary" size="lg" loading={submitting} disabled={questions.length === 0 || uploading > 0}>
-            {form.submit_label.trim() || DEFAULT_SUBMIT_LABEL}
-          </Button>
-          {uploading > 0 && <span className="text-[0.8125rem] text-muted">Waiting for the upload to finish…</span>}
-        </div>
-      </form>
+        </form>
+      </Card>
     </PublicShell>
   );
 }
 
 /** A heading or a paragraph between the questions. */
 export function PublicFormBlock({ field }: { field: PublicForm["fields"][number] }) {
-  if (field.block === "heading") return <h2 className="mt-2 border-b border-line pb-1.5 text-lg font-semibold">{field.label}</h2>;
-  return <p className="whitespace-pre-wrap text-[0.9375rem] leading-normal text-muted">{field.help}</p>;
+  if (field.block === "heading") return <h2 className="mt-2 border-b border-line pb-1.5 text-h3">{field.label}</h2>;
+  return <p className="whitespace-pre-wrap text-read text-muted max-md:text-read-phone">{field.help}</p>;
 }

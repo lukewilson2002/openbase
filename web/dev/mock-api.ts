@@ -1122,12 +1122,64 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
       return send(res, 201, link), true;
     }
   }
+  if ((g = /^\/api\/shares\/([^/]+)$/.exec(p)) && m === "DELETE") {
+    const at = shares.findIndex((x) => x.id === g![1]);
+    if (at < 0) return err(res, 404, "not_found", "share not found"), true;
+    shares.splice(at, 1);
+    return send(res, 200, { ok: true }), true;
+  }
+  if (publicRoutes(m, p, res)) return true;
   if ((g = /^\/api\/shares\/([^/]+)$/.exec(p)) && m === "PATCH") {
     const link = shares.find((x) => x.id === g![1]);
     if (!link) return err(res, 404, "not_found", "share not found"), true;
     if (body.enabled !== undefined) link.enabled = body.enabled;
     if (body.password !== undefined) link.has_password = body.password !== null;
     return send(res, 200, link), true;
+  }
+  return false;
+}
+
+// ---- public pages (a form link, a shared view) ----------------------------------------------------
+// Any token opens the same small example: the collection's color mark, a few questions, three rows.
+// The mock is always signed in, so it cannot show the password prompt; the real server does.
+function publicRoutes(m: string, p: string, res: ServerResponse): boolean {
+  if (m === "GET" && /^\/api\/public\/forms\/[^/]+$/.test(p)) {
+    return send(res, 200, {
+      title: "Join the waitlist",
+      description: "We write back within a day.",
+      base_name: "Acme Studio",
+      table_name: "Tasks",
+      table_color: "teal",
+      submit_label: "Sign me up",
+      success_message: "You are on the list!",
+      redirect_url: null,
+      show_submit_another: true,
+      fields: [
+        { id: "fld_name", label: "Your name", help: null, required: true, type: "text", options: { multiline: false } },
+        { id: "fld_email", label: "Email", help: "Only used to reply.", required: false, type: "email", options: {} },
+        { id: "fld_plan", label: "Plan", help: null, required: false, type: "single_select", options: { choices: [{ id: "c1", name: "Free", color: "gray" }, { id: "c2", name: "Pro", color: "blue" }] } },
+      ],
+    }), true;
+  }
+  if (m === "POST" && /^\/api\/public\/forms\/[^/]+\/submit$/.test(p)) return send(res, 200, { ok: true, record_id: newId("rec") }), true;
+  if (m === "GET" && /^\/api\/public\/shares\/[^/]+$/.test(p)) {
+    return send(res, 200, {
+      kind: "view",
+      name: "Team board",
+      type: "grid",
+      table_name: "Tasks",
+      table_color: "teal",
+      base_name: "Acme Studio",
+      fields: [
+        { id: "fld_name", name: "Name", type: "text", options: { multiline: false } },
+        { id: "fld_qty", name: "Qty", type: "number", options: { precision: 0 } },
+      ],
+      config: { field_widths: {}, frozen_columns: 0, kanban_hide_empty_stacks: false, kanban_stack_order: [], kanban_hidden_stacks: [], kanban_cover_fit: false },
+    }), true;
+  }
+  if (m === "POST" && /^\/api\/public\/shares\/[^/]+\/query$/.test(p)) {
+    const records = [["Alpha", 4], ["Bravo", 12], ["Charlie", 7]].map(([name, qty], i) => ({ id: `rec_pub${i}`, values: { fld_name: name, fld_qty: qty } }));
+    return send(res, 200, { total: records.length, offset: 0, records, groups: [], colors: {} }), true;
   }
   return false;
 }

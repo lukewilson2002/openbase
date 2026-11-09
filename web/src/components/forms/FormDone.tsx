@@ -26,8 +26,8 @@ export function FormDone({ message, note, onAnother, anotherLabel = "Submit anot
   return (
     <div role="status" className={cn("mx-auto flex w-full flex-col items-center gap-3 border border-line bg-surface p-8 text-center", className)}>
       <CircleCheck aria-hidden className="size-8 text-success" />
-      <Heading className="text-xl">{message}</Heading>
-      {note && <div className="text-[0.8125rem] text-muted">{note}</div>}
+      <Heading className="text-h2">{message}</Heading>
+      {note && <div className="text-label text-muted">{note}</div>}
       {onAnother && (
         <Button variant="primary" onClick={onAnother}>
           {anotherLabel}

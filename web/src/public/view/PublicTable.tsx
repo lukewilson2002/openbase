@@ -43,7 +43,7 @@ const Row = memo(function Row({ record, fields, widths, color }: { record: Table
           className={cn("overflow-hidden px-2.5 py-1.5", i === 0 && "sticky left-0 z-[1] border-r border-line bg-surface font-medium")}
           style={{ width: widths[f.id] ?? DEFAULT_WIDTH, maxWidth: widths[f.id] ?? DEFAULT_WIDTH, ...(i === 0 && color ? { boxShadow: `inset 4px 0 0 ${swatchColor(color)}` } : {}) }}
         >
-          <PublicCell field={f} value={record.values[f.id] ?? null} compact className="line-clamp-4 text-[0.8125rem]" markdown={false} />
+          <PublicCell field={f} value={record.values[f.id] ?? null} compact className="line-clamp-4 text-label" markdown={false} />
         </td>
       ))}
     </tr>
@@ -55,7 +55,7 @@ export function PublicTable({ fields, widths, records, offset, groups, colors, s
   const fieldName = new Map(fields.map((f) => [f.id, f.name] as const));
   return (
     <div className={cn("overflow-auto rounded-lg border border-line bg-surface", loading && "opacity-70")}>
-      <table className="w-max min-w-full border-collapse text-left text-[0.8125rem]" aria-label="Records">
+      <table className="w-max min-w-full border-collapse text-left text-label" aria-label="Records">
         <thead className="sticky top-0 z-[2] bg-subtle">
           <tr>
             {fields.map((f, i) => {
@@ -90,7 +90,7 @@ export function PublicTable({ fields, widths, records, offset, groups, colors, s
           {rows.map((row) =>
             row.kind === "group" ? (
               <tr key={`g${row.header.depth}:${row.header.key}:${row.header.start}:${row.continued ? "c" : ""}`} className="border-b border-line bg-subtle/70">
-                <td colSpan={fields.length} className="px-2.5 py-1.5 text-[0.8125rem] font-semibold" style={{ paddingLeft: 10 + row.header.depth * 18 }}>
+                <td colSpan={fields.length} className="px-2.5 py-1.5 text-label font-semibold" style={{ paddingLeft: 10 + row.header.depth * 18 }}>
                   <span className="mr-1.5 font-normal text-muted">{fieldName.get(row.header.field_id) ?? "Group"}:</span>
                   {row.header.label}
                   <span className="ml-2 font-normal text-muted">

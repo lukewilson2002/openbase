@@ -27,7 +27,7 @@ function Chip({ chip }: { chip: DayChip }) {
     <li
       title={chip.time ? `${chip.time} ${chip.title}` : chip.title}
       data-record-id={chip.id}
-      className={cn("truncate rounded px-1.5 py-0.5 text-xs", !p && "bg-primary text-primary-fg")}
+      className={cn("truncate rounded px-1.5 py-0.5 text-meta", !p && "bg-primary text-primary-fg")}
       style={p ? { background: p.bg, color: p.fg } : undefined}
     >
       {chip.time && <span className="mr-1 opacity-80">{chip.time}</span>}
@@ -76,10 +76,10 @@ export function PublicCalendar({ fields, dates, search, transient }: PublicCalen
         </h2>
         {records.fetching && <Spinner className="size-4" label="Loading records" />}
       </div>
-      {records.error && !records.data && <p role="alert" className="text-[0.8125rem] text-danger">Could not load records: {records.error.message}</p>}
+      {records.error && !records.data && <p role="alert" className="text-label text-danger">Could not load records: {records.error.message}</p>}
       <div className="overflow-x-auto">
         <div className="min-w-[44rem] overflow-hidden rounded-lg border border-line bg-surface">
-          <div className="grid grid-cols-7 border-b border-line bg-subtle text-center text-xs font-medium text-muted">
+          <div className="grid grid-cols-7 border-b border-line bg-subtle text-center text-meta font-medium text-muted">
             {WEEKDAYS.map((d) => (
               <div key={d} className="py-1.5">
                 {d}
@@ -94,7 +94,7 @@ export function PublicCalendar({ fields, dates, search, transient }: PublicCalen
               const inMonth = Number(ymd.slice(5, 7)) === monthNo;
               return (
                 <div key={ymd} role="gridcell" data-date={ymd} aria-label={ymd} className={cn("min-h-24 border-b border-r border-line p-1", !inMonth && "bg-subtle/60 text-faint")}>
-                  <div className={cn("mb-1 text-right text-xs", ymd === today && "font-semibold")}>
+                  <div className={cn("mb-1 text-right text-meta", ymd === today && "font-semibold")}>
                     <span className={cn("inline-flex size-5 items-center justify-center rounded-full", ymd === today && "bg-primary text-primary-fg")}>{Number(ymd.slice(8, 10))}</span>
                   </div>
                   <ul className="flex flex-col gap-0.5">
@@ -103,7 +103,7 @@ export function PublicCalendar({ fields, dates, search, transient }: PublicCalen
                     ))}
                   </ul>
                   {!open && list.length > SHOWN_PER_DAY && (
-                    <button type="button" onClick={() => setExpanded((s) => new Set(s).add(ymd))} className="mt-0.5 px-1 text-xs text-muted hover:text-fg">
+                    <button type="button" onClick={() => setExpanded((s) => new Set(s).add(ymd))} className="mt-0.5 px-1 text-meta text-muted hover:text-fg">
                       +{list.length - SHOWN_PER_DAY} more
                     </button>
                   )}
@@ -113,7 +113,7 @@ export function PublicCalendar({ fields, dates, search, transient }: PublicCalen
           </div>
         </div>
       </div>
-      {records.data?.truncated && <p className="text-xs text-muted">Showing the first {records.data.records.length.toLocaleString()} of {records.data.total.toLocaleString()} records of this month.</p>}
+      {records.data?.truncated && <p className="text-meta text-muted">Showing the first {records.data.records.length.toLocaleString()} of {records.data.total.toLocaleString()} records of this month.</p>}
     </section>
   );
 }

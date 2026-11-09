@@ -285,20 +285,19 @@ describe("shared views of other types", () => {
   });
 });
 
-describe("icons on a shared view", () => {
-  it("shows the table and base icons in the header, a plain name without them", async () => {
-    open({ ...view("grid"), table_icon: "truck", base_icon: "store" });
+describe("the header of a shared view", () => {
+  it("shows the collection's color mark beside the view's name, and no icons", async () => {
+    open({ ...view("grid"), table_icon: "truck", base_icon: "store", table_color: "teal" });
     await screen.findByRole("heading", { name: "Team board" });
     const header = document.querySelector("header")!;
-    expect(header.querySelector("svg.lucide-truck")).toBeInTheDocument();
-    expect(header.querySelector("svg.lucide-store")).toBeInTheDocument();
+    expect(header.querySelector(".ob-mark")).toBeInTheDocument();
+    expect(header.querySelector("svg")).toBeNull();
     expect(header).toHaveTextContent("Tasks · Studio · read-only");
   });
 
-  it("adds nothing when neither has an icon", async () => {
+  it("ends with the small OpenBase mark", async () => {
     open(view("grid"));
     await screen.findByRole("heading", { name: "Team board" });
-    expect(document.querySelector("header svg")).toBeNull();
-    expect(document.querySelector("header")).toHaveTextContent("Tasks · Studio · read-only");
+    expect(document.querySelector("footer")).toHaveTextContent("Powered by OpenBase");
   });
 });

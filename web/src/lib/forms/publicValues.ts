@@ -198,7 +198,7 @@ export function buildSubmission(fields: readonly PublicFormField[], inputs: Form
       continue;
     }
     if (res.value === null || (Array.isArray(res.value) && res.value.length === 0)) {
-      if (f.required) errors[f.id] = controlKindOf(f) === "checkbox" ? "This box must be checked." : "This field is required.";
+      if (f.required) errors[f.id] = controlKindOf(f) === "checkbox" ? "This box must be checked." : "This question is required.";
       continue;
     }
     values[f.id] = res.value;
