@@ -328,6 +328,10 @@ pub struct TrashItem {
     /// Name of `table_id`'s table (fields, views and records).
     #[serde(default)]
     pub table_name: Option<String>,
+    /// One of `ob_core::field::COLORS`: the color of the collection (a trashed collection's own, or
+    /// the one a field, view or record belonged to).
+    #[serde(default)]
+    pub table_color: Option<String>,
     /// Who moved it to the trash; null when unknown (trashed before this was
     /// recorded, or by an automation).
     #[serde(default)]

@@ -3,4 +3,8 @@
 /**
  * Where the record lives.
  */
-export type ActivityPlace = { workspace_id: string, workspace_name: string, workspace_color: string, base_id: string, base_name: string, base_icon?: string | null, base_color: string, table_id: string, table_name: string, };
+export type ActivityPlace = { workspace_id: string, workspace_name: string, workspace_color: string, base_id: string, base_name: string, base_icon?: string | null, base_color: string, table_id: string, table_name: string, 
+/**
+ * One of `ob_core::field::COLORS`: the collection's color mark.
+ */
+table_color: string, };

@@ -26,6 +26,11 @@ base_id?: string | null, base_name?: string | null, base_icon?: string | null, b
  */
 table_name?: string | null, 
 /**
+ * One of `ob_core::field::COLORS`: the color of the collection (a trashed collection's own, or
+ * the one a field, view or record belonged to).
+ */
+table_color?: string | null, 
+/**
  * Who moved it to the trash; null when unknown (trashed before this was
  * recorded, or by an automation).
  */

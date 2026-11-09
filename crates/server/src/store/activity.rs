@@ -148,7 +148,7 @@ pub fn accessible_places(
     table_id: Option<&str>,
 ) -> AppResult<Vec<ActivityPlace>> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT w.id, w.name, w.color, b.id, b.name, b.icon, b.color, t.id, t.name
+        "SELECT w.id, w.name, w.color, b.id, b.name, b.icon, b.color, t.id, t.name, t.color
          FROM workspace_members m
          JOIN workspaces w ON w.id = m.workspace_id AND w.deleted_at IS NULL
          JOIN bases b ON b.workspace_id = w.id AND b.deleted_at IS NULL
@@ -174,6 +174,7 @@ pub fn accessible_places(
                 base_color: r.get(6)?,
                 table_id: r.get(7)?,
                 table_name: r.get(8)?,
+                table_color: r.get(9)?,
             })
         },
     )?;

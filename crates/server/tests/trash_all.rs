@@ -184,11 +184,16 @@ async fn one_trash_lists_every_workspace_newest_first_with_where_and_who() {
     assert_eq!(table["base_name"], "CRM");
     assert_eq!(table["workspace_name"], "Acme");
     assert!(table["table_id"].is_null() && table["table_name"].is_null());
+    // The Trash draws a collection's color mark: a trashed collection has its own, and so does what it held.
+    assert!(table["table_color"].is_string());
 
     let dishes = &items[3];
     assert_eq!(dishes["name"], "Dishes");
     assert_eq!(dishes["table_id"], w.chores_table.as_str());
     assert_eq!(dishes["table_name"], "Table 1");
+    assert!(dishes["table_color"].is_string());
+    // A workspace or folder has no collection, so no collection color.
+    assert!(garden["table_color"].is_null());
     assert_eq!(dishes["base_id"], w.chores.as_str());
     assert_eq!(dishes["base_name"], "Chores");
     assert_eq!(dishes["workspace_id"], w.home.as_str());

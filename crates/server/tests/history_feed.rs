@@ -226,6 +226,8 @@ async fn lists_activity_of_every_project_newest_first_with_where_and_who() {
     assert_eq!(ops["place"]["base_name"], "Ops");
     assert_eq!(ops["place"]["table_id"], w.ops_table.as_str());
     assert_eq!(ops["place"]["table_name"], "Table 1");
+    // The collection's color mark.
+    assert!(ops["place"]["table_color"].is_string());
     assert_eq!(
         ops["changes"][&w.ops_primary],
         json!({ "old": "Sprint", "new": "Sprint 1" })

@@ -140,6 +140,7 @@ impl Place {
             base_icon: base.and_then(|b| b.icon.clone()),
             base_color: base.map(|b| b.color.clone()),
             table_name: f.table_name,
+            table_color: None,
             deleted_by_id: f.deleted_by_id,
             deleted_by_name: f.deleted_by_name,
             expires_at: f.deleted_at.saturating_add(retention_ms),
@@ -311,10 +312,32 @@ fn base_items(
         }
     }
 
-    Ok(found
+    let mut items: Vec<TrashItem> = found
         .into_iter()
         .map(|f| place.item(f, retention_ms))
-        .collect())
+        .collect();
+    fill_table_colors(conn, place, &mut items)?;
+    Ok(items)
+}
+
+/// Gives each item the color of its collection, so a listing can draw the collection's mark.
+fn fill_table_colors(conn: &Connection, place: &Place, items: &mut [TrashItem]) -> AppResult<()> {
+    let Some(base) = &place.base else {
+        return Ok(());
+    };
+    let mut stmt = conn.prepare("SELECT id, color FROM tables WHERE base_id = ?1")?;
+    let colors: HashMap<String, String> = stmt
+        .query_map([&base.id], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    for item in items {
+        let table = if item.kind == "table" {
+            Some(&item.id)
+        } else {
+            item.table_id.as_ref()
+        };
+        item.table_color = table.and_then(|t| colors.get(t)).cloned();
+    }
+    Ok(())
 }
 
 /// Newest first; the kind and id break ties so the order is stable.

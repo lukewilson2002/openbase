@@ -736,7 +736,7 @@ pub static ENDPOINTS: &[Endpoint] = &[
         Read,
         "The activity feed: what changed and who commented recently on records in every project you can open (all your workspaces), newest first unless order=oldest. One item per history entry (create, update, delete, restore: the old and new value of each changed field) or comment. Trashed workspaces, projects and tables are left out; so are projects a token does not reach. Page with before = the previous page's next (null at the end).",
         "query: workspace?, base?, table? (ids), user? (the author's user id), kind? (create|update|delete|restore|comment), order? (newest|oldest), before?, limit? (default 50, max 200)",
-        "ActivityPage {items: [{id, kind, created_at, author: {id, name}|null, record: {id, name, deleted}, place: {workspace_id, workspace_name, workspace_color, base_id, base_name, base_icon, base_color, table_id, table_name}, changes: {field_id: {old, new}}, comment: text|null}], next: cursor|null, fields: {field_id: Field}}",
+        "ActivityPage {items: [{id, kind, created_at, author: {id, name}|null, record: {id, name, deleted}, place: {workspace_id, workspace_name, workspace_color, base_id, base_name, base_icon, base_color, table_id, table_name, table_color}, changes: {field_id: {old, new}}, comment: text|null}], next: cursor|null, fields: {field_id: Field}}",
     ),
     // ---------------------------------------------------------------------- trash
     e(
@@ -747,7 +747,7 @@ pub static ENDPOINTS: &[Endpoint] = &[
         Read,
         "Everything you could restore, from every workspace you belong to, newest first: records, fields, tables and shared views of bases where you are a creator, the records you deleted yourself and your own personal views in bases where you are an editor, and (with the manage permission) bases and workspaces you own. Each item says where it was (workspace, base, table), who deleted it and when it is removed for good (expires_at).",
         "query: workspace_id?, base_id?, kind? (workspace|base|table|field|view|record)",
-        "TrashListing {items: [{kind, id, name, icon, table_id, deleted_at, workspace_id, workspace_name, workspace_color, base_id, base_name, base_icon, base_color, table_name, deleted_by_id, deleted_by_name, expires_at}]}",
+        "TrashListing {items: [{kind, id, name, icon, table_id, deleted_at, workspace_id, workspace_name, workspace_color, base_id, base_name, base_icon, base_color, table_name, table_color, deleted_by_id, deleted_by_name, expires_at}]}",
     ),
     e(
         GET,

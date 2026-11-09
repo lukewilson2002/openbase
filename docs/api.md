@@ -290,7 +290,7 @@ Empty values count as absent. The answer is `{items, next, fields}`:
   the feed. `author` is `{id, name}`, or `null` when the account is gone (or an automation did it).
   `record` is `{id, name, deleted}`: the text of its primary field now, and whether it is in the
   trash now. `place` is `{workspace_id, workspace_name, workspace_color, base_id, base_name,
-  base_icon, base_color, table_id, table_name}`. `changes` is keyed by field id, `{old, new}` per
+  base_icon, base_color, table_id, table_name, table_color}`. `changes` is keyed by field id, `{old, new}` per
   field, as in the record history (link values as `[{id, name}]`); empty for a comment. `comment` is
   a comment's text (mentions written `@[Name](usrXXXX)`), `null` otherwise.
 - `next`: the cursor of the next page, `null` at the end. Paging by it never repeats or skips an

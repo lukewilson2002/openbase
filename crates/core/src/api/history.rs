@@ -76,4 +76,7 @@ pub struct ActivityPlace {
     pub base_color: String,
     pub table_id: String,
     pub table_name: String,
+    /// One of `ob_core::field::COLORS`: the collection's color mark.
+    #[serde(default)]
+    pub table_color: String,
 }
