@@ -116,30 +116,41 @@ pub(crate) struct Local {
     pub is_utc: bool,
 }
 
+/// The wall-clock time of `t` in `tz`, or `None` when the zone's offset
+/// pushes it past the dates chrono can represent. `DateTime::naive_local`
+/// and `date_naive` panic there, and an instant at the edge of the range is
+/// easy to write in a formula (`DATETIME_PARSE` reads a six-digit year), so
+/// every local view of a formula date goes through this.
+pub(crate) fn local_naive(t: DateTime<Utc>, tz: Tz) -> Option<NaiveDateTime> {
+    let z = t.with_timezone(&tz);
+    z.naive_utc().checked_add_offset(z.offset().fix())
+}
+
 impl Local {
     /// Calendar dates are not shifted by the zone: `DAY` of a date-only
-    /// value is always its own day.
-    pub(crate) fn new(d: DateVal, tz: Tz) -> Local {
+    /// value is always its own day. `None` when the zone pushes the value
+    /// out of the representable range.
+    pub(crate) fn new(d: DateVal, tz: Tz) -> Option<Local> {
         let is_utc = tz == chrono_tz::UTC;
         match d {
             DateVal::Instant(t) => {
                 let z = t.with_timezone(&tz);
-                Local {
-                    naive: z.naive_local(),
+                Some(Local {
+                    naive: local_naive(t, tz)?,
                     offset_secs: z.offset().fix().local_minus_utc(),
                     utc: t,
                     is_utc,
-                }
+                })
             }
             DateVal::Date(day) => {
                 let naive = naive_midnight(day);
                 let utc = from_local(naive, tz).unwrap_or_else(|| naive.and_utc());
-                Local {
+                Some(Local {
                     naive,
                     offset_secs: utc.with_timezone(&tz).offset().fix().local_minus_utc(),
                     utc,
                     is_utc,
-                }
+                })
             }
         }
     }
@@ -280,7 +291,7 @@ pub(crate) fn date_add(d: DateVal, count: f64, unit: Unit, tz: Tz) -> Option<Dat
                 Some(DateVal::Date(n.date()))
             }
             DateVal::Instant(t) => {
-                let local = t.with_timezone(&tz).naive_local();
+                let local = local_naive(t, tz)?;
                 let moved = add_calendar(local, whole, unit)?;
                 Some(DateVal::Instant(from_local(moved, tz)?))
             }
@@ -438,12 +449,18 @@ fn push_lit(parts: &mut Vec<Part>, s: &str) {
 
 fn tokenize_into(fmt: &str, parts: &mut Vec<Part>, expand: bool) {
     let mut rest = fmt;
+    // Once one `[` finds no `]` after it, no later one will either; searching
+    // again for each would rescan the whole remainder every time.
+    let mut unclosed = false;
     while let Some(c) = rest.chars().next() {
-        if c == '[' {
-            if let Some(close) = rest.find(']') {
-                push_lit(parts, &rest[1..close]);
-                rest = &rest[close + 1..];
-                continue;
+        if c == '[' && !unclosed {
+            match rest.find(']') {
+                Some(close) => {
+                    push_lit(parts, &rest[1..close]);
+                    rest = &rest[close + 1..];
+                    continue;
+                }
+                None => unclosed = true,
             }
         }
         if let Some(tok) = TOKENS

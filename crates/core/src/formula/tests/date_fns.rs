@@ -640,3 +640,102 @@ fn datetime_parse_with_format() {
     check_err("DATETIME_PARSE(\"hello\", \"YYYY\")", "could not read");
     check_err("DATETIME_PARSE(\"10 xx\", \"HH A\")", "could not read");
 }
+
+// A date at the edge of chrono's range, seen through a zone whose offset
+// pushes it past the edge, is an error, never a panic (F44, F63).
+const LAST_INSTANT: &str = "DATETIME_PARSE(\"262142-12-31 23:00\", \"Y-MM-DD HH:mm\")";
+const FIRST_INSTANT: &str = "DATETIME_PARSE(\"-262143-01-01 00:00\", \"Y-MM-DD HH:mm\")";
+
+#[test]
+fn date_at_the_end_of_the_range_in_a_zone_is_an_error() {
+    for f in ["YEAR", "DAY", "HOUR", "DATESTR", "TIMESTR", "WEEKNUM"] {
+        check_err(
+            &format!("{f}(SET_TIMEZONE({LAST_INSTANT}, \"Asia/Tokyo\"))"),
+            "out of range",
+        );
+        check_err(
+            &format!("{f}(SET_TIMEZONE({FIRST_INSTANT}, \"America/New_York\"))"),
+            "out of range",
+        );
+    }
+    check_err(
+        &format!("DATETIME_FORMAT(SET_TIMEZONE({LAST_INSTANT}, \"Asia/Tokyo\"), \"YYYY\")"),
+        "out of range",
+    );
+    check_err(
+        &format!("IS_SAME(SET_TIMEZONE({LAST_INSTANT}, \"Asia/Tokyo\"), {LAST_INSTANT}, \"day\")"),
+        "out of range",
+    );
+}
+
+#[test]
+fn date_at_the_end_of_the_range_in_the_context_zone_is_an_error() {
+    let tokyo = Ctx {
+        tz: chrono_tz::Asia::Tokyo,
+        ..Ctx::default()
+    };
+    check_err_in(&format!("DAY({LAST_INSTANT})"), &tokyo, "out of range");
+    check_err_in(
+        &format!("DATEADD({LAST_INSTANT}, 1, \"day\")"),
+        &tokyo,
+        "out of range",
+    );
+    check_err_in(
+        &format!("WORKDAY({LAST_INSTANT}, 1)"),
+        &tokyo,
+        "out of range",
+    );
+    check_err_in(
+        &format!("WORKDAY_DIFF({LAST_INSTANT}, {LAST_INSTANT})"),
+        &tokyo,
+        "out of range",
+    );
+    check_err_in(
+        &format!("WORKDAY(\"2024-03-15\", 1, {LAST_INSTANT})"),
+        &tokyo,
+        "out of range",
+    );
+    let far = Ctx {
+        now: utc("2024-03-15T12:30:45Z"),
+        tz: chrono_tz::Asia::Tokyo,
+        ..Ctx::default()
+    };
+    check_in("TODAY()", &far, date(2024, 3, 15));
+}
+
+#[test]
+fn date_in_range_in_a_zone_still_works() {
+    check(
+        "DAY(SET_TIMEZONE(DATETIME_PARSE(\"2024-03-15 23:30\", \"YYYY-MM-DD HH:mm\"), \"Asia/Tokyo\"))",
+        n(16.0),
+    );
+}
+
+#[test]
+fn datetime_parse_format_is_capped_and_unclosed_brackets_are_cheap() {
+    check_err(
+        &format!("DATETIME_PARSE(\"x\", \"{}\")", "[".repeat(1_001)),
+        "too long",
+    );
+    // At the cap a format of unclosed brackets is read in one pass; this ran
+    // in quadratic time before the tokenizer remembered there was no `]`.
+    let start = std::time::Instant::now();
+    check(
+        &format!("DATETIME_PARSE(\"x\", \"{}\")", "[".repeat(1_000)),
+        dt("2024-01-01T00:00:00Z"),
+    );
+    assert!(start.elapsed().as_secs() < 1);
+    check(
+        "DATETIME_PARSE(\"2024 [\", \"YYYY [\")",
+        dt("2024-01-01T00:00:00Z"),
+    );
+}
+
+#[test]
+fn tokenizer_is_linear_on_unclosed_brackets() {
+    let fmt = "[".repeat(400_000);
+    let start = std::time::Instant::now();
+    let parts = crate::formula::datetime::tokenize_format(&fmt);
+    assert!(start.elapsed().as_secs() < 2);
+    assert_eq!(parts.len(), 1);
+}

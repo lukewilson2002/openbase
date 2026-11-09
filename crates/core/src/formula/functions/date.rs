@@ -17,8 +17,8 @@ use super::{
 use crate::formula::ast::Expr;
 use crate::formula::coerce::{DateVal, R, err, num, preview, text, to_date, to_number, to_text};
 use crate::formula::datetime::{
-    Local, Unit, date_add, date_diff, default_format, format_moment, humanize, parse_date_text,
-    parse_tz, parse_with_format, start_of, weeknum, workday, workday_diff,
+    Local, Unit, date_add, date_diff, default_format, format_moment, humanize, local_naive,
+    parse_date_text, parse_tz, parse_with_format, start_of, weeknum, workday, workday_diff,
 };
 use crate::formula::eval::Evaluator;
 use crate::formula::types::Ty;
@@ -167,7 +167,9 @@ fn tz_from(v: &Value) -> R<Tz> {
 }
 
 fn local_arg(ev: &Evaluator, e: &Expr) -> R<Option<Local>> {
-    Ok(date_arg(ev, e)?.map(|(d, tz)| Local::new(d, tz)))
+    date_arg(ev, e)?
+        .map(|(d, tz)| Local::new(d, tz).ok_or_else(out_of_range))
+        .transpose()
 }
 
 fn unit_from(v: &Value, default: Unit) -> R<Unit> {
@@ -184,10 +186,12 @@ fn plain_date(v: &Value) -> R<Option<DateVal>> {
 }
 
 /// Calendar date of a value in the context timezone.
-fn calendar_date(d: DateVal, tz: Tz) -> NaiveDate {
+fn calendar_date(d: DateVal, tz: Tz) -> R<NaiveDate> {
     match d {
-        DateVal::Date(day) => day,
-        DateVal::Instant(t) => t.with_timezone(&tz).date_naive(),
+        DateVal::Date(day) => Ok(day),
+        DateVal::Instant(t) => local_naive(t, tz)
+            .map(|n| n.date())
+            .ok_or_else(out_of_range),
     }
 }
 
@@ -240,12 +244,12 @@ fn holidays(v: &Value, tz: Tz) -> R<Vec<NaiveDate>> {
                             preview(piece)
                         ))
                     })?;
-                    out.push(calendar_date(d, tz));
+                    out.push(calendar_date(d, tz)?);
                 }
             }
             other => {
                 if let Some(d) = to_date(other)? {
-                    out.push(calendar_date(d, tz));
+                    out.push(calendar_date(d, tz)?);
                 }
             }
         }
@@ -302,6 +306,11 @@ fn datetime_diff(a: &[Value], _: &Evaluator) -> R {
     date_diff(x, y, unit).map_or_else(|| Err(out_of_range()), num)
 }
 
+/// Longest format string `DATETIME_FORMAT` and `DATETIME_PARSE` accept, in
+/// bytes; the format is formula text, so it is otherwise as long as a text
+/// value may be.
+const MAX_FORMAT_LEN: usize = 1_000;
+
 /// `DATETIME_FORMAT(date, [format])` with Moment.js tokens.
 fn datetime_format(args: &[Expr], ev: &Evaluator) -> R {
     let local = local_arg(ev, &args[0])?;
@@ -315,7 +324,7 @@ fn datetime_format(args: &[Expr], ev: &Evaluator) -> R {
     if fmt.is_empty() {
         return Ok(Value::Text(default_format(&l)));
     }
-    if fmt.len() > 1_000 {
+    if fmt.len() > MAX_FORMAT_LEN {
         return Err(err("Date format is too long"));
     }
     text(format_moment(&l, &fmt))
@@ -337,6 +346,9 @@ fn datetime_parse(a: &[Value], ev: &Evaluator) -> R {
         return Ok(Value::Null);
     }
     let fmt = text_arg(a, 1)?;
+    if fmt.len() > MAX_FORMAT_LEN {
+        return Err(err("Date format is too long"));
+    }
     let parsed = if fmt.trim().is_empty() {
         parse_date_text(&s).map(DateVal::instant)
     } else {
@@ -433,8 +445,8 @@ fn is_same(args: &[Expr], ev: &Evaluator) -> R {
     if unit == Unit::Millisecond {
         return Ok(Value::Bool(x.instant() == y.instant()));
     }
-    let lx = Local::new(x, tz).naive;
-    let ly = Local::new(y, tz).naive;
+    let lx = Local::new(x, tz).ok_or_else(out_of_range)?.naive;
+    let ly = Local::new(y, tz).ok_or_else(out_of_range)?.naive;
     Ok(Value::Bool(start_of(lx, unit) == start_of(ly, unit)))
 }
 
@@ -444,9 +456,8 @@ fn now(_: &[Value], ev: &Evaluator) -> R {
 
 /// `TODAY()`: the current date in the context timezone.
 fn today(_: &[Value], ev: &Evaluator) -> R {
-    Ok(Value::Date(
-        ev.ctx.now().with_timezone(&ev.ctx.timezone()).date_naive(),
-    ))
+    let today = local_naive(ev.ctx.now(), ev.ctx.timezone()).ok_or_else(out_of_range)?;
+    Ok(Value::Date(today.date()))
 }
 
 /// `SET_LOCALE(date, locale)`: accepted for compatibility; output stays English.
@@ -488,7 +499,7 @@ fn workday_(a: &[Value], ev: &Evaluator) -> R {
     let Some(start) = start else {
         return Ok(Value::Null);
     };
-    workday(calendar_date(start, tz), n, &hol)
+    workday(calendar_date(start, tz)?, n, &hol)
         .map(Value::Date)
         .ok_or_else(out_of_range)
 }
@@ -501,7 +512,7 @@ fn workday_diff_(a: &[Value], ev: &Evaluator) -> R {
     let hol = holidays(arg(a, 2), tz)?;
     match (start, end) {
         (Some(s), Some(e)) => {
-            num(workday_diff(calendar_date(s, tz), calendar_date(e, tz), &hol) as f64)
+            num(workday_diff(calendar_date(s, tz)?, calendar_date(e, tz)?, &hol) as f64)
         }
         _ => Ok(Value::Null),
     }
