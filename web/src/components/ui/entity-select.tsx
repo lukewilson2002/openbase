@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { Select as S } from "radix-ui";
+import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
 import { ColorMark } from "./color-mark";
 import { Icon } from "./icon";
+import { SheetMenu, SheetMenuRow } from "./sheet-menu";
 
 export interface EntityOption {
   /** Must not be empty (Radix Select reserves "" for "nothing chosen"). */
@@ -37,8 +40,10 @@ export interface EntitySelectProps {
  * `<Select>`: pass the `id` and aria props from `<Field>`.
  */
 export function EntitySelect({ id, value, onValueChange, options, disabled, className, ...aria }: EntitySelectProps) {
+  const desktop = useMediaQuery(DESKTOP_QUERY);
   // When some options have a mark, the ones without keep its space so the names line up.
   const anyMark = options.some((o) => o.hue !== undefined);
+  if (!desktop) return <SheetSelect id={id} value={value} onValueChange={onValueChange} options={options} disabled={disabled} className={className} anyMark={anyMark} {...aria} />;
   return (
     <S.Root value={value} onValueChange={onValueChange} disabled={disabled}>
       <S.Trigger
@@ -88,5 +93,42 @@ export function EntitySelect({ id, value, onValueChange, options, disabled, clas
         </S.Content>
       </S.Portal>
     </S.Root>
+  );
+}
+
+const triggerClass = cn(
+  "flex h-8 w-full items-center justify-between gap-2 rounded-md border border-line-strong bg-surface px-2.5 text-left text-fg max-md:h-control-touch",
+  "transition-colors hover:border-faint focus-visible:border-ring focus-visible:outline-2 focus-visible:-outline-offset-1",
+  "disabled:cursor-not-allowed disabled:bg-subtle disabled:opacity-70 aria-[invalid=true]:border-danger",
+);
+
+/** The phone's select (PH-3): the same trigger, and the options in a bottom sheet instead of a pop-over list. */
+function SheetSelect({ id, value, onValueChange, options, disabled, className, anyMark, ...aria }: EntitySelectProps & { anyMark: boolean }) {
+  const [open, setOpen] = useState(false);
+  const chosen = options.find((o) => o.value === value);
+  // Named as the trigger is: by its aria-label, else by the label that points at it (a `Field`'s).
+  const name = aria["aria-label"] ?? (id ? document.querySelector(`label[for="${CSS.escape(id)}"]`)?.textContent?.trim() : undefined) ?? "Choose";
+  const mark = (o: EntityOption) => (o.hue !== undefined ? <ColorMark hue={o.hue} size={10} name={o.markName ?? o.label} /> : anyMark ? <span aria-hidden className="size-2.5 shrink-0" /> : null);
+  return (
+    <>
+      <button type="button" id={id} role="combobox" aria-expanded={open} aria-haspopup="dialog" disabled={disabled} onClick={() => setOpen(true)} {...aria} className={cn(triggerClass, className)}>
+        <span className="inline-flex min-w-0 flex-1 items-center gap-2 truncate">
+          {chosen && mark(chosen)}
+          <span className="truncate">{chosen?.label}</span>
+        </span>
+        <Icon icon={ChevronDown} className="text-muted" />
+      </button>
+      <SheetMenu open={open} onOpenChange={setOpen} title={name}>
+        <ul role="listbox" aria-label={name} className="flex flex-col py-1.5">
+          {options.map((o) => (
+            <li key={o.value} role="presentation">
+              <SheetMenuRow bare lead={mark(o)} selected={o.value === value} disabled={o.disabled} onSelect={() => onValueChange(o.value)} buttonProps={{ role: "option", "aria-selected": o.value === value }}>
+                {o.label}
+              </SheetMenuRow>
+            </li>
+          ))}
+        </ul>
+      </SheetMenu>
+    </>
   );
 }

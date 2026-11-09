@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { stubDesktop, stubPhone } from "@/test/utils";
 import { Field } from "./input";
 import { EntitySelect, type EntityOption } from "./entity-select";
 
@@ -32,6 +33,9 @@ function Harness({ onValueChange = () => {} }: { onValueChange?: (v: string) => 
 }
 
 describe("EntitySelect", () => {
+  // The Radix list is the desktop's; a phone gets a sheet (below).
+  beforeEach(() => stubDesktop());
+
   it("is labelled by its Field and shows the chosen option with its color mark", () => {
     render(<Harness />);
     const trigger = screen.getByRole("combobox", { name: "Table" });
@@ -74,5 +78,29 @@ describe("EntitySelect", () => {
   it("can be disabled", () => {
     render(<EntitySelect value="tbl1" onValueChange={() => {}} options={OPTIONS} disabled aria-label="Linked table" />);
     expect(screen.getByRole("combobox", { name: "Linked table" })).toBeDisabled();
+  });
+});
+
+describe("EntitySelect on a phone (PH-3)", () => {
+  beforeEach(() => stubPhone());
+
+  it("opens its options in a bottom sheet with their marks, and choosing one closes it", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(<Harness onValueChange={onValueChange} />);
+    const trigger = screen.getByRole("combobox", { name: "Table" });
+    expect(trigger).toHaveTextContent("Orders");
+    expect(trigger).toHaveAccessibleDescription("Pick one");
+    await user.click(trigger);
+    const sheet = await screen.findByRole("dialog", { name: "Table" });
+    const list = within(sheet).getByRole("listbox", { name: "Table" });
+    expect(within(list).getAllByRole("option").map((o) => o.textContent)).toEqual(["Orders", "Contacts", "Shipments", "Archive"]);
+    expect(within(list).getByRole("option", { name: "Orders" })).toHaveAttribute("aria-selected", "true");
+    expect(within(list).getByRole("option", { name: "Archive" })).toBeDisabled();
+    expect(within(list).getByRole("option", { name: "Shipments" }).querySelector(".ob-mark.ob-hue-orange")).toBeInTheDocument();
+    await user.click(within(list).getByRole("option", { name: "Shipments" }));
+    expect(onValueChange).toHaveBeenCalledWith("tbl3");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByRole("combobox", { name: "Table" })).toHaveTextContent("Shipments");
   });
 });
