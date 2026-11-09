@@ -341,7 +341,7 @@ are names or ids.
 | `search_records` | any | Case-insensitive text search over all fields (embed blocks in rich text are skipped, see [Embedding records and views in rich text](#embedding-records-and-views-in-rich-text)); takes `include_empty` like `list_records` |
 | `search_everything` | any | The web app's search box: names, record text (rich text as plain words) and comments across all your projects, or only inside one `workspace` or `project` (names or ids); best first. Each result says where it is and where it matched: `name_matches`, and for a record found by another field or a comment a plain-text `snippet` (`…` where cut) with `snippet_matches` and the `field`; ranges are `[start, end)` in code points. Same as `GET /api/search` ([docs/api.md](api.md)) |
 | `get_home` | any | A workspace's Home in one read (`workspace`: name or id, optional when you belong to one): `due` (records dated from 30 days ago to 7 days ahead by their table's Home date, not marked done, oldest first, at most 50, with `date`, `time`, `overdue`, `done_field_id` and `can_edit`), `recent` (the 10 records most recently created or edited, with who and when), `drafts` (your inbox drafts) and `truncated` when some tables were not checked. Only projects you can open are read. Same as `GET /api/workspaces/{id}/home` ([docs/api.md](api.md)) |
-| `aggregate_records` | any | Counts, sums, averages, minimums and maximums computed on the server, optionally per group (`group_by` up to 3 fields); narrow with `view` / `filterByFormula`; group values come back as names (selects, links, people), dates as `YYYY-MM-DD`, empty group as `null`; invalid combinations (sum of text, group by a button) are errors that list the valid fields. Same as `POST /api/tables/{id}/aggregate` ([docs/api.md](api.md) §5) |
+| `aggregate_records` | any | Counts, sums, averages, minimums and maximums computed on the server, optionally per group (`group_by` up to 3 fields); narrow with `view` / `filterByFormula`; `sort` takes at most 23 entries (one per aggregate and group field; a key named twice counts once); group values come back as names (selects, links, people), dates as `YYYY-MM-DD`, empty group as `null`; invalid combinations (sum of text, group by a button) are errors that list the valid fields. Same as `POST /api/tables/{id}/aggregate` ([docs/api.md](api.md) §5) |
 | `get_record` | any | One record; takes `include_empty` like `list_records` |
 | `create_records` | write | 1-10 records per call; `typecast` (default true) converts values and creates select choices. New records go to the bottom of the table's manual order, or to `position` `top` / `bottom`, or right `after_record_id` / `before_record_id` (at most one of the three; several records keep the order you list them in). Same as `POST /api/tables/{id}/records` with `after_record_id` / `before_record_id` |
 | `update_records` | write | 1-10 records; only the given fields change; `null` clears |
@@ -385,7 +385,7 @@ are names or ids.
 | `update_table_settings` | write | A table's `color`, `description`, `record_noun` (what a record is called), `home_date_field` (the date field Home orders it by; `null` = none) and `done_field` (the checkbox that marks a record done; `null` = none); fields by name or id. Same as `PATCH /api/tables/{id}` |
 | `check_formula` | write | Parse and type-check a formula and preview it on a record |
 | `field_types` | any | What each field type is for (`use_for`), its options and value shape, with an example. Text is two types: `rich_text` (Markdown) for notes, summaries, descriptions, articles and anything longer than a sentence, and `text` (plain, `multiline` optional) for names, titles and codes; the names before v0.8, `single_line_text` and `long_text`, are still accepted |
-| `list_icons` | any | Search the Lucide icon names (`query`, `limit`) that `icon` accepts |
+| `list_icons` | any | Search the Lucide icon names (`query` of at most 200 characters, `limit`) that `icon` accepts |
 
 #### Icons
 
@@ -405,7 +405,7 @@ newer web client keeps working), the tools check the name against the list of Lu
 `scripts/gen-icons.sh`). An unknown name is refused with suggestions (`Did you mean:
 shopping-cart, ...`); an old name (`home` for `house`) or loose spelling (`Chart Column`) is
 accepted and stored under the canonical name, and the result says so in `note`. `list_icons`
-finds names: every word of `query` has to match a name or an old name (`cart shop` finds
+finds names: every word of `query` (200 characters at most; a longer one is an error that says to search for a word or two) has to match a name or an old name (`cart shop` finds
 `shopping-cart`); without a query it lists alphabetically. Icons show in `list_projects`,
 `list_workspaces` and `get_project_schema`.
 

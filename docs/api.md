@@ -329,6 +329,10 @@ and group anyway. Each part that is present replaces the saved one, and parts le
 saved value; it is checked like a saved configuration (an unknown field or an operator that does
 not suit the field is a 400 whose message starts with `transient:`). A public share link's query
 refuses a `transient` with a `filter` (400), so a visitor cannot widen the view's saved filter.
+A filter (saved, transient or in a row-color rule) is limited to 3 levels of groups, 100 conditions,
+and 1,000 ids in one id-list operand (`is any of`, `has all of`, ...) and 5,000 in all; a longer list
+is a 400 whose message names the limit. A request body that nests groups more than 7 deep or holds
+more than 5,000 items is refused while it is read.
 
 | Part | Replaces | To drop the saved one |
 |---|---|---|
@@ -852,7 +856,7 @@ length). Unattached public-form uploads are deleted after 2 hours.
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/public/shares/{token}` | the shared view: name, layout config and **only the visible fields** (hidden fields and field order of the view apply) |
-| `POST /api/public/shares/{token}/query` | records (`QueryRequest`: `offset`, `limit`, `search`, `range`, `timezone`, `week_start`, `transient`). `search` is at most 500 characters (400 otherwise). Search, ranges and `transient` sort/group/row-color/summary overrides may only use visible fields (400 otherwise); a `transient` **filter** is always refused (400): the view's saved filter bounds what the link exposes and a visitor cannot replace it (sort or `search` instead); a drafted `row_color` colours rows only when it is `by_select` on a visible field, like a saved one. `groups` carries at most 1,000 headers, each with `key`/`label` cut to 200 characters and `value` always `null`; keys of user fields are placeholders (`user-0`, ...), never user ids. Records contain only visible fields; user values are `[{"name"}]`, created/modified-by `{"name"}`; **no user ids, e-mail addresses or creator/editor metadata** ever appear (an @mention in rich text reads `@Name`) |
+| `POST /api/public/shares/{token}/query` | body of at most 64 KiB (413 beyond; the rest of the API takes 4 MB), records (`QueryRequest`: `offset`, `limit`, `search`, `range`, `timezone`, `week_start`, `transient`). `search` is at most 500 characters (400 otherwise). Search, ranges and `transient` sort/group/row-color/summary overrides may only use visible fields (400 otherwise); a `transient` **filter** is always refused (400): the view's saved filter bounds what the link exposes and a visitor cannot replace it (sort or `search` instead); a drafted `row_color` colours rows only when it is `by_select` on a visible field, like a saved one. `groups` carries at most 1,000 headers, each with `key`/`label` cut to 200 characters and `value` always `null`; keys of user fields are placeholders (`user-0`, ...), never user ids. Records contain only visible fields; user values are `[{"name"}]`, created/modified-by `{"name"}`; **no user ids, e-mail addresses or creator/editor metadata** ever appear (an @mention in rich text reads `@Name`) |
 | `GET /api/attachments/{id}/{filename}?share={token}` (also `/api/attachments/{id}/thumb`) | attachment files **the shared view shows**: the id must be in a visible attachment field, or referenced (`/api/attachments/{id}/...`) in a visible rich text field, of a live record the view's filter lists, otherwise 404 (`Range` requests work as for signed-in users) (also for files of other tables, hidden fields, filtered-out or trashed records, and uploads not yet attached to a record). Send `X-Share-Password` when protected. Counts against its own rate limits (600/min per IP, 2,400/min per token) and the shared password limit (30/min per IP and link; 429 beyond) |
 | `GET /api/public/forms/{token}` | the form: title, description, fields with label/help/required/options |
 | `POST /api/public/forms/{token}/submit` | `{"values": {fieldId: value}}` creates one record anonymously (history source `form`, no user) and answers `{"ok": true, "record_id"}` (a form's `redirect_url` may contain `{record_id}`, which the page replaces). Only form fields are accepted, required fields are enforced, values are read leniently like a browser form but **never create select options**. Files in a file property or linked in a rich text answer must be ones visitors uploaded anonymously through the form's attachments endpoint (400 for any other file of the folder). **Link and user fields are not collected by public forms** (they would need pickers over other data), even if listed in the form's config |
@@ -979,7 +983,8 @@ Response:
   a multiple select, link or user field groups by the exact combination of its values, dates by
   calendar day in `timezone` (default the caller's), and empty cells form one group. Buttons
   cannot be grouped. Groups come ordered by their values (blanks first) unless `sort` says
-  otherwise (`by` is an aggregate alias or a group-by field); `limit` (default 1000, at most
+  otherwise (`by` is an aggregate alias or a group-by field; at most 23 entries, one per aggregate
+  and group-by field, and a key named twice counts once); `limit` (default 1000, at most
   10,000) cuts the list and `truncated` / `total_groups` report it.
 - **Group values** are names, never ids: text, number and checkbox values as they are, a single
   select as its choice name, links, users and multiple selects as arrays of names, dates as

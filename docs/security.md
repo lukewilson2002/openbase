@@ -409,6 +409,7 @@ ceremony state (not the credentials) is kept in memory, which suits the single-n
 | Unattached uploads | public-form uploads that no record references are deleted after 2 hours, other unattached uploads after 24 hours |
 | CSV import | 20 MB, 100,000 rows, 500 columns, **3,000,000 cells** (rows x widest row), two imports at a time server-wide; bad rows are found by bisection, at most 50 are reported |
 | Webhook calls (`/api/hooks/{token}`) | body up to 1 MB; 60 per minute per automation and 30 per minute with unknown tokens per client address; 200 queued runs per automation; a finished run keeps the first 16,384 characters of the body, runs are deleted after 30 days |
+| Body of a public share query (`POST /api/public/shares/{token}/query`) | 64 KiB (413 beyond), read before the token is checked; the rest of the API takes 4 MB |
 | Group headers in a public share response | 1,000, key/label cut to 200 characters, raw value never sent, user-field keys replaced by placeholders |
 
 ### What a share link exposes
@@ -447,6 +448,10 @@ ceremony state (not the credentials) is kept in memory, which suits the single-n
 | Grid search text | 500 characters (400 beyond); lower-cased once per query, not per row | `limits.rs`, `query/search.rs` |
 | Search everything (`GET /api/search`) | 200 characters of text (400 beyond); at most 50 results (default 20); record text of at most 100,000 records in at most 100 tables per search, after which only names are searched | `store/search.rs` |
 | Home (`GET /api/workspaces/{id}/home`) | at most 100,000 records in at most 100 collections that have a Home date per request, each collection read whole or skipped (`truncated`); 50 due records; the latest 5,000 history entries are walked for the 10 recent ones | `store/home.rs` |
+| Filter shape and operands | 3 levels of groups and 100 conditions when compiled; while parsing, 8 levels of objects and 5,000 items per filter (so a body is refused after a few levels, not after the whole tree is built); at most 1,000 ids in one id-list operand and 5,000 in a filter. Id lists are compiled to a set once, so a row costs about what its own cell does, not what the operand does | `view.rs`, `query/filter.rs` |
+| Aggregate `sort` | 23 entries (one per aggregate and group field); a repeated key is dropped | `v1/aggregate.rs` |
+| Icon search (`list_icons`, the "did you mean" hints) | 200 characters of query, repeated words counted once | `icons.rs` |
+| Rich text to plain text (changing a field's type) | indentation of nested lists stops at 32 levels and reading stops after 400,000 bytes of output | `store/markdown.rs` |
 | `filterByFormula` (v1 API) | 5 seconds of evaluation per request, then 422 | `v1/records.rs` |
 | v1 pagination snapshots | 16 per user, 256 and 1,000,000 ids overall; when the store is full the user holding the most loses their oldest snapshot first | `v1/cursor.rs` |
 
@@ -610,6 +615,11 @@ Formulas and queries:
   Cosmetic only.
 - Group headers beyond the first 1,000 in a public share are not sent; their
   records still page normally but appear without a header.
+- A view query has no time or row budget of its own. What it costs per row is bounded
+  by the filter limits above (an id list no longer costs per row what it holds), but a
+  scan of a 100,000 record table still holds one of the four read connections for as
+  long as it takes, and is not cancelled when the client leaves. Many such queries in
+  flight at once, within the rate limits, can still queue other reads behind them.
 - Search everything (`GET /api/search`) has no rate limit of its own. Each search
   is bounded (see the table above) and the search box waits for a pause in typing,
   but a signed-in user or a token can still send searches back to back.

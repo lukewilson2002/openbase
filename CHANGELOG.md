@@ -258,6 +258,16 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Security
 
+- **Query bodies from strangers are bounded.** `POST /api/public/shares/{token}/query` takes a body of
+  at most 64 KiB (413 beyond) and filters are read in one pass that stops at 8 levels or 5,000 items,
+  where a nested filter in a 4 MB body could make the server hold gigabytes of copies before the token
+  was even looked at. A filter's id-list operand (`is any of`, `has all of`, ...) is limited to 1,000
+  ids and 5,000 per filter, and is compiled to a set once instead of being rebuilt for every record.
+  `aggregate_records` and `POST /api/tables/{id}/aggregate` take at most 23 `sort` entries and ignore a
+  key named twice. `list_icons` refuses a `query` over 200 characters (the same bound applies to the
+  icon "did you mean" search). Changing a rich text property's type no longer indents nested lists
+  without limit, which let one 100,000 character cell need gigabytes. All stored filters and view
+  configurations load as before.
 - **A share link's visitor can no longer change the view's filter.** `POST /api/public/shares/{token}/query`
   used to let a `transient.filter` replace the saved filter, which showed every record of the collection
   in the shown properties, including the ones the filter hides. It now answers 400 for a `transient`
