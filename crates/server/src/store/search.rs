@@ -379,7 +379,9 @@ fn comment_hits(
             Ok(CommentHit {
                 id: r.get(0)?,
                 record_id: r.get(1)?,
-                text: mentions::plain_text(&body),
+                // The comment box is the page editor, so a comment can hold an embed block; search leaves its
+                // JSON out, as it does in a record's rich text (BE-8).
+                text: mentions::plain_text(&ob_core::cell::without_embeds(&body)),
                 author: r.get(3)?,
             })
         },

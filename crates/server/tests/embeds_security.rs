@@ -281,3 +281,39 @@ async fn an_embed_is_text_the_server_stores_as_written_and_does_not_search() {
         assert_eq!(hits, expected, "search for {needle}: {}", r.body);
     }
 }
+
+#[tokio::test]
+async fn a_comment_with_an_embed_is_found_by_its_words_and_not_by_the_block() {
+    let f = Fixture::new().await;
+    let id = f.insert_record(&f.table_id, json!({ f.primary_id.clone(): "Page one" }));
+    let body = "Please read this\n\n```openbase\n{\"embed\":\"view\",\"view\":\"viwOtherWorkspace1\",\"limit\":10}\n```\n\nthanks";
+    f.app
+        .post(
+            &f.owner,
+            &format!("/api/records/{id}/comments"),
+            json!({ "body": body }),
+        )
+        .await
+        .assert_status(201);
+    for (needle, expected) in [
+        ("thanks", 1),
+        ("viwOtherWorkspace1", 0),
+        ("embed", 0),
+        ("limit", 0),
+    ] {
+        let r = f
+            .app
+            .get(&f.owner, &format!("/api/search?q={needle}&limit=20"))
+            .await;
+        r.assert_status(200);
+        let hits = r.body["results"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter(|x| x["kind"] == "comment" && x["record_id"] == id.as_str())
+                    .count()
+            })
+            .unwrap_or(0);
+        assert_eq!(hits, expected, "search for {needle}: {}", r.body);
+    }
+}
