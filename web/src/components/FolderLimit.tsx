@@ -13,8 +13,8 @@ export interface FolderLimitProps {
   onLimitedChange: (limited: boolean) => void;
   baseIds: readonly string[];
   onBaseIdsChange: (ids: string[]) => void;
-  /** What a limit costs, said under the list ("cannot have Full control"). */
-  note: string;
+  /** What a limit costs, said under the list ("cannot have Full control"), when it costs anything. */
+  note?: string;
 }
 
 /**
@@ -67,7 +67,7 @@ export function FolderLimit({ limited, onLimitedChange, baseIds, onBaseIdsChange
               )),
             )
           )}
-          <p className="text-meta text-muted">{note}</p>
+          {note && <p className="text-meta text-muted">{note}</p>}
         </div>
       )}
     </>

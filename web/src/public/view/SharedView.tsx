@@ -40,9 +40,9 @@ export interface SharedViewProps {
 function Toolbar({ search, onSearch, summary, children }: { search: string; onSearch: (s: string) => void; summary: ReactNode; children?: ReactNode }) {
   return (
     <div role="toolbar" aria-label="Shared view toolbar" className="mb-3 flex flex-wrap items-center gap-2">
-      <div className="relative">
-        <Search aria-hidden className="pointer-events-none absolute left-2 top-2 size-4 text-muted" />
-        <Input type="search" aria-label="Search records" placeholder="Search records" value={search} onChange={(e) => onSearch(e.target.value)} className="h-8 w-56 pl-8" />
+      <div className="relative max-md:w-full">
+        <Search aria-hidden className="pointer-events-none absolute left-2 top-2 size-4 text-muted max-md:top-3.5" />
+        <Input type="search" aria-label="Search records" placeholder="Search records" value={search} onChange={(e) => onSearch(e.target.value)} className="h-8 w-56 pl-8 max-md:h-control-touch max-md:w-full max-md:text-read-phone" />
       </div>
       <span className="text-label text-muted" aria-live="polite">
         {summary}
@@ -51,6 +51,9 @@ function Toolbar({ search, onSearch, summary, children }: { search: string; onSe
     </div>
   );
 }
+
+/** The layouts that can fall back to a table, by the names the interface gives them. */
+const LAYOUT_NAME = { kanban: "Board", calendar: "Calendar", timeline: "Timeline" } as const;
 
 const count = (n: number) => `${n.toLocaleString()} record${n === 1 ? "" : "s"}`;
 
@@ -95,7 +98,7 @@ export function SharedView({ token, password, view }: SharedViewProps) {
     <ShareProvider value={{ token, password, format }}>
       {fallback && (
         <p className="mb-3 rounded-md bg-subtle px-3 py-2 text-label text-muted">
-          This {type} needs a field that is not shared, so its records are shown as a table.
+          This {LAYOUT_NAME[type as "kanban" | "calendar" | "timeline"]} needs a property that is not shared, so its records are shown as a table.
         </p>
       )}
       {mode === "table" && <TableBody view={view} fields={fields} token={token} password={password} search={search} searchText={searchText} onSearch={setSearchText} offset={offset} onOffset={setOffset} sort={sort} onSort={setSort} transient={transient} timeZone={timeZone} />}

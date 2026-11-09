@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { keys } from "@/api/keys";
 import type { TrashItem, WorkspaceSummary } from "@/api/types";
-import { retentionDays, trashDaysLeft, trashItemDeleted, trashItemPlace } from "@/components/trash/trashItem";
+import { trashDaysLeft, trashItemDeleted, trashItemPlace } from "@/components/trash/trashItem";
 import { useRestoreFromTrash } from "@/components/trash/useRestoreFromTrash";
 import { USER, apiError, mockApi, renderApp, renderWithProviders, stubDesktop, type Handler, type RecordedCall } from "@/test/utils";
 
@@ -227,8 +227,9 @@ describe("Trash page", () => {
     expect(await row("Vacuum")).toBeInTheDocument();
   });
 
-  it("uses the server's retention for the footnote", async () => {
-    routes({}, () => [item({ kind: "record", id: "r", name: "Short", deleted_at: NOW, expires_at: NOW + 7 * DAY })]);
+  it("quotes the server's retention in the footnote, even with nothing in the trash", async () => {
+    const setup = { "GET /api/setup": { needs_setup: false, open_signup: false, email_enabled: false, public_url: "https://base.example.org", passkeys_enabled: false, trash_days: 7 } };
+    routes(setup, () => []);
     renderApp({ route: "/trash" });
     expect(await screen.findByText("Things stay here for 7 days, then they're removed for good.")).toBeInTheDocument();
   });
@@ -262,12 +263,10 @@ describe("trash item text", () => {
     expect(trashItemDeleted({ ...record, deleted_by_id: null, deleted_by_name: null }, USER.id, NOW)).toBe("Deleted 2 hours ago");
   });
 
-  it("counts the days left, rounding up, and the retention", () => {
+  it("counts the days left, rounding up", () => {
     expect(trashDaysLeft(record, NOW)).toBe("30 days left");
     expect(trashDaysLeft({ ...record, expires_at: NOW + DAY + 1 }, NOW)).toBe("2 days left");
     expect(trashDaysLeft({ ...record, expires_at: NOW + HOUR }, NOW)).toBe("1 day left");
     expect(trashDaysLeft({ ...record, expires_at: NOW - HOUR }, NOW)).toBe("Removed today");
-    expect(retentionDays([])).toBe(30);
-    expect(retentionDays([{ ...record, deleted_at: 0, expires_at: 14 * DAY }])).toBe(14);
   });
 });

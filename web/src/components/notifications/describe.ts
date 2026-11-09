@@ -56,10 +56,10 @@ export function notificationActor(n: Notification): string | null {
   return text(p, "author_name");
 }
 
-/** The user id of that person, when the payload has it (a mention's `author_id`). */
+/** The user id of that person, when the payload has it (a mention's `author_id`, an assignment's `assigned_by`). */
 export function notificationActorId(n: Notification): string | null {
   const p = payloadOf(n);
-  return text(p, "author_id");
+  return text(p, "author_id") ?? text(p, "assigned_by");
 }
 
 /** The record a notification is about, for the link chip under its sentence: only when the payload names the collection too, which a record link needs. */

@@ -427,7 +427,8 @@ function InviteRow({
   const basesGone = !invite.all_bases && liveBaseIds(invite, ws).length === 0;
   const editorId = `access-${invite.id}`;
   const owner = invite.role === "owner";
-  const link = "text-primary-text underline underline-offset-2 hover:text-primary-hover disabled:opacity-50 disabled:no-underline";
+  // 44 px tall on phone, with room between the two so Cancel is not hit for Resend.
+  const link = "text-primary-text underline underline-offset-2 hover:text-primary-hover disabled:opacity-50 disabled:no-underline max-md:inline-flex max-md:min-h-control-touch max-md:items-center max-md:px-1";
   return (
     <li aria-label={`${who}, invited`} className={cn("px-4 py-4", open && "bg-bg")}>
       <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
@@ -437,7 +438,7 @@ function InviteRow({
             <span className="truncate">{who}</span>
             <span className="shrink-0 rounded-pill bg-subtle px-2 py-0.5 text-meta font-semibold text-muted">Invited</span>
           </p>
-          <p className="text-label text-muted">
+          <p className="text-label text-muted max-md:-mx-1 max-md:flex max-md:items-center max-md:gap-2">
             <button
               type="button"
               disabled={busy || basesGone}
@@ -447,7 +448,7 @@ function InviteRow({
             >
               Resend
             </button>
-            {" · "}
+            <span aria-hidden>{" · "}</span>
             <button type="button" disabled={busy} onClick={onCancel} className={link}>
               Cancel invite
             </button>

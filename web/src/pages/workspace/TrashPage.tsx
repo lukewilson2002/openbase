@@ -13,7 +13,8 @@ import { keys } from "@/api/keys";
 import type { TrashItem } from "@/api/types";
 import { useMe } from "@/auth/useAuth";
 import { PlaceFilterBar, type PlaceFilterValue } from "@/components/filters/PlaceFilterBar";
-import { trashDaysLeft, trashItemDeleted, trashItemHue, trashItemName, trashItemPlace, retentionDays } from "@/components/trash/trashItem";
+import { trashDaysLeft, trashItemDeleted, trashItemHue, trashItemName, trashItemPlace } from "@/components/trash/trashItem";
+import { daysText, useTrashDays } from "@/components/trash/retention";
 import { useRestoreFromTrash } from "@/components/trash/useRestoreFromTrash";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -41,6 +42,7 @@ const PARTS = ["workspace", "base"] as const;
 export function TrashPage() {
   const [params, setParams] = useSearchParams();
   const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list });
+  const trashDays = useTrashDays();
   const baseId = params.get("base");
   const kindParam = params.get("kind");
   const kind = isTrashKind(kindParam) ? kindParam : null;
@@ -77,7 +79,7 @@ export function TrashPage() {
   return (
     <HomeShell workspaceId={workspaceId ?? undefined} title="Trash">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-6 md:px-10">
-        <p className="text-label text-muted">Things stay here for {retentionDays(listing.data?.items ?? [])} days, then they're removed for good.</p>
+        <p className="text-label text-muted">Things stay here for {daysText(trashDays)}, then they're removed for good.</p>
 
         <PlaceFilterBar
           parts={PARTS}

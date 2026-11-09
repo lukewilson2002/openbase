@@ -163,6 +163,8 @@ export function NotificationsPanel({ onOpened, headingId, heading = true, classN
 interface Lookups {
   /** Emails of the people in the caller's workspaces, by user id. */
   emails: ReadonlyMap<string, string>;
+  /** Their names, for a notification that carries only who did it as an id (an assignment). */
+  names: ReadonlyMap<string, string>;
   /** Collection colors, by collection id. */
   tableColors: ReadonlyMap<string, string>;
 }
@@ -176,13 +178,18 @@ function useLookups(): Lookups {
   const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list });
   return useMemo(() => {
     const emails = new Map<string, string>();
+    const names = new Map<string, string>();
     const tableColors = new Map<string, string>();
     for (const w of workspaces.data ?? [])
       for (const b of w.bases) {
-        for (const p of b.people) if (p.user_id && p.email) emails.set(p.user_id, p.email);
+        for (const p of b.people) {
+          if (!p.user_id || p.pending) continue;
+          if (p.email) emails.set(p.user_id, p.email);
+          if (p.name) names.set(p.user_id, p.name);
+        }
         for (const t of b.tables) if (t.color) tableColors.set(t.id, t.color);
       }
-    return { emails, tableColors };
+    return { emails, names, tableColors };
   }, [workspaces.data]);
 }
 
@@ -193,14 +200,15 @@ function useLookups(): Lookups {
 function NotificationItem({ n, lookups, onOpen, onMarkRead }: { n: Notification; lookups: Lookups; onOpen: (n: Notification, href: string | null) => void; onMarkRead: () => void }) {
   const v = describeNotification(n);
   const Glyph = ICONS[v.kind];
-  const actor = notificationActor(n);
   const actorId = notificationActorId(n);
+  // A person gets their avatar; automations and form responses have none and keep the glyph.
+  const actor = notificationActor(n) ?? (actorId ? lookups.names.get(actorId) : undefined);
   const isUnread = n.read_at == null;
   const record = notificationRecord(n);
   return (
     <li className="relative border-b border-line last:border-b-0 hover:bg-hover">
       <div className="flex items-start gap-3 px-4 py-3 pr-12">
-        {actor && v.kind === "mention" ? (
+        {actor && (v.kind === "mention" || v.kind === "assigned") ? (
           <span aria-hidden className="flex">
             <Avatar name={actor} email={actorId ? lookups.emails.get(actorId) : undefined} size="md" />
           </span>

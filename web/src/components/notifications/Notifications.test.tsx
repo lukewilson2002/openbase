@@ -197,6 +197,22 @@ describe("Notifications in the docked menu", () => {
     await waitFor(() => expect(panel.querySelector("[role=img]")).toHaveClass("ob-solid", hue));
   });
 
+  it("shows the avatar of the person who assigned you, found by their id", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    const grace = { user_id: "usr2", name: "Grace", email: "grace@example.com", pending: false, role: "editor" };
+    routes(
+      { unread: 2, notifications: [note("n1", "assigned", { base_id: "app1", table_id: "tbl1", record_id: "rec1", record_name: "Fix login", assigned_by: "usr2" }), note("n2", "automation", { message: "Weekly digest sent" })] },
+      { "GET /api/workspaces": [makeWorkspace("owner", [{ id: "app1", workspace_id: "wsp1", name: "Roadmap", color: "red", role: "owner", is_top_level: false, people: [grace], tables: [] }])] },
+    );
+    renderShell();
+    const panel = await openNotifications(user);
+    await within(panel).findByText("You were assigned to Fix login");
+    const hue = `ob-hue-${accentHue(avatarColor("grace@example.com"))}`;
+    await waitFor(() => expect(panel.querySelectorAll("[role=img]")).toHaveLength(1));
+    expect(panel.querySelector("[role=img]")).toHaveClass("ob-solid", hue);
+  });
+
   it("polls every 60 seconds and refetches when the window regains focus", async () => {
     stubDesktop();
     vi.useFakeTimers({ shouldAdvanceTime: true });

@@ -218,12 +218,36 @@ describe("account", () => {
     expect(within(form).getByRole("button", { name: "Create token" })).toBeDisabled();
     await user.click(await within(group).findByRole("checkbox", { name: "Acme / Ops" }));
     expect(within(group).getByRole("checkbox", { name: "Acme / CRM" })).not.toBeChecked();
-    expect(within(group).getByText(/cannot have Full access/)).toBeInTheDocument();
-    // Managing reaches beyond single folders, so it is not on offer here.
-    expect(within(form).getByRole("radio", { name: "Full access" })).toBeDisabled();
+    // The server takes any level with a folder limit for a token, so Full access stays on offer.
+    expect(within(group).queryByText(/cannot have Full access/)).not.toBeInTheDocument();
+    expect(within(form).getByRole("radio", { name: "Full access" })).toBeEnabled();
     await user.click(within(form).getByRole("button", { name: "Create token" }));
 
     await screen.findByRole("dialog", { name: "Copy your new token" });
     expect(api.callsTo("POST /api/tokens")[0]?.body).toEqual({ name: "Scoped", write: false, manage: false, base_ids: ["app2"], expires_in_days: null });
+  });
+
+  it("keeps Full access when a token is limited to some folders, as the server allows", async () => {
+    const user = userEvent.setup();
+    const info = { id: "pat6", name: "Scoped agent", write: true, manage: true, base_ids: ["app2"], created_at: 1_700_000_000_000, last_used_at: null, expires_at: null };
+    const api = mockApi({
+      "GET /api/auth/me": USER,
+      "GET /api/tokens": [],
+      "GET /api/workspaces": [{ id: "wsp1", name: "Acme", role: "owner", bases: [{ id: "app2", workspace_id: "wsp1", name: "Ops", color: "green", icon: null, role: "owner" }] }],
+      "POST /api/tokens": { token: "pat_SCOPED", info },
+    });
+    renderApp({ route: "/account?tab=tokens" });
+
+    await user.click(await screen.findByRole("button", { name: /New token/ }));
+    const form = await screen.findByRole("dialog", { name: "New API token" });
+    await user.type(within(form).getByLabelText("Name"), "Scoped agent");
+    await user.click(within(form).getByRole("radio", { name: "Full access" }));
+    await user.selectOptions(within(form).getByLabelText("Folders"), "some");
+    expect(within(form).getByRole("radio", { name: "Full access" })).toBeChecked();
+    await user.click(await within(await within(form).findByRole("group", { name: "Allowed folders" })).findByRole("checkbox", { name: "Acme / Ops" }));
+    await user.click(within(form).getByRole("button", { name: "Create token" }));
+
+    await screen.findByRole("dialog", { name: "Copy your new token" });
+    expect(api.callsTo("POST /api/tokens")[0]?.body).toEqual({ name: "Scoped agent", write: true, manage: true, base_ids: ["app2"], expires_in_days: null });
   });
 });

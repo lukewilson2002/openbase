@@ -260,7 +260,7 @@ describe("shared views of other types", () => {
 
   it("falls back to a table when the board's stack field is not shared", async () => {
     open(view("kanban", { kanban_stack_field_id: null }));
-    expect(await screen.findByText(/needs a field that is not shared/)).toBeInTheDocument();
+    expect(await screen.findByText("This Board needs a property that is not shared, so its records are shown as a table.")).toBeInTheDocument();
     expect(await screen.findByRole("table", { name: "Records" })).toBeInTheDocument();
   });
 

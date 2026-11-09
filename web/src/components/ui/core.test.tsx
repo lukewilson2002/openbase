@@ -355,7 +355,7 @@ describe("FeedRow", () => {
   it("has a page glyph tile tinted with the hue, hidden from assistive technology", () => {
     const { container } = render(<FeedTile hue="purple" />);
     expect(container.firstElementChild).toHaveAttribute("aria-hidden", "true");
-    expect(container.firstElementChild).toHaveClass("ob-hue-purple", "ob-tint");
+    expect(container.firstElementChild).toHaveClass("ob-hue-purple", "ob-tint", "size-7");
   });
 });
 

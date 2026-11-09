@@ -16,7 +16,7 @@ import { Field, Input, Select } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusChip } from "@/components/ui/status-chip";
 import { formatDate } from "@/lib/format";
-import { NEEDS_ALL_FOLDERS, TOKEN_ACCESS_LABEL, accessOf, type OAuthAccess } from "@/lib/oauthAccess";
+import { TOKEN_ACCESS_LABEL, accessOf, type OAuthAccess } from "@/lib/oauthAccess";
 
 export function TokensSection() {
   const qc = useQueryClient();
@@ -147,25 +147,15 @@ function CreateTokenDialog({ onClose, onCreated }: { onClose: () => void; onCrea
         </Field>
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-1 text-label font-medium">What can it do?</legend>
-          <AccessChoice
-            value={access}
-            onChange={setAccess}
-            labels={TOKEN_ACCESS_LABEL}
-            // The server refuses a token that manages and is limited to some folders.
-            disabled={limitBases ? { [NEEDS_ALL_FOLDERS]: "Not available for a token limited to some folders." } : undefined}
-          />
+          {/* The server takes any level with any folder limit for a token (only an app's grant has the rule that Full access reaches every folder). */}
+          <AccessChoice value={access} onChange={setAccess} labels={TOKEN_ACCESS_LABEL} />
           <p className="text-meta text-muted">Passwords, two-factor settings, sessions and tokens can never be changed with a token. Only give Full access to tools you fully trust, such as an AI agent that should work for you.</p>
         </fieldset>
         <FolderLimit
           limited={limitBases}
-          onLimitedChange={(limited) => {
-            setLimitBases(limited);
-            // Step down rather than fail on Create.
-            if (limited && access === "manage") setAccess("write");
-          }}
+          onLimitedChange={setLimitBases}
           baseIds={baseIds}
           onBaseIdsChange={setBaseIds}
-          note="A token limited to some folders cannot have Full access, which reaches beyond single folders."
         />
         <Field label="Expires">
           {(ctl) => (

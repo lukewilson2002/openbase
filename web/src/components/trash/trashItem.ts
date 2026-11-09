@@ -56,16 +56,6 @@ export function trashDaysLeft(item: TrashItem, now = Date.now()): string {
   return days === 1 ? "1 day left" : `${days} days left`;
 }
 
-/**
- * How long the server keeps things, read off the items (each one's `expires_at` is its
- * `deleted_at` plus the server's retention), since the server does not publish the setting.
- */
-export function retentionDays(items: readonly TrashItem[]): number {
-  const item = items[0];
-  if (!item) return DEFAULT_RETENTION_DAYS;
-  return Math.max(1, Math.round((item.expires_at - item.deleted_at) / DAY));
-}
-
 /** The palette color of the item's mark: its own for a workspace, folder or collection, else its collection's, else its folder's. */
 export function trashItemHue(item: TrashItem): string {
   if (item.kind === "workspace") return item.workspace_color;

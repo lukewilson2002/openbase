@@ -76,7 +76,7 @@ export function FeedRow({ leading, title, meta, metaHue, metaMarkName, wrapMeta,
 /** The one generic page glyph a feed may show, on a tile tinted with the collection's hue. */
 export function FeedTile({ hue, className }: { hue?: string | null; className?: string }) {
   return (
-    <span aria-hidden className={cn(accentClass(hue, "tint"), "inline-flex size-8 shrink-0 items-center justify-center rounded-md", className)}>
+    <span aria-hidden className={cn(accentClass(hue, "tint"), "inline-flex size-7 shrink-0 items-center justify-center rounded-md", className)}>
       <Icon icon={FileText} />
     </span>
   );

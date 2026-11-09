@@ -194,6 +194,8 @@ describe("members page", () => {
     expect(goneResend).toBeDisabled();
     expect(goneResend).toHaveAttribute("title", "Its folders are in the trash. Cancel it and invite them again.");
     expect(within(goneRow).getByRole("button", { name: "Cancel invite" })).toBeEnabled();
+    // PH-6: the invite actions are 44 px tall on a phone.
+    expect(within(goneRow).getByRole("button", { name: "Cancel invite" })).toHaveClass("max-md:min-h-control-touch");
 
     const pending = screen.getByRole("listitem", { name: "jordan@example.com, invited" });
     await user.click(within(pending).getByRole("button", { name: "Resend" }));
