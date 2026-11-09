@@ -168,10 +168,14 @@
     display: none;
   }
 }
-/* With the unscheduled sheet open the days share what it leaves, and a row shorter than a day number and "+1 more" lets the link spill into the row below: the month then scrolls instead. */
+/*
+ * A row shorter than a day number and one chip makes FullCalendar fold every day's records into "+1 more" and show none, and
+ * one that cannot hold the number and the link lets the link spill into the row below: the days are never shorter than 5 rem
+ * (a number and a chip whose title takes two lines in a finger-wide cell), and the month scrolls when they do not all fit.
+ */
 @media (max-width: 1023px) {
   .ob-calendar .fc-dayGridMonth-view .fc-daygrid-day-frame {
-    min-height: 3.25rem;
+    min-height: 5rem;
   }
   /* "+N more" is a 15 px line: a layer around it makes it a 44 px target (PH-6); it opens the day's sheet. */
   .ob-calendar .fc-more-link {

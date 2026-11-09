@@ -727,6 +727,8 @@ test.describe("A11Y-6 sizing and motion", () => {
     };
     await open("Clients", "Follow-ups");
     await expect(page.locator(".fc-daygrid-day").first()).toBeVisible();
+    // A finger-wide day still shows its record (a row too short for one chip folds every day into "+1 more" and shows none).
+    await expect(page.locator(".fc-event").first()).toBeVisible();
     expect(await tapTargetFailures(page), "the calendar").toEqual([]);
     await open("Clients", "By status");
     await expect(page.getByRole("tree")).toBeVisible();
