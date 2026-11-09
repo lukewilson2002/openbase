@@ -274,7 +274,7 @@ export function Toolbar({ editor, canUpload }: { editor: Editor; canUpload?: boo
   // padded scroll area sets it to minus its padding (sticky stops at the padding's inner edge, and
   // the text would show above it); a page scrolling as a whole has no bar above it, so it stays 0.
   return (
-    <div role="toolbar" aria-label="Formatting" aria-orientation="horizontal" ref={ref} onKeyDown={moveAlong} className="sticky top-[var(--ob-sticky-top,0px)] z-10 flex shrink-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain rounded-t-md border-b border-line bg-surface px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div role="toolbar" aria-label="Formatting" aria-orientation="horizontal" ref={ref} onKeyDown={moveAlong} className="sticky top-[var(--ob-sticky-top,0px)] z-10 flex w-full min-w-0 max-w-full shrink-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain rounded-t-md border-b border-line bg-surface px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <ToolMenu editor={editor} label="Text style" trigger={<span className="flex items-center gap-1 px-1.5 text-[0.8125rem] text-fg">{s.heading ? `Heading ${s.heading}` : "Paragraph"}<ChevronDown aria-hidden className="size-3.5 text-muted" /></span>} className="w-auto min-w-24 justify-between">
         <DropdownMenuItem onSelect={() => run().setParagraph().run()}>Paragraph</DropdownMenuItem>
         {HEADINGS.map((level) => (
@@ -358,6 +358,8 @@ export function Toolbar({ editor, canUpload }: { editor: Editor; canUpload?: boo
         <Minus aria-hidden className="size-4" />
       </ToolButton>
       {canUpload && <MediaButton editor={editor} />}
+      {/* The end of the row: a browser may leave the container's own end padding out of what scrolls, which cut the last icon off. */}
+      <span aria-hidden data-toolbar-end className="w-1 shrink-0 self-stretch" />
     </div>
   );
 }

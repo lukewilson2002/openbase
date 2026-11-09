@@ -6,6 +6,7 @@ import type { BasePerson } from "@/api/types";
 import { IntroProvider } from "@/onboarding/IntroContext";
 import { ADMIN, USER, mockApi, renderWithProviders, stubDesktop } from "@/test/utils";
 import { AppShell } from "./AppShell";
+import { accentClass, personColors } from "@/lib/colors";
 import { BaseAvatars } from "./BaseAvatars";
 import { HomeShell } from "./HomeShell";
 import { ScreenHeader } from "./ScreenHeader";
@@ -267,6 +268,15 @@ describe("BaseAvatars", () => {
     const group = await screen.findByRole("img", { name: "2 people viewing now, 1 more can open this project: you and Alex Kim" });
     expect(Array.from(container.querySelectorAll("[data-face] [role=img]")).map((f) => f.getAttribute("title"))).toEqual(["Ada Lovelace", "Alex Kim"]);
     expect(group).toHaveTextContent("+1");
+  });
+
+  it("gives another person the colour comments and cells give them (the base's assignment, not a second hash)", async () => {
+    routes();
+    const { container } = renderWithProviders(<BaseAvatars people={[me, alex]} viewers={["usr1", "usr2"]} />);
+    await screen.findByRole("img", { name: "2 people viewing now: you and Alex Kim" });
+    const face = container.querySelectorAll<HTMLElement>("[data-face] [role=img]")[1]!;
+    const assigned = personColors([{ id: "usr1", name: me.name, email: me.email }, { id: "usr2", name: alex.name, email: alex.email }]).get("usr2")!;
+    expect(face.className).toContain(accentClass(assigned, "solid"));
   });
 
   it("has no +N when everyone who can open it is viewing", async () => {

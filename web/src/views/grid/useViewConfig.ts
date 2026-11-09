@@ -97,6 +97,9 @@ export function useViewConfig(schema: BaseSchema, table: Table, view: View, role
   const canConfigure = canConfigureView(role, view);
   const fieldIds = useMemo(() => new Set(table.fields.map((f) => f.id)), [table.fields]);
   const [saving, setSaving] = useState(false);
+  // The form being saved, shown until the save has landed: a refetch of the schema that was asked for before the last
+  // edit would otherwise put the form of a moment ago back for a moment (a label typed quickly after another edit).
+  const [sending, setSending] = useState<ViewConfig["form"] | null>(null);
   const viewRef = useRef(view);
   viewRef.current = view;
   const fieldIdsRef = useRef(fieldIds);
@@ -107,7 +110,8 @@ export function useViewConfig(schema: BaseSchema, table: Table, view: View, role
     if (draft && draft.base === null) writeDraft(userId, view.id, nextDraft(draft, view, applyDraft(view.config, draft), draftLayout(view, draft), Date.now()));
   }, [draft, userId, view]);
 
-  const config = useMemo(() => effectiveConfig(view.config, draft, fieldIds), [view.config, draft, fieldIds]);
+  const saved = useMemo(() => (sending ? { ...view.config, form: sending } : view.config), [view.config, sending]);
+  const config = useMemo(() => effectiveConfig(saved, draft, fieldIds), [saved, draft, fieldIds]);
   const transient = useMemo(() => toTransient(view.config, config), [view.config, config]);
   const queryConfig = useMemo(() => applyTransient(view.config, transient), [view.config, transient]);
   const layout = draftLayout(view, draft);
@@ -162,6 +166,7 @@ export function useViewConfig(schema: BaseSchema, table: Table, view: View, role
       s.origin = null;
       s.busy = false;
       setSaving(false);
+      setSending(null);
     }
   }, [qc, schema.id, table.id, toast, rebase]);
 
@@ -176,6 +181,7 @@ export function useViewConfig(schema: BaseSchema, table: Table, view: View, role
       if (!s.pending) s.origin = v.config;
       s.pending = next;
       s.queued = next;
+      setSending(next.form);
       rebase(before, next);
       qc.setQueryData<BaseSchema>(keys.base(schema.id), (old) => (old ? replaceViewConfig(old, table.id, v.id, next) : old));
       void pump();

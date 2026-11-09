@@ -204,6 +204,9 @@ describe("RecordPage: comments", () => {
     const mine = screen.getByLabelText("Comment by Ada Lovelace");
     expect(within(mine).getByRole("button", { name: "Edit comment" })).toBeInTheDocument();
     expect(within(screen.getByLabelText("Comment by Grace Hopper")).queryByRole("button", { name: "Edit comment" })).not.toBeInTheDocument();
+    // Your face is the colour of yours everywhere (the sidebar's too), not a second colour of the base's assignment.
+    expect(within(mine).getByRole("img", { name: "Ada Lovelace" })).toHaveClass("bg-primary");
+    expect(within(screen.getByLabelText("Comment by Grace Hopper")).getByRole("img", { name: "Grace Hopper" })).not.toHaveClass("bg-primary");
   });
 
   it("posts a rich text comment with an @mention picked after typing @", async () => {

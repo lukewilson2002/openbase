@@ -130,7 +130,7 @@ export function CommentsPanel({ recordId, collaborators, currentUserId, canComme
             const isEditing = editing?.id === c.id;
             return (
               <li key={c.id} className="flex gap-2" aria-label={`Comment by ${c.user_name ?? "a former user"}`}>
-                <Avatar name={c.user_name} email={c.user_id ? emailOf.get(c.user_id) : undefined} color={c.user_id ? colorOf.get(c.user_id) : undefined} size="sm" />
+                <Avatar name={c.user_name} email={c.user_id ? emailOf.get(c.user_id) : undefined} color={c.user_id ? colorOf.get(c.user_id) : undefined} own={mine} size="sm" />
                 <div className="min-w-0 flex-1">
                   <div className="flex min-h-control-sm items-center gap-2 max-md:min-h-0">
                     <span className="truncate text-label font-semibold">{c.user_name ?? "Former user"}</span>

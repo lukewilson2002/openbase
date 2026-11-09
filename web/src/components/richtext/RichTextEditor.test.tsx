@@ -27,6 +27,13 @@ function Host({ initial = "", onMarkdown }: { initial?: string; onMarkdown: (md:
 const editorOf = (root: ParentNode = document) => (root.querySelector(".ProseMirror") as HTMLElement & { editor: Editor }).editor;
 
 describe("RichTextEditor", () => {
+  it("ends the toolbar with a spacer, so its last control is never cut off at the end of the row on a phone", async () => {
+    render(<RichTextEditor value="" onChange={() => {}} aria-label="Notes" />);
+    const toolbar = await screen.findByRole("toolbar", { name: "Formatting" });
+    expect(toolbar.lastElementChild).toHaveAttribute("data-toolbar-end");
+    expect(toolbar).toHaveClass("min-w-0", "max-w-full");
+  });
+
   it("shows the Markdown it is given as formatting, with no raw Markdown on screen", async () => {
     render(<Host initial={"# Title\n\n**bold** and a [link](https://example.com)\n\n- one\n- two"} onMarkdown={vi.fn()} />);
     const box = await screen.findByRole("textbox", { name: "Notes" });

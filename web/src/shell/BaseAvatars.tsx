@@ -3,6 +3,7 @@ import { Lock } from "lucide-react";
 import type { BasePerson } from "@/api/types";
 import { useMe } from "@/auth/useAuth";
 import { Avatar, initials } from "@/components/ui/avatar";
+import { personColors } from "@/lib/colors";
 import { cn } from "@/lib/cn";
 
 const MAX_FACES = 4;
@@ -75,6 +76,8 @@ export function BaseAvatars({ people, viewers = [], max = MAX_FACES, size = "sm"
 
   // I count even before the first presence frame has come in, so the faces never start empty.
   const byId = new Map(people.filter((p) => !p.pending && p.user_id).map((p) => [p.user_id!, p] as const));
+  // The colour a person has in comments, history and cells: assigned across the people who can open the base.
+  const colors = personColors(people.flatMap((p) => (p.user_id ? [{ id: p.user_id, name: p.name, email: p.email }] : [])));
   const watching = [...new Set([...(meId ? [meId] : []), ...viewers])].flatMap((id) => byId.get(id) ?? []);
   const faces = watching.slice(0, max);
   const rest = people.length - faces.length;
@@ -91,7 +94,7 @@ export function BaseAvatars({ people, viewers = [], max = MAX_FACES, size = "sm"
         {/* Leftmost on top, each face (on a phone) tucked under the one before it: the first face (you) reads whole. */}
         {faces.map((p, i) => (
           <span key={p.user_id ?? i} aria-hidden data-face className="relative inline-flex rounded-full ring-2 ring-surface" style={{ zIndex: faces.length - i + 1 }}>
-            <Avatar name={p.name} email={p.email} size={size} own={!!meId && p.user_id === meId} />
+            <Avatar name={p.name} email={p.email} color={p.user_id ? colors.get(p.user_id) : undefined} size={size} own={!!meId && p.user_id === meId} />
           </span>
         ))}
         {rest > 0 && (

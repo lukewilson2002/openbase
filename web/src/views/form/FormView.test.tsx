@@ -112,6 +112,27 @@ describe("the builder", () => {
     expect(form.fields.find((f) => f.field_id === F.status.id)).toMatchObject({ label: "How far along?", help: "Pick one", required: true });
   });
 
+  it("keeps the label that was typed while its save is on the way, when an older copy of the schema arrives (a refetch asked for before)", async () => {
+    const user = userEvent.setup();
+    const view = formView();
+    // The first save never answers: the form is "being saved" for as long as the test looks.
+    const { client } = setup("creator", view, { "PATCH /api/views/viw1": () => new Promise(() => {}) });
+    await screen.findByRole("heading", { name: "Form" });
+    const label = screen.getByLabelText("Label for Name");
+    await user.clear(label);
+    await user.type(label, "Full name");
+    expect(label).toHaveValue("Full name");
+    // The schema as the server had it before this edit comes back from a refetch.
+    const old = client.getQueryData<ReturnType<typeof projectSchema>>(keys.base("app1"))!;
+    client.setQueryData(keys.base("app1"), {
+      ...old,
+      tables: old.tables.map((t) => ({ ...t, views: t.views.map((v) => (v.id === "viw1" ? { ...v, config: { ...v.config, form: { ...v.config.form, fields: v.config.form.fields.map((f) => ({ ...f, label: "Your name" })) } } } : v)) })),
+    });
+    await user.type(label, "!");
+    expect(screen.getByLabelText("Label for Name")).toHaveValue("Full name!");
+    expect(within(screen.getByRole("region", { name: "Form preview" })).getByText("Full name!")).toBeInTheDocument();
+  });
+
   it("removes, re-adds and reorders fields", async () => {
     const user = userEvent.setup();
     const { api } = setup("creator");
