@@ -1695,3 +1695,47 @@ async fn a_public_form_cannot_attach_a_file_a_member_uploaded() {
     .await;
     r.assert_status(200);
 }
+
+/// F2: a stranger's query body is read, and parsed, before the token is checked.
+#[tokio::test]
+async fn public_query_bodies_are_small_and_nested_filters_are_refused() {
+    let s = setup().await;
+    let big = json!({ "search": "x".repeat(70 * 1024) });
+    pub_post(s.app(), &s.query_path(), big)
+        .await
+        .assert_status(413);
+    // The same size is refused for a token that does not exist, before anything looks it up.
+    pub_post(
+        s.app(),
+        "/api/public/shares/shr_nope/query",
+        json!({ "search": "x".repeat(70 * 1024) }),
+    )
+    .await
+    .assert_status(413);
+
+    // Groups nested far past the limit: refused while reading, not after building the tree.
+    let mut filter = json!({ "items": [] });
+    for _ in 0..40 {
+        filter = json!({ "items": [filter] });
+    }
+    let r = pub_post(
+        s.app(),
+        "/api/public/shares/shr_nope/query",
+        json!({ "transient": { "filter": filter } }),
+    )
+    .await;
+    r.assert_status(400);
+    assert!(
+        r.body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("nested"),
+        "{}",
+        r.body
+    );
+
+    // An ordinary query still works.
+    pub_post(s.app(), &s.query_path(), json!({ "search": "a" }))
+        .await
+        .assert_status(200);
+}

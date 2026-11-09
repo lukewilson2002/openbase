@@ -93,13 +93,21 @@ pub const GUESS_LOCKOUT: Duration = Duration::from_secs(15 * 60);
 pub const MIN_SHARE_PASSWORD: usize = 8;
 pub const MAX_SHARE_PASSWORD: usize = 256;
 
+/// Largest body a public share's query accepts.
+pub const PUBLIC_QUERY_BODY_LIMIT: usize = 64 * 1024;
+
 const MINUTE: Duration = Duration::from_secs(60);
 const PASSWORD_HEADER: &str = "x-share-password";
 
 pub fn router() -> Router<AppState> {
     let public = Router::new()
         .route("/api/public/shares/{token}", get(public_view))
-        .route("/api/public/shares/{token}/query", post(public_query))
+        // The body is read before the token is looked at, so it is bounded for a stranger:
+        // a query is a page, a search and a few sorts, which fits in a few kilobytes.
+        .route(
+            "/api/public/shares/{token}/query",
+            post(public_query).layer(DefaultBodyLimit::max(PUBLIC_QUERY_BODY_LIMIT)),
+        )
         .route("/api/public/forms/{token}", get(public_form))
         .route("/api/public/forms/{token}/submit", post(submit_form))
         .route(
