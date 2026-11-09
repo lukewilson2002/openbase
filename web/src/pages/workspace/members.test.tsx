@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { InviteInfo, Member, WorkspaceSummary } from "@/api/types";
-import { USER, apiError, mockApi, renderApp, type Handler } from "@/test/utils";
+import { USER, apiError, mockApi, renderApp, stubDesktop, type Handler } from "@/test/utils";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -151,6 +151,7 @@ describe("members page", () => {
   });
 
   it("removes a member after confirming", async () => {
+    stubDesktop();
     const user = userEvent.setup();
     const api = routes({ "DELETE /api/workspaces/wsp1/members/usr3": { ok: true } });
     renderApp({ route: "/workspace/wsp1/members" });
@@ -302,6 +303,7 @@ describe("members page", () => {
   });
 
   it("lets someone who is not an owner leave, then goes home", async () => {
+    stubDesktop();
     const user = userEvent.setup();
     const me: Member = { user_id: "usr1", name: "Ada Lovelace", email: "ada@example.com", role: "viewer", all_bases: true, base_ids: [] };
     const owner: Member = { user_id: "usr9", name: "Olive Owner", email: "olive@example.com", role: "owner", all_bases: true, base_ids: [] };
@@ -319,6 +321,7 @@ describe("members page", () => {
   });
 
   it("does not let the only owner leave, and says why", async () => {
+    stubDesktop();
     const user = userEvent.setup();
     routes();
     renderApp({ route: "/workspace/wsp1/members" });

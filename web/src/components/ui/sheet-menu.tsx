@@ -7,6 +7,9 @@ import { Sheet, type SheetProps } from "./sheet";
 
 const CloseContext = createContext<() => void>(() => {});
 
+/** Closes the sheet menu the caller is in (a no-op outside one). */
+export const useSheetMenuClose = () => useContext(CloseContext);
+
 /**
  * A list of actions in a bottom sheet (PH-3): what a menu becomes on a phone. The rows close the sheet
  * after they act, so a tap that navigates or opens a dialog does not leave the sheet over the next screen.

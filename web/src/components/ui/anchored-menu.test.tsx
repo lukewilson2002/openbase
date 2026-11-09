@@ -1,9 +1,13 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { stubDesktop } from "@/test/utils";
 import { AnchoredMenu } from "./anchored-menu";
 import { DropdownMenuItem } from "./dropdown-menu";
+
+// A menu is a dropdown on a desktop and a sheet on a phone; these tests drive the dropdown (jsdom matches no query, so it would read as a phone).
+beforeEach(() => stubDesktop());
 
 function Harness({ onSelect }: { onSelect?: () => void }) {
   const [anchor, setAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);

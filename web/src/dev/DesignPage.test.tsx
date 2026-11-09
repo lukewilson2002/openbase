@@ -1,8 +1,12 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { stubDesktop } from "@/test/utils";
 import { Providers, createQueryClient } from "@/providers";
 import DesignPage from "./DesignPage";
 import { DESIGN_SECTIONS, DESIGN_THEMES } from "./designSections";
+
+// A menu is a dropdown on a desktop and a sheet on a phone; these tests drive the dropdown (jsdom matches no query, so it would read as a phone).
+beforeEach(() => stubDesktop());
 
 /** What assistive technology reads as a control's name: aria-label, aria-labelledby, a label, or its text. */
 function accessibleName(el: Element): string {

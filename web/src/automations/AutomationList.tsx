@@ -110,7 +110,7 @@ export function AutomationList({ baseId, automations, activeId, onNew, onDeleted
                 label={<span className="sr-only">{`${a.enabled ? "Turn off" : "Turn on"} ${a.name}`}</span>}
                 className="pt-0.5"
               />
-              <DropdownMenu>
+              <DropdownMenu title={a.name}>
                 <DropdownMenuTrigger asChild>
                   <IconButton label={`Options for ${a.name}`} size="sm" noTooltip>
                     <Ellipsis aria-hidden className="size-4" />

@@ -1,8 +1,11 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { ADMIN, ADMIN_USER_ROW, USER, mockApi, renderApp } from "@/test/utils";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ADMIN, ADMIN_USER_ROW, USER, mockApi, renderApp, stubDesktop } from "@/test/utils";
 import { AUDIT_PAGE_SIZE } from "./admin/AuditTab";
+
+// A menu is a dropdown on a desktop and a sheet on a phone; these tests drive the dropdown (jsdom matches no query, so it would read as a phone).
+beforeEach(() => stubDesktop());
 
 afterEach(() => vi.unstubAllGlobals());
 

@@ -100,7 +100,7 @@ export function UsersTab() {
                   <Td className="whitespace-nowrap text-muted max-md:hidden">{formatDateTime(u.created_at)}</Td>
                   <Td className="whitespace-nowrap text-muted max-md:hidden">{u.last_login_at ? formatDateTime(u.last_login_at) : "Never"}</Td>
                   <Td>
-                    <DropdownMenu>
+                    <DropdownMenu title={u.name}>
                       <DropdownMenuTrigger asChild>
                         <IconButton label={`Actions for ${u.name}`} size="sm" noTooltip>
                           <Ellipsis aria-hidden className="size-4" />

@@ -2,8 +2,12 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Editor } from "@tiptap/core";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { stubDesktop } from "@/test/utils";
 import { RichTextEditor } from "./RichTextEditor";
+
+// A menu is a dropdown on a desktop and a sheet on a phone; these tests drive the dropdown (jsdom matches no query, so it would read as a phone).
+beforeEach(() => stubDesktop());
 
 function Host({ initial = "", onMarkdown }: { initial?: string; onMarkdown: (md: string) => void }) {
   const [value, setValue] = useState(initial);

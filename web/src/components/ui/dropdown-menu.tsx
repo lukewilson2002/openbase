@@ -1,10 +1,13 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ComponentProps, type CSSProperties } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ComponentProps, type CSSProperties, type ReactNode } from "react";
 import { Check, ChevronRight } from "lucide-react";
-import { DropdownMenu as M } from "radix-ui";
+import { DropdownMenu as M, Slot } from "radix-ui";
+import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
 import { useTapGuard } from "@/lib/tapGuard";
 import { usePortalHost } from "./portal-host";
 import { Icon } from "./icon";
+import { SheetMenu, useSheetMenuClose } from "./sheet-menu";
+import { SheetModeContext } from "./sheet-mode";
 
 /**
  * The height a menu has below or above its trigger, inside the screen's collision padding and clear
@@ -28,11 +31,16 @@ export const menuRowClass =
   "relative flex min-h-control-lg cursor-default select-none items-center gap-2 rounded-md px-2.5 text-ui text-fg no-underline outline-none max-md:min-h-control-touch pointer-coarse:min-h-control-touch " +
   "data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-primary-soft data-[active=true]:bg-primary-soft";
 
-/** The menu's open state, so a trigger can open it on a tap (see `DropdownMenuTrigger`). */
-const OpenContext = createContext<{ open: boolean; setOpen: (open: boolean) => void } | null>(null);
+/** The menu's open state, so a trigger can open it on a tap (see `DropdownMenuTrigger`), and whether it is a sheet and what it is called. */
+const OpenContext = createContext<{ open: boolean; setOpen: (open: boolean) => void; sheet: boolean; title: string } | null>(null);
 
-/** Radix's root, with the open state held here (controlled or not) for the trigger's tap handling. */
-export function DropdownMenu({ open: openProp, defaultOpen = false, onOpenChange, ...props }: ComponentProps<typeof M.Root>) {
+/**
+ * Radix's root, with the open state held here (controlled or not) for the trigger's tap handling. Below the desktop
+ * breakpoint the menu is a bottom sheet titled `title` instead of a dropdown (PH-3): its content, items and labels
+ * draw as sheet rows, so a menu is written once.
+ */
+export function DropdownMenu({ open: openProp, defaultOpen = false, onOpenChange, title = "Menu", ...props }: ComponentProps<typeof M.Root> & { title?: string }) {
+  const desktop = useMediaQuery(DESKTOP_QUERY);
   const [inner, setInner] = useState(defaultOpen);
   const open = openProp ?? inner;
   const setOpen = useCallback(
@@ -42,7 +50,7 @@ export function DropdownMenu({ open: openProp, defaultOpen = false, onOpenChange
     },
     [openProp, onOpenChange],
   );
-  const value = useMemo(() => ({ open, setOpen }), [open, setOpen]);
+  const value = useMemo(() => ({ open, setOpen, sheet: !desktop, title }), [open, setOpen, desktop, title]);
   return (
     <OpenContext value={value}>
       <M.Root open={open} onOpenChange={setOpen} {...props} />
@@ -67,6 +75,8 @@ export function DropdownMenuTrigger({ onPointerDown, onPointerMove, onPointerUp,
       {...props}
       onPointerDown={(e) => {
         onPointerDown?.(e);
+        // Radix opens on the press, before a mouse has given the button focus: a sheet that opens then has nothing to hand focus back to.
+        if (menu?.sheet && e.pointerType === "mouse") e.currentTarget.focus({ preventScroll: true });
         guard.onPointerDown(e);
       }}
       onPointerMove={(e) => {
@@ -88,10 +98,26 @@ export function DropdownMenuTrigger({ onPointerDown, onPointerMove, onPointerUp,
     />
   );
 }
-export const DropdownMenuRadioGroup = M.RadioGroup;
+
+const RadioContext = createContext<{ value?: string; onValueChange?: (value: string) => void } | null>(null);
+
+export function DropdownMenuRadioGroup({ value, onValueChange, ...props }: ComponentProps<typeof M.RadioGroup>) {
+  if (useContext(SheetModeContext)) return <RadioContext value={{ value, onValueChange }}>{props.children}</RadioContext>;
+  return <M.RadioGroup value={value} onValueChange={onValueChange} {...props} />;
+}
 
 export function DropdownMenuContent({ className, style, sideOffset = 4, align = "end", collisionPadding = 8, ...props }: ComponentProps<typeof M.Content>) {
   const host = usePortalHost();
+  const menu = useContext(OpenContext);
+  if (menu?.sheet) {
+    return (
+      <SheetMenu open={menu.open} onOpenChange={menu.setOpen} title={props["aria-label"] ?? menu.title}>
+        <SheetModeContext value>
+          <ul className="flex flex-col py-1.5">{props.children}</ul>
+        </SheetModeContext>
+      </SheetMenu>
+    );
+  }
   return (
     <M.Portal container={host.container}>
       <M.Content
@@ -108,13 +134,68 @@ export function DropdownMenuContent({ className, style, sideOffset = 4, align = 
 
 const itemClass = menuRowClass;
 
-export function DropdownMenuItem({ className, danger, ...props }: ComponentProps<typeof M.Item> & { danger?: boolean }) {
-  return <M.Item className={cn(itemClass, danger && "text-danger", className)} {...props} />;
+/**
+ * A row of a menu drawn as a sheet: 44 px, closing the sheet after it acts unless the item keeps the menu open
+ * (`preventDefault` on the select event, as in a dropdown).
+ */
+function SheetItem({ className, danger, disabled, onSelect, asChild, selected, children }: { className?: string; danger?: boolean; disabled?: boolean; onSelect?: (event: Event) => void; asChild?: boolean; selected?: boolean; children?: ReactNode }) {
+  const close = useSheetMenuClose();
+  const Comp = asChild ? Slot.Root : "button";
+  return (
+    <li>
+      <Comp
+        {...(asChild ? {} : { type: "button", disabled })}
+        aria-current={selected ? "true" : undefined}
+        onClick={() => {
+          if (disabled) return;
+          const event = new Event("menu.select", { cancelable: true });
+          onSelect?.(event);
+          if (!event.defaultPrevented) close();
+        }}
+        className={cn(menuRowClass, "min-h-control-touch w-full gap-3 text-left hover:bg-hover disabled:pointer-events-none disabled:opacity-50", selected && "font-semibold", danger && "text-danger", className)}
+      >
+        {children}
+      </Comp>
+    </li>
+  );
 }
 
-export function DropdownMenuRadioItem({ className, children, ...props }: ComponentProps<typeof M.RadioItem>) {
+export function DropdownMenuItem({ className, danger, disabled, onSelect, asChild, children, ...props }: ComponentProps<typeof M.Item> & { danger?: boolean }) {
+  if (useContext(SheetModeContext)) {
+    return (
+      <SheetItem className={className} danger={danger} disabled={disabled} onSelect={onSelect} asChild={asChild}>
+        {children}
+      </SheetItem>
+    );
+  }
   return (
-    <M.RadioItem className={cn(itemClass, "pl-8", className)} {...props}>
+    <M.Item className={cn(itemClass, danger && "text-danger", className)} disabled={disabled} onSelect={onSelect} asChild={asChild} {...props}>
+      {children}
+    </M.Item>
+  );
+}
+
+export function DropdownMenuRadioItem({ className, children, value, onSelect, ...props }: ComponentProps<typeof M.RadioItem>) {
+  const group = useContext(RadioContext);
+  if (useContext(SheetModeContext)) {
+    const selected = group?.value === value;
+    return (
+      <SheetItem
+        className={className}
+        disabled={props.disabled}
+        selected={selected}
+        onSelect={(e) => {
+          onSelect?.(e);
+          if (!e.defaultPrevented) group?.onValueChange?.(value);
+        }}
+      >
+        <span className="min-w-0 flex-1">{children}</span>
+        {selected && <Icon icon={Check} className="text-primary-text" />}
+      </SheetItem>
+    );
+  }
+  return (
+    <M.RadioItem className={cn(itemClass, "pl-8", className)} value={value} onSelect={onSelect} {...props}>
       <M.ItemIndicator className="absolute left-2.5 inline-flex">
         <Icon icon={Check} />
       </M.ItemIndicator>
@@ -124,6 +205,7 @@ export function DropdownMenuRadioItem({ className, children, ...props }: Compone
 }
 
 export function DropdownMenuLabel({ className, ...props }: ComponentProps<typeof M.Label>) {
+  if (useContext(SheetModeContext)) return <li className={cn("px-2.5 py-1 text-meta font-medium text-muted", className)}>{props.children}</li>;
   return <M.Label className={cn("px-2.5 py-1 text-meta font-medium text-muted", className)} {...props} />;
 }
 
@@ -154,5 +236,6 @@ export function DropdownMenuSubContent({ className, style, sideOffset = 4, colli
 }
 
 export function DropdownMenuSeparator({ className, ...props }: ComponentProps<typeof M.Separator>) {
+  if (useContext(SheetModeContext)) return <li role="separator" className="my-1 h-px bg-line" />;
   return <M.Separator className={cn("-mx-1.5 my-1.5 h-px bg-line", className)} {...props} />;
 }

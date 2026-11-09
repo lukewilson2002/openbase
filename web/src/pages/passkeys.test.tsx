@@ -2,7 +2,10 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PasskeyInfo } from "@/api/types";
-import { ADMIN, ADMIN_USER_ROW, USER, apiError, mockApi, renderApp } from "@/test/utils";
+import { ADMIN, ADMIN_USER_ROW, USER, apiError, mockApi, renderApp, stubDesktop } from "@/test/utils";
+
+// A menu is a dropdown on a desktop and a sheet on a phone; these tests drive the dropdown (jsdom matches no query, so it would read as a phone).
+beforeEach(() => stubDesktop());
 
 // The browser's WebAuthn calls are replaced; the conversions (lib/webauthn.test.ts) are real.
 const webauthn = vi.hoisted(() => ({

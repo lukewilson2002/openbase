@@ -3,13 +3,13 @@ import { resolve } from "node:path";
 import { act, createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { stubDesktop, stubPhone } from "@/test/utils";
 import { Button } from "./button";
 import { CommandPalette, type CommandGroup } from "./command-palette";
 import { ConfirmDialog } from "./confirm-dialog";
 import { Dialog } from "./dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./dropdown-menu";
 import { FilterBar, type FilterBarChip, type FilterBarSuggestion } from "./filter-bar";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 import { Sheet } from "./sheet";
@@ -51,6 +51,9 @@ describe("Popover", () => {
 });
 
 describe("Menu", () => {
+  // A dropdown on a desktop; a phone gets the sheet (see "Menu on a phone").
+  beforeEach(() => stubDesktop());
+
   function Harness({ onPick = () => {} }: { onPick?: (name: string) => void }) {
     return (
       <DropdownMenu>
@@ -106,6 +109,65 @@ describe("Menu", () => {
     await screen.findByRole("menu");
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    expect(opener).toHaveFocus();
+  });
+});
+
+describe("Menu on a phone", () => {
+  function Harness({ onPick = () => {}, onTheme = () => {} }: { onPick?: (name: string) => void; onTheme?: (v: string) => void }) {
+    return (
+      <DropdownMenu title="Actions for Ada">
+        <DropdownMenuTrigger asChild>
+          <button>Actions</button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuLabel>Ada</DropdownMenuLabel>
+          <DropdownMenuItem onSelect={() => onPick("Rename")}>Rename</DropdownMenuItem>
+          <DropdownMenuItem onSelect={(e) => (e.preventDefault(), onPick("Keep open"))}>Keep open</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuRadioGroup value="light" onValueChange={onTheme}>
+            <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+          <DropdownMenuItem danger disabled>
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
+  it("opens as a bottom sheet with 44 px rows instead of a dropdown (PH-3)", async () => {
+    const user = userEvent.setup();
+    const onPick = vi.fn();
+    const onTheme = vi.fn();
+    render(<Harness onPick={onPick} onTheme={onTheme} />);
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    const sheet = await screen.findByRole("dialog", { name: "Actions for Ada" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(within(sheet).getByRole("button", { name: "Rename" })).toHaveClass("min-h-control-touch");
+    expect(within(sheet).getByRole("button", { name: "Light" })).toHaveAttribute("aria-current", "true");
+    expect(within(sheet).getByRole("button", { name: "Delete" })).toBeDisabled();
+
+    // A choice that keeps the menu open (preventDefault, as in a dropdown) leaves the sheet where it is.
+    await user.click(within(sheet).getByRole("button", { name: "Keep open" }));
+    expect(onPick).toHaveBeenCalledWith("Keep open");
+    expect(screen.getByRole("dialog", { name: "Actions for Ada" })).toBeInTheDocument();
+
+    await user.click(within(sheet).getByRole("button", { name: "Dark" }));
+    expect(onTheme).toHaveBeenCalledWith("dark");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("closes after an item acts and hands focus back to the button that opened it", async () => {
+    const user = userEvent.setup();
+    const onPick = vi.fn();
+    render(<Harness onPick={onPick} />);
+    const opener = screen.getByRole("button", { name: "Actions" });
+    await user.click(opener);
+    await user.click(await screen.findByRole("button", { name: "Rename" }));
+    expect(onPick).toHaveBeenCalledWith("Rename");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(opener).toHaveFocus();
   });
 });

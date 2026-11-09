@@ -108,7 +108,7 @@ export default function FormView(props: ViewProps) {
         <div role="toolbar" aria-label="Form toolbar" className="flex flex-wrap items-center gap-1.5 border-b border-line bg-surface px-2.5 py-2 md:px-4 md:py-2.5">
           {modes.length > 1 ? <SegmentedSwitch label="Form mode" size="md" value={mode} options={modes} onChange={setMode} className="md:mr-1.5" /> : null}
           {address && (
-            <DropdownMenu>
+            <DropdownMenu title="More">
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="gap-1 pr-2">
                   More <ChevronDown aria-hidden className="size-3.5" />

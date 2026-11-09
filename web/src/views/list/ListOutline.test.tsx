@@ -1,11 +1,15 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { stubDesktop } from "@/test/utils";
 import type { GroupHeader, TableRecord } from "@/api/types";
 import { DEFAULT_CTX } from "@/lib/cells/format";
 import { ALL_FIELDS, field, makeRecord } from "@/test/fields";
 import type { RecordSelection } from "../common/useRecordSelection";
 import { ListOutline, ROWS_PER_GROUP, type ListOutlineProps } from "./ListOutline";
+
+// A menu is a dropdown on a desktop and a sheet on a phone; these tests drive the dropdown (jsdom matches no query, so it would read as a phone).
+beforeEach(() => stubDesktop());
 
 const name = ALL_FIELDS.text!;
 const status = ALL_FIELDS.single_select!;

@@ -1,13 +1,16 @@
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Automation, RunsPage } from "@/api/types";
 import { Providers, createQueryClient } from "@/providers";
-import { USER, apiError, mockApi, type Handler } from "@/test/utils";
+import { USER, apiError, mockApi, type Handler, stubDesktop } from "@/test/utils";
 import { PEOPLE } from "@/test/fields";
 import { AutomationsPage } from "./AutomationsPage";
 import { automationSchema, makeAutomation } from "./testUtils";
+
+// A menu is a dropdown on a desktop and a sheet on a phone; these tests drive the dropdown (jsdom matches no query, so it would read as a phone).
+beforeEach(() => stubDesktop());
 
 afterEach(() => vi.unstubAllGlobals());
 

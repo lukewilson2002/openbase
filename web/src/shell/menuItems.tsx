@@ -3,16 +3,16 @@
  * `DropdownMenuItem` on a desktop and a 44 px row of a bottom sheet on a phone (PH-3). `ActionMenu` provides
  * which; the items and groups read it, so a menu's content is the same code in both.
  */
-import { cloneElement, createContext, useContext, useState, type ReactElement, type ReactNode } from "react";
+import { cloneElement, useContext, useState, type ReactElement, type ReactNode } from "react";
 import { Link } from "react-router";
 import type { LucideIcon } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Icon } from "@/components/ui/icon";
 import { SheetMenu, SheetMenuRow } from "@/components/ui/sheet-menu";
 import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
+import { SheetModeContext } from "@/components/ui/sheet-mode";
 
-/** Whether the items in scope are rows of a sheet rather than items of a dropdown. */
-export const SheetModeContext = createContext(false);
+export { SheetModeContext };
 
 export interface MenuItemProps {
   icon: LucideIcon;

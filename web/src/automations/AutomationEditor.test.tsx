@@ -4,14 +4,17 @@
  */
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionStep, Automation, Trigger } from "@/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { api as endpoints } from "@/api/endpoints";
 import { keys } from "@/api/keys";
-import { apiError, chooseOption, mockApi, type Handler, type MockApi } from "@/test/utils";
+import { apiError, chooseOption, mockApi, type Handler, type MockApi, stubDesktop } from "@/test/utils";
 import { AutomationEditor } from "./AutomationEditor";
 import { automationSchema, makeAutomation, makeEnv, renderWithEnv } from "./testUtils";
+
+// A menu is a dropdown on a desktop and a sheet on a phone; these tests drive the dropdown (jsdom matches no query, so it would read as a phone).
+beforeEach(() => stubDesktop());
 
 afterEach(() => vi.unstubAllGlobals());
 

@@ -27,6 +27,7 @@ export function AnchoredMenu({ anchor, onClose, children, label, align = "start"
   }, [isOpen]);
   return (
     <DropdownMenu
+      title={label}
       open={anchor !== null}
       onOpenChange={(open) => {
         if (!open) onClose();

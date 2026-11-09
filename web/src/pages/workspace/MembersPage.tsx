@@ -255,7 +255,7 @@ function MemberRow({
           )}
           {canManage || isMe ? (
             <div className={cn("flex justify-center", ACTIONS_COL)}>
-              <DropdownMenu>
+              <DropdownMenu title={m.name}>
                 <DropdownMenuTrigger asChild>
                   <IconButton label={`Actions for ${m.name}`} noTooltip>
                     <Ellipsis aria-hidden className="size-[18px]" />

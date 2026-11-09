@@ -106,7 +106,7 @@ const HEADINGS = [1, 2, 3, 4, 5, 6] as const;
 
 function ToolMenu({ editor, label, trigger, children, className }: { editor: Editor; label: string; trigger: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <DropdownMenu>
+    <DropdownMenu title={label}>
       <DropdownMenuTrigger asChild>
         <button type="button" tabIndex={-1} aria-label={label} title={label} onMouseDown={keepFocus} className={cn(btn, className)}>
           {trigger}

@@ -84,7 +84,7 @@ function AddActionMenu({ count, onAdd }: { count: number; onAdd: (type: ActionTy
   const full = count >= MAX_ACTIONS;
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <DropdownMenu>
+      <DropdownMenu title="Add action">
         <DropdownMenuTrigger asChild>
           <Button disabled={full}>
             <Plus aria-hidden className="size-4" /> Add action

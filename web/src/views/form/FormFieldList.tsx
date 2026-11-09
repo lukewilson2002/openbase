@@ -361,7 +361,7 @@ export function FormFieldList({ form, table, hiddenFields, readOnly, onChange, o
       </DndContext>
       {!readOnly && (
         <div className="flex flex-wrap gap-x-1">
-          <DropdownMenu>
+          <DropdownMenu title="Add a property">
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
@@ -384,7 +384,7 @@ export function FormFieldList({ form, table, hiddenFields, readOnly, onChange, o
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-          <DropdownMenu>
+          <DropdownMenu title="Add a heading or text">
             <DropdownMenuTrigger asChild>
               <button type="button" className="flex h-9 items-center gap-1.5 self-start rounded-lg px-2.5 text-ui text-muted hover:bg-hover hover:text-fg data-[state=open]:bg-hover">
                 <Heading aria-hidden className="size-[15px]" /> Add a heading or text
