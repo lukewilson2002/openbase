@@ -94,7 +94,7 @@ test.describe("on a desktop", () => {
 
   test("Comments opens a 360 px panel with the count on its button, and the panel is remembered across a reload", async ({ page }) => {
     await page.goto(recordUrl(fx.records[0]!));
-    const button = page.getByRole("button", { name: "Comments (1)" });
+    const button = page.getByRole("button", { name: "Comments, 1" });
     await expect(button).toBeVisible();
     await expect(button).toHaveText("1");
     await button.click();
@@ -110,7 +110,7 @@ test.describe("on a desktop", () => {
     await page.keyboard.type("Second thought");
     await panel.getByRole("button", { name: "Comment", exact: true }).click();
     await expect(panel.getByText("Second thought")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Comments (2)" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Comments, 2" })).toBeVisible();
 
     // Remembered per device: it is open again, and the keyboard is where the page left it.
     await page.reload();
@@ -211,7 +211,7 @@ test.describe("on a phone", () => {
   test("Comments and History are full-screen sheets, with the box to write in kept in view, and nothing is remembered", async ({ page }) => {
     await page.goto(recordUrl(fx.records[0]!));
     await expect(title(page)).toBeVisible();
-    const comments = page.getByRole("button", { name: /^Comments \(/ });
+    const comments = page.getByRole("button", { name: /^Comments, / });
     await expect(comments).toHaveText(/\d/);
     const size = (await comments.boundingBox())!;
     expect(size.width).toBeGreaterThanOrEqual(44);

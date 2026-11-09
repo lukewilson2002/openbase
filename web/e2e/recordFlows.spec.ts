@@ -336,7 +336,7 @@ test.describe("on a desktop", () => {
     await page.keyboard.type("Sent the renewal quote");
     await comments.getByRole("button", { name: "Comment", exact: true }).click();
     await expect(comments.getByText("Sent the renewal quote")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Comments (1)" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Comments, 1" })).toBeVisible();
     const saved = await call<{ body: string }[]>(page.request, "get", `/api/records/${fx.records[0]}/comments`);
     expect(saved.map((c) => c.body)).toEqual(["Sent the renewal quote"]);
     // Focus goes back to the page first: Escape in the box is not "leave".

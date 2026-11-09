@@ -95,7 +95,7 @@ test("the shell, its sheets, the collection and the record page fit a phone", as
   });
 
   await test.step("the avatar opens the profile menu as a sheet, with Escape returning focus to it", async () => {
-    const avatar = page.getByRole("main").locator("header").first().getByRole("button", { name: "Account menu" });
+    const avatar = page.getByRole("main").locator("header").first().getByRole("button", { name: /^Account menu/ });
     await avatar.tap();
     const sheet = page.getByRole("dialog", { name: "Account" });
     await expect(sheet.getByText(email)).toBeVisible();
@@ -125,7 +125,7 @@ test("the shell, its sheets, the collection and the record page fit a phone", as
     await expect(main.getByRole("button", { name: /^Mobile workspace/ })).toBeVisible();
     await expect(tabs.getByRole("link", { name: "Collections" })).toHaveAttribute("aria-current", "page");
     for (const name of ["History", "Trash", "Workspace settings"]) await expect(main.getByRole("link", { name })).toBeVisible();
-    await expect(main.getByRole("button", { name: "Account menu" })).toBeVisible();
+    await expect(main.getByRole("button", { name: /^Account menu/ })).toBeVisible();
     await expectTouchTargets(main.getByRole("link"), "collections tab links");
     const folder = main.getByRole("button", { name: "A base with a fairly long name", exact: true });
     await expect(folder).toBeVisible();

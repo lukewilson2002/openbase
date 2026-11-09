@@ -126,7 +126,7 @@ async function signInWithButton(page: Page, auth: Virtual): Promise<void> {
 }
 
 async function logOut(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("button", { name: /^Account menu/ }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login/);
 }
@@ -247,7 +247,7 @@ test("a sign-in with a passkey skips the two-factor code that a password sign-in
   // by itself, completes it right away: signed in, with nothing typed, no button and no code.
   const loggedOut = page.waitForResponse((r) => r.url().endsWith("/api/auth/logout"));
   const signedIn = page.waitForResponse((r) => r.url().endsWith("/api/auth/passkey-login/finish"));
-  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("button", { name: /^Account menu/ }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   expect((await loggedOut).ok()).toBe(true);
   expect((await signedIn).status()).toBe(200);

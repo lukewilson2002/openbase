@@ -107,8 +107,11 @@ export default defineConfig({
     { name: "settings-pages", testMatch: /settingsPages\.spec\.ts$/, use: chrome, dependencies: ["journey"] },
     // The screen ledger's screenshots (docs/plans/ux-overhaul-screenshots): skipped unless LEDGER_SHOTS=1. Signs up its own users.
     { name: "ledger", testMatch: /ledger\.spec\.ts$/, use: chrome, dependencies: ["journey"] },
+    // Accessibility (A11Y-1 to A11Y-7): axe-core on every ledger screen in both themes at 1440 and 390 px, keyboard-only walks,
+    // focus rings, landmarks, live regions, 200% text zoom and target sizes. Signs up its own users.
+    { name: "a11y", testMatch: /a11y[A-Za-z]*\.spec\.ts$/, use: chrome, dependencies: ["journey"] },
     // Administration -> Email: changes the instance-wide mail settings and restores them, so it
     // runs after everything else.
-    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views", "date-groups", "oauth", "assistants", "appearance", "mobile", "passkeys", "search", "sidebar", "collection", "linked-records", "record-page", "record-panels", "page-embeds", "record-flows", "shell-routes", "home", "settings-pages"] },
+    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views", "date-groups", "oauth", "assistants", "appearance", "mobile", "passkeys", "search", "sidebar", "collection", "linked-records", "record-page", "record-panels", "page-embeds", "record-flows", "shell-routes", "home", "settings-pages", "a11y"] },
   ],
 });

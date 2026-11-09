@@ -123,7 +123,7 @@ test("the workspace settings move the top level, and Members lists folder access
 
   const current = page.getByRole("listitem").filter({ hasText: "Top level now" });
   await expect(current).toHaveCount(1);
-  await page.getByRole("button", { name: "Use Garden as top level" }).click();
+  await page.getByRole("button", { name: "Use as top level: Garden" }).click();
   await expect(page.getByText("Garden is now the top level")).toBeVisible();
   await expect(page.getByRole("listitem").filter({ hasText: "Top level now" })).toContainText("Garden");
 

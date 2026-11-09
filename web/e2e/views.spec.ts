@@ -143,7 +143,7 @@ test.describe("kanban", () => {
 
   test("drags a card to another stack with the pointer and saves the new status", async ({ page }) => {
     await open(page, "kanban");
-    const card = page.getByRole("button", { name: "Alpha" });
+    const card = page.getByRole("button", { name: /^Alpha/ });
     const target = page.getByRole("listitem", { name: "Stack: Doing" });
     const from = (await card.boundingBox())!;
     const to = (await target.boundingBox())!;
@@ -153,12 +153,12 @@ test.describe("kanban", () => {
     await page.mouse.move(to.x + to.width / 2, to.y + 120, { steps: 12 });
     await page.mouse.up();
     await expect.poll(async () => (await record(page, fx.records.alpha)).values[fx.fields.status]).toBe(fx.choice.doing);
-    await expect(target.getByRole("button", { name: "Alpha" })).toBeVisible();
+    await expect(target.getByRole("button", { name: /^Alpha/ })).toBeVisible();
   });
 
   test("moves a card with the keyboard (Space, arrow, Space)", async ({ page }) => {
     await open(page, "kanban");
-    await page.getByRole("button", { name: "Delta" }).focus();
+    await page.getByRole("button", { name: /^Delta/ }).focus();
     // dnd-kit ignores arrow keys until it has measured the cards (the overlay shows earlier than that).
     // The board announces only the pick-up at that point, nothing about what the card is over, so wait for
     // the pick-up, then press the arrow until the card shows in the next stack. A press that was ignored
@@ -166,7 +166,7 @@ test.describe("kanban", () => {
     await page.keyboard.press("Space");
     await expect(page.locator("[data-drag-overlay]")).toBeVisible();
     await expect(page.getByRole("status").filter({ hasText: /Picked up Delta/ })).toBeAttached();
-    const inDoing = page.getByRole("listitem", { name: "Stack: Doing" }).getByRole("button", { name: "Delta" });
+    const inDoing = page.getByRole("listitem", { name: "Stack: Doing" }).getByRole("button", { name: /^Delta/ });
     await expect(async () => {
       await page.keyboard.press("ArrowLeft");
       await expect(inDoing).toBeVisible({ timeout: 2_000 });
@@ -187,18 +187,18 @@ test.describe("kanban", () => {
 test.describe("gallery and list", () => {
   test("the gallery shows a card per record and opens one as its page", async ({ page }) => {
     await open(page, "gallery");
-    await expect(page.getByRole("button", { name: "Bravo" })).toBeVisible();
-    await page.getByRole("button", { name: "Bravo" }).click();
+    await expect(page.getByRole("button", { name: /^Bravo/ })).toBeVisible();
+    await page.getByRole("button", { name: /^Bravo/ }).click();
     await expect(page).toHaveURL(new RegExp(`/r/${fx.records.bravo}$`));
     await expect(page.getByRole("main", { name: "Record" }).getByRole("heading", { level: 1, name: "Bravo" })).toBeVisible();
     // Back (Escape) is the gallery again, where the card was.
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("button", { name: "Bravo" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Bravo/ })).toBeVisible();
   });
 
   test("a filter that matches nothing says so with Reset, and Reset shows the cards again as a draft (COL-9)", async ({ page }) => {
     await open(page, "gallery");
-    await expect(page.getByRole("button", { name: "Bravo" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Bravo/ })).toBeVisible();
     const filterBar = page.getByRole("combobox", { name: "Filter or search" });
     await filterBar.fill("zzz-no-such-record");
     await page.keyboard.press("Enter");
@@ -208,12 +208,12 @@ test.describe("gallery and list", () => {
     await expect(message.locator("..").getByRole("button", { name: /^New / })).toHaveCount(0);
     await message.locator("..").getByRole("button", { name: "Reset" }).click();
     await expect(message).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Bravo" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Bravo/ })).toBeVisible();
   });
 
   test("a right-click on a card opens its menu at the pointer, not a sheet", async ({ page }) => {
     await open(page, "gallery");
-    await page.getByRole("button", { name: "Bravo" }).click({ button: "right" });
+    await page.getByRole("button", { name: /^Bravo/ }).click({ button: "right" });
     const menu = page.getByRole("menu", { name: "Record menu" });
     await expect(menu.getByRole("menuitem", { name: "Open record" })).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -224,7 +224,7 @@ test.describe("gallery and list", () => {
     await open(page, "list");
     await expect(page.getByRole("tree", { name: "Grouped records" })).toBeVisible();
     // A group header is a tree item named "<group>, <n> records"; each group ends in a "New record in <group>" item.
-    await expect(page.getByRole("treeitem", { name: /^Todo, \d+ records?$/ })).toBeVisible();
+    await expect(page.getByRole("treeitem", { name: /^Todo \d+ records?$/ })).toBeVisible();
     await page.getByRole("treeitem", { name: "New record in Todo" }).click();
     await expect(page).toHaveURL(/\/r\/rec/);
     expect((await record(page, openRecordId(page))).values[fx.fields.status]).toBe(fx.choice.todo);
@@ -409,7 +409,7 @@ test.describe("trash and notifications", () => {
     const unreadBefore = (await call<{ unread: number }>(page.request, "get", "/api/notifications")).unread;
 
     await open(page, "list");
-    const bell = page.getByRole("navigation", { name: "Main menu" }).getByRole("button", { name: /^Notifications, \d+ unread/ });
+    const bell = page.getByRole("navigation", { name: "Main menu" }).getByRole("button", { name: /^Notifications \d+ unread/ });
     await expect(bell).toBeVisible();
     await bell.click();
     const popup = page.getByRole("dialog", { name: "Notifications" });

@@ -62,7 +62,7 @@ test("shows the workspace's collections and folders, folds a folder for good, an
     await expect(nav.getByRole("list", { name: "Collections", exact: true }).getByRole("link")).toHaveText([/^Notes\s*2$/, /^Plans\s*0$/]);
     await expect(nav.getByRole("list", { name: "Collections in Garden" }).getByRole("link")).toHaveText([/^Plants/, /^Tools/]);
     for (const name of ["History", "Trash", "Workspace settings"]) await expect(nav.getByRole("link", { name })).toBeVisible();
-    await expect(nav.getByRole("button", { name: "Account menu" })).toContainText("Sidebar E2E");
+    await expect(nav.getByRole("button", { name: /^Account menu/ })).toContainText("Sidebar E2E");
   });
 
   await test.step("a collection opens in its last view, and its row is the selected one", async () => {

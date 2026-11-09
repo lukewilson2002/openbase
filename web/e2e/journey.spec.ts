@@ -352,7 +352,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
   });
 
   await test.step("logs out and back in; the data is where it was left", async () => {
-    await page.getByRole("button", { name: "Account menu" }).click();
+    await page.getByRole("button", { name: /^Account menu/ }).click();
     await page.getByRole("menuitem", { name: "Sign out" }).click();
     await expect(page.getByRole("heading", { name: "Log in" })).toBeVisible();
     await expectSignInCard(page, "Log in");

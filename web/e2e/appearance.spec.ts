@@ -27,7 +27,7 @@ test("the accent colour repaints the app, is saved on the account and survives a
   const save = page.getByRole("button", { name: "Save changes" });
   await expect(save).toHaveCSS("background-color", BLUE);
 
-  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("button", { name: /^Account menu/ }).click();
   await page.getByRole("menuitem", { name: /^Appearance/ }).click();
   const colors = page.getByRole("group", { name: "Color" });
   await expect(colors.getByRole("menuitemradio", { name: "Blue" })).toHaveAttribute("aria-checked", "true");
@@ -55,7 +55,7 @@ test("the accent colour repaints the app, is saved on the account and survives a
   await other.close();
 
   // Blue again: the default, saved as no colour.
-  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("button", { name: /^Account menu/ }).click();
   await page.getByRole("menuitem", { name: /^Appearance/ }).click();
   await page.getByRole("group", { name: "Color" }).getByRole("menuitemradio", { name: "Blue" }).click();
   // The open menu hides the page from the accessibility tree; close it (submenu, then menu).

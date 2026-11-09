@@ -69,8 +69,9 @@ async function seed(page: Page): Promise<Fixture> {
 /** The group headers of the list view, top to bottom. */
 async function headers(page: Page): Promise<string[]> {
   // A group header is a tree item named "<group>, <n> record(s)"; the records are tree items too, without the count.
-  const items = page.getByRole("tree", { name: "Grouped records" }).getByRole("treeitem", { name: /, \d+ records?$/ });
-  return (await items.evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") ?? ""))).map((l) => l.replace(/, \d+ records?$/, ""));
+  const items = page.getByRole("tree", { name: "Grouped records" }).getByRole("treeitem", { name: / \d+ records?$/ });
+  // The heading's own label, without the count after it.
+  return await items.evaluateAll((els) => els.map((e) => e.querySelector("span.truncate")?.textContent ?? ""));
 }
 
 test.beforeAll(async ({ browser }, testInfo) => {
