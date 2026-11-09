@@ -382,6 +382,12 @@ fn list_icons(a: ListIconsArg) -> ToolResult {
     let set = crate::icons::icons();
     let limit = a.limit.unwrap_or(40).clamp(1, 200);
     let query = a.query.unwrap_or_default();
+    if query.chars().count() > crate::icons::MAX_QUERY_CHARS {
+        return ToolResult::error(format!(
+            "query is too long (at most {} characters); search for one or two words, such as 'cart'.",
+            crate::icons::MAX_QUERY_CHARS
+        ));
+    }
     let all = set.search(&query, usize::MAX);
     let mut out = json!({
         "icons": all.iter().take(limit).collect::<Vec<_>>(),

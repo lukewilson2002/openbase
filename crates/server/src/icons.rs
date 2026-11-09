@@ -99,12 +99,20 @@ impl IconSet {
     /// shop" finds "shopping-cart", "home" finds "house"). An empty query lists everything in
     /// alphabetical order. Names rank before aliases.
     pub fn search(&self, query: &str, limit: usize) -> Vec<&'static str> {
-        let words: Vec<String> = query
+        // Cost is words x icons x aliases, and `query` can be a whole request body (the
+        // `icon` argument reaches here through `suggest`). Nothing past the limit can name an
+        // icon, and a repeated word adds a score to every icon but changes no ranking.
+        let query: String = query.chars().take(MAX_QUERY_CHARS).collect();
+        let mut words: Vec<String> = Vec::new();
+        for w in query
             .to_lowercase()
             .split(|c: char| c.is_whitespace() || c == '_' || c == '-')
             .filter(|w| !w.is_empty())
-            .map(str::to_string)
-            .collect();
+        {
+            if !words.iter().any(|seen| seen == w) {
+                words.push(w.to_string());
+            }
+        }
         if words.is_empty() {
             return self.names.iter().copied().take(limit).collect();
         }
@@ -179,6 +187,9 @@ impl IconSet {
         ))
     }
 }
+
+/// Longest search text, in characters; the longest icon name is under 40.
+pub const MAX_QUERY_CHARS: usize = 200;
 
 /// `" Shopping_Cart "` -> `"shopping-cart"`.
 fn normalize(name: &str) -> String {
@@ -305,5 +316,19 @@ mod tests {
         assert!(set.suggest("zzzzqqqqzzzz", 5).is_empty());
         let err = set.check("zzzzqqqqzzzz").unwrap_err();
         assert!(!err.contains("Did you mean"), "{err}");
+    }
+
+    #[test]
+    fn a_huge_query_costs_no_more_than_a_long_one() {
+        let set = icons();
+        let started = std::time::Instant::now();
+        // 'e' is in most icon names; unbounded, this is millions of words times every icon.
+        assert!(set.search(&"e ".repeat(2_000_000), 5).len() <= 5);
+        assert!(set.suggest(&"e ".repeat(2_000_000), 5).len() <= 5);
+        assert!(started.elapsed().as_secs() < 2);
+        // Text past the limit never matches, and a repeated word ranks like one.
+        let padded = format!("{} cart", "x".repeat(MAX_QUERY_CHARS));
+        assert!(set.search(&padded, 5).is_empty());
+        assert_eq!(set.search("cart cart cart", 5), set.search("cart", 5));
     }
 }

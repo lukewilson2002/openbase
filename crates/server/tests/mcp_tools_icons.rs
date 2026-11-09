@@ -424,3 +424,33 @@ async fn icon_tools_respect_the_token_scope_and_roles() {
     assert!(err.contains("creator"), "{err}");
     assert_eq!(r.schema().await["icon"], "star");
 }
+
+/// F20: the search ran every word of the query against every icon on an async worker, with the
+/// whole request body as its only bound.
+#[tokio::test]
+async fn a_long_icon_query_is_refused_and_a_long_icon_name_is_bounded() {
+    let r = Rig::new().await;
+    let a = &r.agent;
+
+    let err = a
+        .fails("list_icons", json!({"query": "e ".repeat(2_000)}))
+        .await;
+    assert!(err.contains("too long"), "{err}");
+    // At the limit it still searches.
+    let ok = a
+        .call("list_icons", json!({"query": "cart".repeat(50)}))
+        .await;
+    assert_eq!(ok["matches"], 0);
+
+    // The `icon` argument reaches the same search through the "did you mean" hints; a body-sized
+    // name must come back as the usual error, quickly.
+    let started = std::time::Instant::now();
+    let err = a
+        .fails(
+            "create_base",
+            json!({"workspace_id": r.ws, "name": "X", "icon": "e ".repeat(2_000_000)}),
+        )
+        .await;
+    assert!(err.contains("not a known icon"), "{err}");
+    assert!(started.elapsed().as_secs() < 5, "{:?}", started.elapsed());
+}
