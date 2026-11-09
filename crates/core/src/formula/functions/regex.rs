@@ -6,6 +6,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use regex::{Regex, RegexBuilder};
+use regex_syntax::hir::{Hir, HirKind};
 
 use super::{FnSpec, Imp, literal_text, r_bool, r_text, text_arg};
 use crate::formula::ast::Expr;
@@ -22,6 +23,11 @@ const CACHE_SIZE: usize = 64;
 const COMPILE_COST: u64 = 500_000;
 /// Work per byte of text a pattern is run over.
 const SCAN_COST: u64 = 8;
+/// A pattern's size (see [`states`]) per extra unit of work per byte. The
+/// search keeps a set of live NFA states per byte once the lazy DFA's cache
+/// no longer holds, so a flat per-byte price would let a 20,000-state
+/// pattern run over 400 KB for the cost of a one-state one.
+const WEIGHT_PER_UNIT: u64 = 64;
 
 pub(crate) const SPECS: &[FnSpec] = &[
     FnSpec::new(
@@ -68,13 +74,47 @@ fn r_regex_bool(tys: &[Ty], args: &[Expr]) -> Result<Ty, String> {
     r_bool(tys, args)
 }
 
+/// A compiled pattern and its [`states`].
+#[derive(Clone)]
+struct Compiled {
+    re: Regex,
+    weight: u64,
+}
+
+/// Rough number of NFA states a pattern needs: a counted repetition repeats
+/// what it contains, everything else adds up. Not exact, only proportional
+/// enough to price a scan; a literal or class counts once however long it is.
+fn states(h: &Hir) -> u64 {
+    match h.kind() {
+        HirKind::Empty => 0,
+        HirKind::Literal(_) | HirKind::Class(_) | HirKind::Look(_) => 1,
+        HirKind::Capture(c) => states(&c.sub),
+        HirKind::Repetition(r) => {
+            let times = u64::from(r.max.unwrap_or(r.min).max(r.min).max(1));
+            states(&r.sub).saturating_mul(times)
+        }
+        HirKind::Concat(items) | HirKind::Alternation(items) => items
+            .iter()
+            .fold(0u64, |acc, i| acc.saturating_add(states(i))),
+    }
+}
+
+fn pattern_weight(pattern: &str) -> u64 {
+    // The pattern just compiled, so it parses; the fallback only guards a
+    // parser that differs from the builder's.
+    regex_syntax::Parser::new()
+        .parse(pattern)
+        .map(|h| states(&h))
+        .unwrap_or(65_536)
+}
+
 /// Compiles (or fetches from the per-thread cache) a pattern. Failures are
 /// cached too, so a formula built from patterns that blow the size limit
 /// cannot make every record pay for the failed compile again. Evaluation
 /// passes its [`Evaluator`] so uncached compiles are charged to its budget;
 /// the save-time check passes `None`.
-fn compile(pattern: &str, ev: Option<&Evaluator>) -> R<Regex> {
-    type Entry = (Result<Regex, String>, u64);
+fn compile(pattern: &str, ev: Option<&Evaluator>) -> R<Compiled> {
+    type Entry = (Result<Compiled, String>, u64);
     thread_local! {
         static CACHE: RefCell<(HashMap<String, Entry>, u64)> = RefCell::new((HashMap::new(), 0));
     }
@@ -102,6 +142,10 @@ fn compile(pattern: &str, ev: Option<&Evaluator>) -> R<Regex> {
         .size_limit(REGEX_SIZE_LIMIT)
         .dfa_size_limit(REGEX_SIZE_LIMIT)
         .build()
+        .map(|re| Compiled {
+            re,
+            weight: pattern_weight(pattern),
+        })
         .map_err(|e| {
             let msg = e.to_string();
             let last = msg.lines().last().unwrap_or("").trim();
@@ -122,23 +166,23 @@ fn compile(pattern: &str, ev: Option<&Evaluator>) -> R<Regex> {
 }
 
 /// Charges the cost of scanning `s`.
-fn charge_scan(ev: &Evaluator, s: &str) -> R<()> {
-    ev.charge(s.len() as u64 * SCAN_COST)
+fn charge_scan(ev: &Evaluator, s: &str, weight: u64) -> R<()> {
+    ev.charge((s.len() as u64).saturating_mul(SCAN_COST + weight / WEIGHT_PER_UNIT))
 }
 
 /// `REGEX_MATCH(text, regex)`: true if the pattern matches anywhere.
 fn regex_match(a: &[Value], ev: &Evaluator) -> R {
     let s = text_arg(a, 0)?;
-    let re = compile(&text_arg(a, 1)?, Some(ev))?;
-    charge_scan(ev, &s)?;
+    let Compiled { re, weight } = compile(&text_arg(a, 1)?, Some(ev))?;
+    charge_scan(ev, &s, weight)?;
     Ok(Value::Bool(re.is_match(&s)))
 }
 
 /// `REGEX_EXTRACT(text, regex)`: the first match, or blank if none.
 fn regex_extract(a: &[Value], ev: &Evaluator) -> R {
     let s = text_arg(a, 0)?;
-    let re = compile(&text_arg(a, 1)?, Some(ev))?;
-    charge_scan(ev, &s)?;
+    let Compiled { re, weight } = compile(&text_arg(a, 1)?, Some(ev))?;
+    charge_scan(ev, &s, weight)?;
     Ok(re
         .find(&s)
         .map(|m| Value::Text(m.as_str().to_string()))
@@ -149,19 +193,29 @@ fn regex_extract(a: &[Value], ev: &Evaluator) -> R {
 /// `$1` / `${name}` in the replacement refer to capture groups.
 fn regex_replace(a: &[Value], ev: &Evaluator) -> R {
     let s = text_arg(a, 0)?;
-    let re = compile(&text_arg(a, 1)?, Some(ev))?;
-    charge_scan(ev, &s)?;
+    let Compiled { re, weight } = compile(&text_arg(a, 1)?, Some(ev))?;
+    charge_scan(ev, &s, weight)?;
     let replacement = text_arg(a, 2)?;
+    // Every `$` can name a capture group, and a group lies inside its match,
+    // so `refs * match length` bounds what one expansion appends. `expand`
+    // has no limit of its own, and a replacement of `$0` repeated over one
+    // long match would otherwise build gigabytes before the length check
+    // after it ran.
+    let refs = replacement.bytes().filter(|b| *b == b'$').count() as u64;
     let mut out = String::with_capacity(s.len());
     let mut last = 0;
     for caps in re.captures_iter(&s) {
         let Some(m) = caps.get(0) else { continue };
+        let appended = (m.start() - last) as u64
+            + replacement.len() as u64
+            + refs.saturating_mul(m.len() as u64);
+        if (out.len() as u64).saturating_add(appended) > MAX_TEXT_BYTES as u64 {
+            return Err(too_long());
+        }
+        ev.charge(appended)?;
         out.push_str(&s[last..m.start()]);
         caps.expand(&replacement, &mut out);
         last = m.end();
-        if out.len() > MAX_TEXT_BYTES {
-            return Err(too_long());
-        }
     }
     out.push_str(&s[last..]);
     if out.len() > MAX_TEXT_BYTES {

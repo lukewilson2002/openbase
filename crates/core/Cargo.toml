@@ -25,6 +25,7 @@ thiserror.workspace = true
 chrono.workspace = true
 chrono-tz.workspace = true
 regex.workspace = true
+regex-syntax.workspace = true
 ts-rs = { version = "12", optional = true, features = ["serde-json-impl"] }
 
 [dev-dependencies]

@@ -72,3 +72,57 @@ fn regex_is_linear_time() {
     check(&src, b(false));
     assert!(start.elapsed().as_secs() < 5);
 }
+
+#[test]
+fn replace_expands_references_into_the_output() {
+    check("REGEX_REPLACE(\"abc\", \"(b)\", \"[$1$0]\")", t("a[bb]c"));
+    check("REGEX_REPLACE(\"abc\", \"b\", \"$$\")", t("a$c"));
+    check(
+        "REGEX_REPLACE(\"ab\", \"(?P<x>a)\", \"${x}${x}\")",
+        t("aab"),
+    );
+}
+
+#[test]
+fn replace_stops_an_expansion_that_would_not_fit_before_building_it() {
+    // One 400,000 byte match and 200,000 references to it: 80 GB if built,
+    // so the size is checked before the expansion, not after (F3).
+    check_err(
+        "REGEX_REPLACE(REPT(\"a\", 400000), \".+\", REPT(\"$0\", 200000))",
+        "too long",
+    );
+    // Smaller than the limit, so the answer is the text itself.
+    check_num(
+        "LEN(REGEX_REPLACE(REPT(\"a\", 1000), \".+\", \"$0$0\"))",
+        2000.0,
+    );
+}
+
+#[test]
+fn scan_cost_grows_with_the_size_of_the_pattern() {
+    // A 12,000-state pattern over 400 KB is billions of steps once the lazy
+    // DFA gives up, so it runs out of budget instead (F40).
+    check_err(
+        "REGEX_MATCH(REPT(\"a\", 400000), \"[ab]{12000}[^ab]\")",
+        "too expensive",
+    );
+    check_err(
+        "REGEX_EXTRACT(REPT(\"a\", 400000), \"[ab]{12000}[^ab]\")",
+        "too expensive",
+    );
+    check_err(
+        "REGEX_REPLACE(REPT(\"a\", 400000), \"[ab]{12000}[^ab]\", \"\")",
+        "too expensive",
+    );
+    // The same pattern over a short text, and ordinary patterns over long
+    // text, cost what they always did.
+    check(
+        "REGEX_MATCH(REPT(\"a\", 1000), \"[ab]{12000}[^ab]\")",
+        b(false),
+    );
+    check("REGEX_MATCH(REPT(\"a\", 400000), \"\\\\w+\")", b(true));
+    check(
+        "REGEX_MATCH(REPT(\"a\", 400000), \"^[a-z]{5,20}\\\\d{3}\")",
+        b(false),
+    );
+}
