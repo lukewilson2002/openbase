@@ -412,6 +412,7 @@ async fn public_view(
         view_type: r.view.view.view_type,
         table_name: r.table.name.clone(),
         table_icon: r.table.icon.clone(),
+        table_color: Some(r.table.color.clone()),
         base_name: r.base_name.clone(),
         base_icon: r.base_icon.clone(),
         fields: visible.iter().map(sharing::public_field).collect(),
@@ -601,6 +602,7 @@ async fn public_form(
         base_icon: r.base_icon.clone(),
         table_name: r.table.name.clone(),
         table_icon: r.table.icon.clone(),
+        table_color: Some(r.table.color.clone()),
         fields: inputs,
         submit_label: or(&form.submit_label, "Submit"),
         success_message: or(
@@ -817,6 +819,16 @@ fn notify_response(
     Ok(out)
 }
 
+/// Where the email sends the person: the record's own page when the response made a record, else the
+/// collection. The record's page is `/base/:base/:table/r/:record`; the old `?record=` form only
+/// survives as a redirect, which a mail client should not have to follow.
+fn mail_link(public_url: &str, collection_path: &str, record_id: Option<&str>) -> String {
+    match record_id {
+        Some(id) => format!("{public_url}{collection_path}/r/{id}"),
+        None => format!("{public_url}{collection_path}"),
+    }
+}
+
 /// Email those people too when the server can send mail. Failures are only logged, and each
 /// person's mail counts against the hourly email budget like any other mail the server sends.
 fn mail_response(state: &AppState, notified: &[Notified], record_id: Option<&str>) {
@@ -828,10 +840,7 @@ fn mail_response(state: &AppState, notified: &[Notified], record_id: Option<&str
         if crate::email::spend_budget(&state.limiter, &state.config, &n.user_id, 1).is_err() {
             continue;
         }
-        let link = match record_id {
-            Some(id) => format!("{base}{}?record={id}", n.link),
-            None => format!("{base}{}", n.link),
-        };
+        let link = mail_link(base, &n.link, record_id);
         crate::email::send_in_background(
             state.mailer.clone(),
             n.email.clone(),
@@ -903,4 +912,25 @@ async fn upload_form_file(
         crate::api::attachments::save_upload(&state, Some(&r.table.base_id), None, multipart)
             .await?;
     Ok(Json(saved))
+}
+
+#[cfg(test)]
+mod mail_link_tests {
+    use super::mail_link;
+
+    #[test]
+    fn a_response_that_made_a_record_links_to_the_record_page() {
+        assert_eq!(
+            mail_link("https://ob.example", "/base/app1/tbl2", Some("rec3")),
+            "https://ob.example/base/app1/tbl2/r/rec3"
+        );
+    }
+
+    #[test]
+    fn a_response_without_a_record_links_to_the_collection() {
+        assert_eq!(
+            mail_link("https://ob.example", "/base/app1/tbl2", None),
+            "https://ob.example/base/app1/tbl2"
+        );
+    }
 }

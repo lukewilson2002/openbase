@@ -498,6 +498,12 @@ async fn public_view_and_form_carry_base_and_table_icons() {
     r.assert_status(200);
     assert_eq!(r.body["base_icon"], "store");
     assert_eq!(r.body["table_icon"], "package");
+    // The public pages draw the collection's color mark, not its icon.
+    assert!(
+        r.body["table_color"]
+            .as_str()
+            .is_some_and(|c| !c.is_empty())
+    );
 
     let form_view = f.view_of(&f.table_id, "Intake", "form", Value::Null).await;
     let form = f.share(&form_view, "form", None).await;
@@ -509,6 +515,11 @@ async fn public_view_and_form_carry_base_and_table_icons() {
     r.assert_status(200);
     assert_eq!(r.body["base_icon"], "store");
     assert_eq!(r.body["table_icon"], "package");
+    assert!(
+        r.body["table_color"]
+            .as_str()
+            .is_some_and(|c| !c.is_empty())
+    );
 
     // cleared icons are null in the public payloads too
     f.app

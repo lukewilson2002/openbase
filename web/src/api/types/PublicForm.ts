@@ -4,7 +4,11 @@ import type { PublicFormField } from "./PublicFormField";
 /**
  * `GET /api/public/forms/{token}`.
  */
-export type PublicForm = { title: string, description: string, base_name: string, base_icon?: string | null, table_name: string, table_icon?: string | null, fields: Array<PublicFormField>, submit_label: string, success_message: string, 
+export type PublicForm = { title: string, description: string, base_name: string, base_icon?: string | null, table_name: string, table_icon?: string | null, 
+/**
+ * The collection's color, for the mark beside the form's title.
+ */
+table_color?: string | null, fields: Array<PublicFormField>, submit_label: string, success_message: string, 
 /**
  * Only http(s) URLs are ever returned.
  */

@@ -169,6 +169,9 @@ pub struct PublicView {
     pub table_name: String,
     #[serde(default)]
     pub table_icon: Option<String>,
+    /// The collection's color, for the mark beside its name (the public pages draw no icons).
+    #[serde(default)]
+    pub table_color: Option<String>,
     pub base_name: String,
     #[serde(default)]
     pub base_icon: Option<String>,
@@ -243,6 +246,9 @@ pub struct PublicForm {
     pub table_name: String,
     #[serde(default)]
     pub table_icon: Option<String>,
+    /// The collection's color, for the mark beside the form's title.
+    #[serde(default)]
+    pub table_color: Option<String>,
     pub fields: Vec<PublicFormField>,
     pub submit_label: String,
     pub success_message: String,
