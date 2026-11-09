@@ -44,10 +44,7 @@ pub fn reset_password(state: &AppState, email: &str, pw: &str) -> AppResult<()> 
                 r.get(0)
             })
             .map_err(|_| AppError::not_found("user"))?;
-        tx.execute(
-            "UPDATE users SET password_hash = ?1, updated_at = ?2 WHERE id = ?3",
-            rusqlite::params![hash, now_ms(), id],
-        )?;
+        crate::store::users::set_password_hash(tx, &id, &hash)?;
         session::delete_all_for_user(tx, &id, None)?;
         crate::store::tokens::delete_all_for_user(tx, &id)?;
         Ok(())

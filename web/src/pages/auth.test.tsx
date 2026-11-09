@@ -172,6 +172,36 @@ describe("signup and invites", () => {
     expect(api.callsTo("POST /api/auth/signup")[0]?.body).toMatchObject({ invite_token: "tok123" });
   });
 
+  it("asks for the emailed code when an invite is for one address, then signs up with it", async () => {
+    const user = userEvent.setup();
+    let signedIn = false;
+    const api = mockApi({
+      "GET /api/setup": { needs_setup: false, open_signup: false, email_enabled: true },
+      "GET /api/auth/me": () => (signedIn ? USER : LOGGED_OUT),
+      "GET /api/invites/by-token/tok123": { target_name: "Acme", target_kind: "workspace", role: "editor", email: "ada@example.com", invited_by: "Grace" },
+      "POST /api/auth/signup": (call) => {
+        if (!(call.body as { email_code?: string | null }).email_code) return apiError(403, "email_code_required", "enter the code we emailed to it");
+        signedIn = true;
+        return USER;
+      },
+      "GET /api/workspaces": [],
+    });
+    renderApp({ route: "/signup?invite=tok123" });
+
+    await user.type(await screen.findByLabelText("Your name"), "Ada");
+    await user.type(screen.getByLabelText("Email"), "ada@example.com");
+    await user.type(screen.getByLabelText("Password"), "longenough1");
+    await user.type(screen.getByLabelText("Confirm password"), "longenough1");
+    expect(screen.queryByLabelText("Confirmation code")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+
+    await user.type(await screen.findByLabelText("Confirmation code"), "12345678");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(await screen.findByRole("heading", { name: "Create your first workspace" })).toBeInTheDocument();
+    expect(api.callsTo("POST /api/auth/signup")[1]?.body).toMatchObject({ invite_token: "tok123", email_code: "12345678" });
+  });
+
   it("offers sign up or log in on an invite page when signed out", async () => {
     mockApi({
       "GET /api/auth/me": LOGGED_OUT,

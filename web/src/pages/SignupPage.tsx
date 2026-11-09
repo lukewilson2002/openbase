@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { errorMessage } from "@/api/client";
+import { ApiError, errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import { useMe, useSetUser, useSetupStatus } from "@/auth/useAuth";
@@ -32,10 +32,17 @@ export function SignupPage() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
+  // An invite for one address is confirmed with a code mailed to it (the server asks on the
+  // first try); the form then shows the field for it.
+  const [needCode, setNeedCode] = useState(false);
+  const [code, setCode] = useState("");
 
   const signup = useMutation({
     // Signing up also signs in; the response is the new user.
-    mutationFn: () => api.auth.signup({ name: name.trim(), email: email.trim(), password, invite_token: inviteToken }),
+    mutationFn: () => api.auth.signup({ name: name.trim(), email: email.trim(), password, invite_token: inviteToken, email_code: code.trim() || null }),
+    onError: (e) => {
+      if (e instanceof ApiError && e.code === "email_code_required") setNeedCode(true);
+    },
     onSuccess: (user) => {
       setUser(user);
       navigate("/", { replace: true });
@@ -83,7 +90,12 @@ export function SignupPage() {
             </Notice>
           )}
           {invite.isError && <Notice tone="error">This invitation is invalid or has expired. Ask the person who invited you for a new link.</Notice>}
-          {(localError || signup.isError) && <Notice tone="error">{localError ?? errorMessage(signup.error)}</Notice>}
+          {needCode && !localError && (!signup.isError || (signup.error instanceof ApiError && signup.error.code === "email_code_required")) && (
+            <Notice>We emailed a confirmation code to {email.trim() || "the invited address"}. Enter it below to finish.</Notice>
+          )}
+          {(localError || (signup.isError && !(signup.error instanceof ApiError && signup.error.code === "email_code_required"))) && (
+            <Notice tone="error">{localError ?? errorMessage(signup.error)}</Notice>
+          )}
           <Field label="Your name">
             {(ctl) => <Input {...ctl} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus className={AUTH_INPUT} />}
           </Field>
@@ -98,6 +110,13 @@ export function SignupPage() {
           <Field label="Confirm password">
             {(ctl) => <Input {...ctl} type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required className={AUTH_INPUT} />}
           </Field>
+          {needCode && (
+            <Field label="Confirmation code" hint="From the email we just sent. It is good for 15 minutes.">
+              {(ctl) => (
+                <Input {...ctl} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} required autoFocus className={`${AUTH_INPUT} font-mono tracking-widest`} />
+              )}
+            </Field>
+          )}
           <Button type="submit" variant="primary" size="lg" className={AUTH_BUTTON} loading={signup.isPending}>
             Create account
           </Button>

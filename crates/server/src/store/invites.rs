@@ -292,23 +292,35 @@ fn live_workspace(
         .optional()?)
 }
 
-/// The listed bases of a limited invite that are not in the trash.
-fn live_listed_bases(conn: &Connection, invite: &InviteRow) -> AppResult<Vec<String>> {
+/// The listed bases of a limited invite that belong to its workspace, with
+/// whether each is live (not in the trash). A base of another workspace is
+/// never one the invite can give: it is left out here, so it neither counts
+/// towards the invite's validity nor reaches a grant.
+fn listed_bases(conn: &Connection, invite: &InviteRow) -> AppResult<Vec<(String, bool)>> {
+    let ws = invite.workspace_id()?;
     let mut out = Vec::new();
     for b in &invite.info.base_ids {
-        let live: bool = conn
+        let live: Option<bool> = conn
             .query_row(
-                "SELECT deleted_at IS NULL FROM bases WHERE id = ?1",
-                [b],
+                "SELECT deleted_at IS NULL FROM bases WHERE id = ?1 AND workspace_id = ?2",
+                params![b, ws],
                 |r| r.get(0),
             )
-            .optional()?
-            .unwrap_or(false);
-        if live {
-            out.push(b.clone());
+            .optional()?;
+        if let Some(live) = live {
+            out.push((b.clone(), live));
         }
     }
     Ok(out)
+}
+
+/// The listed bases of a limited invite that are in its workspace and not in
+/// the trash.
+fn live_listed_bases(conn: &Connection, invite: &InviteRow) -> AppResult<Vec<String>> {
+    Ok(listed_bases(conn, invite)?
+        .into_iter()
+        .filter_map(|(b, live)| live.then_some(b))
+        .collect())
 }
 
 /// Whether the invite's creator can still hand out what it gives: an active
@@ -316,6 +328,9 @@ fn live_listed_bases(conn: &Connection, invite: &InviteRow) -> AppResult<Vec<Str
 /// or (for an invite limited to some bases) is a Creator who can still open
 /// each of them. An invite is only as good as its creator's standing, so
 /// removal, demotion, deactivation or losing a base voids pending invites.
+/// Bases in the trash count too: otherwise trashing the one base a creator
+/// lost would bring a voided invite back, and accepting it would hand over
+/// that base when it is restored.
 fn creator_may_still_invite(conn: &Connection, invite: &InviteRow) -> AppResult<bool> {
     let Some(creator) = &invite.created_by else {
         return Ok(false);
@@ -335,12 +350,14 @@ fn creator_may_still_invite(conn: &Connection, invite: &InviteRow) -> AppResult<
     if ws_role == Some(Role::Owner) {
         return Ok(true);
     }
-    if invite.info.all_bases {
+    // Whoever is not in the workspace cannot invite to it, whatever bases the
+    // invite lists.
+    if ws_role.is_none() || invite.info.all_bases {
         return Ok(false);
     }
     let needed = Role::Creator.max(invite.role()?);
-    for b in live_listed_bases(conn, invite)? {
-        if !perm::base_role(conn, creator, &b)?.is_some_and(|r| r >= needed) {
+    for (b, _) in listed_bases(conn, invite)? {
+        if !perm::base_role_including_trashed(conn, creator, &b)?.is_some_and(|r| r >= needed) {
             return Ok(false);
         }
     }
@@ -464,7 +481,18 @@ pub fn accept(
             role = existing;
         }
     }
-    workspaces::grant(conn, ws, user_id, role, &invite.access())?;
+    // Only bases of the invite's workspace; a stored foreign id gives nothing.
+    let access = if invite.info.all_bases {
+        BaseAccess::All
+    } else {
+        BaseAccess::Only(
+            listed_bases(conn, invite)?
+                .into_iter()
+                .map(|(b, _)| b)
+                .collect(),
+        )
+    };
+    workspaces::grant(conn, ws, user_id, role, &access)?;
     let mut info = invite.info.clone();
     info.accepted_at = Some(now);
     Ok(info)

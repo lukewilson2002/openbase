@@ -192,6 +192,7 @@ export type { TrashListing } from "./TrashListing";
 export type { Trigger } from "./Trigger";
 export type { TwoFactorCode } from "./TwoFactorCode";
 export type { TwoFactorDisable } from "./TwoFactorDisable";
+export type { TwoFactorEnable } from "./TwoFactorEnable";
 export type { TwoFactorSetup } from "./TwoFactorSetup";
 export type { UpdateAutomation } from "./UpdateAutomation";
 export type { UpdateBase } from "./UpdateBase";

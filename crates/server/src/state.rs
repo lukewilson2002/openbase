@@ -22,6 +22,9 @@ pub struct AppState {
     pub share_guesses: GuessLimiter,
     /// The passkey (WebAuthn) relying party and its pending ceremonies.
     pub passkeys: Arc<Passkeys>,
+    /// Codes mailed to the address of an email-restricted invite, which a sign-up with that
+    /// invite must present.
+    pub invite_codes: Arc<crate::auth::invite_code::InviteEmailCodes>,
     /// Outgoing email: the [`EmailService`] as a [`Mailer`] (SMTP, or a no-op logger when SMTP
     /// is not configured; it follows the settings on the Admin -> Email page at once).
     pub mailer: Arc<dyn Mailer>,
@@ -67,6 +70,7 @@ impl AppState {
                 crate::api::sharing::GUESS_LOCKOUT,
             ),
             passkeys,
+            invite_codes: Arc::default(),
             mailer,
             email,
             query_cache: Arc::new(QueryCache::new()),

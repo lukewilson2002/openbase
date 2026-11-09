@@ -87,6 +87,11 @@ pub struct SignupRequest {
     pub password: String,
     #[serde(default)]
     pub invite_token: Option<String>,
+    /// For an invite limited to one email address: the code mailed to that address. Without it
+    /// the server mails one and answers `email_code_required` (403); the sign-up is sent again
+    /// with the code.
+    #[serde(default)]
+    pub email_code: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,6 +116,17 @@ pub struct LoginResponse {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct TwoFactorCode {
     pub code: String,
+}
+
+/// Turn two-factor authentication on. Like adding a passkey, it needs the password, or a sign-in
+/// in the last 10 minutes; without either the answer is `reauth_required` (403), which says to
+/// ask for the password and try again. Otherwise a stolen older session could lock the owner out.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct TwoFactorEnable {
+    pub code: String,
+    #[serde(default)]
+    pub password: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

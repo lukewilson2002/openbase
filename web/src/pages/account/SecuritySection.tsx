@@ -4,7 +4,7 @@ import { ShieldCheck, ShieldOff } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { TwoFactorSetup, User } from "@/api/types";
-import { errorMessage } from "@/api/client";
+import { ApiError, errorMessage } from "@/api/client";
 import { CopyField } from "@/components/CopyField";
 import { QrCode } from "@/components/QrCode";
 import { Notice, Section } from "@/components/layouts";
@@ -134,7 +134,17 @@ function TwoFactor({ user }: { user: User }) {
 
 function EnableDialog({ setup, onClose, onEnabled }: { setup: TwoFactorSetup; onClose: () => void; onEnabled: (user: User) => void }) {
   const [code, setCode] = useState("");
-  const enable = useMutation({ mutationFn: () => api.auth.twoFactorEnable(code.trim()), onSuccess: onEnabled });
+  // A session older than a few minutes has to confirm the password too (the server answers
+  // `reauth_required`), so a stolen old session cannot lock the owner out with a second factor.
+  const [password, setPassword] = useState("");
+  const [needPassword, setNeedPassword] = useState(false);
+  const enable = useMutation({
+    mutationFn: () => api.auth.twoFactorEnable(code.trim(), password || undefined),
+    onSuccess: onEnabled,
+    onError: (e) => {
+      if (e instanceof ApiError && e.code === "reauth_required") setNeedPassword(true);
+    },
+  });
   const submit = (e: FormEvent) => {
     e.preventDefault();
     enable.mutate();
@@ -149,7 +159,12 @@ function EnableDialog({ setup, onClose, onEnabled }: { setup: TwoFactorSetup; on
           <span className="text-label font-medium">Or enter this key manually</span>
           <CopyField label="Secret key" value={setup.secret} />
         </div>
-        {enable.isError && <Notice tone="error">{errorMessage(enable.error)}</Notice>}
+        {enable.isError && <Notice tone={enable.error instanceof ApiError && enable.error.code === "reauth_required" ? "info" : "error"}>{errorMessage(enable.error)}</Notice>}
+        {needPassword && (
+          <Field label="Password">
+            {(ctl) => <Input {...ctl} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus />}
+          </Field>
+        )}
         <Field label="Code from your app">
           {(ctl) => <Input {...ctl} inputMode="numeric" autoComplete="one-time-code" maxLength={10} value={code} onChange={(e) => setCode(e.target.value)} className="font-mono tracking-widest" required />}
         </Field>

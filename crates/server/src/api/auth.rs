@@ -10,7 +10,7 @@
 use std::time::Duration;
 
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
@@ -18,13 +18,13 @@ use axum_extra::extract::CookieJar;
 use ob_core::api::auth::{
     ChangePasswordRequest, LoginRequest, LoginResponse, OkResponse, PasswordResetConfirm,
     PasswordResetRequest, SessionInfo, SetupStatus, SignupRequest, TwoFactorCode, TwoFactorDisable,
-    TwoFactorSetup, UpdateMeRequest, User,
+    TwoFactorEnable, TwoFactorSetup, UpdateMeRequest, User,
 };
 use rusqlite::{OptionalExtension, params};
 use serde_json::json;
 
 use crate::auth::password::{self, DUMMY_HASH};
-use crate::auth::{Actor, Capability, ClientInfo, session, totp};
+use crate::auth::{Actor, Capability, ClientInfo, cookie_value, session, totp};
 use crate::db::now_ms;
 use crate::email;
 use crate::error::{AppError, AppResult};
@@ -142,8 +142,10 @@ async fn signup(
     client: ClientInfo,
     jar: CookieJar,
     ApiJson(req): ApiJson<SignupRequest>,
-) -> AppResult<(CookieJar, Json<User>)> {
-    state.limiter.check("signup", &client.ip, 10, HOUR)?;
+) -> AppResult<Response> {
+    state
+        .limiter
+        .check("signup", &client.rate_key(), 10, HOUR)?;
     let email = users::normalize_email(&req.email)?;
     let name = users::validate_name(&req.name)?;
     password::validate_new_password(&req.password)?;
@@ -153,6 +155,11 @@ async fn signup(
     // Cheap check before spending a password hash on a request that can't succeed.
     if invite_token.is_none() && !open && state.db.read(users::count).await? > 0 {
         return Err(invite_only());
+    }
+    if let Some(t) = invite_token.clone() {
+        if let Some(refusal) = confirm_invite_address(&state, &email, &t, req.email_code).await? {
+            return Ok(refusal);
+        }
     }
     let hash = password::hash_async(req.password).await?;
 
@@ -193,7 +200,95 @@ async fn signup(
             Ok((users::require(tx, &id)?.to_api(), token))
         })
         .await?;
-    Ok((jar.add(session::cookie(&state.config, token)), Json(user)))
+    Ok((jar.add(session::cookie(&state.config, token)), Json(user)).into_response())
+}
+
+/// An invite limited to one address is not honoured because the sign-up form says it is that
+/// address: the form is anonymous, so a leaked link would let its holder claim the address. The
+/// invitee has to read a code from that mailbox. Returns the response that asks for it, or None
+/// when the invite is not limited to an address or the code is right.
+async fn confirm_invite_address(
+    state: &AppState,
+    email: &str,
+    token: &str,
+    code: Option<String>,
+) -> AppResult<Option<Response>> {
+    let t = token.to_string();
+    let found = state
+        .db
+        .read(move |c| {
+            // Nothing to check on an empty instance (the first account takes no invite).
+            if users::count(c)? == 0 {
+                return Ok(None);
+            }
+            invites::find_valid_by_token(c, &t)
+        })
+        .await?;
+    let Some(invite) = found else {
+        return Ok(None);
+    };
+    let Some(address) = invite.info.email.as_deref() else {
+        return Ok(None);
+    };
+    if !address.eq_ignore_ascii_case(email.trim()) {
+        return Err(AppError::forbidden(
+            "this invite was sent to a different email address",
+        ));
+    }
+    let wrong = || AppError::bad_request("that code is not valid or has expired");
+    if let Some(code) = code.filter(|c| !c.trim().is_empty()) {
+        // Only guesses count against the invite, so they are limited per invite as well as
+        // by the five tries each code allows.
+        state
+            .limiter
+            .check("invite_code_try", &invite.info.id, 30, HOUR)?;
+        return if state.invite_codes.verify(&invite.info.id, &code) {
+            Ok(None)
+        } else {
+            Err(wrong())
+        };
+    }
+    if !state.email.enabled() {
+        return Err(AppError::forbidden(
+            "this invite is for one email address, and this server cannot send the code that \
+             confirms it. Ask the person who invited you to set up email or to send an invite \
+             without an address",
+        ));
+    }
+    // A mailbox gets few codes an hour, whoever asks, so the sign-up form cannot be used to
+    // mail-bomb the invitee.
+    if state
+        .limiter
+        .check("invite_code_mail", &invite.info.id, 3, HOUR)
+        .is_ok()
+        && state
+            .limiter
+            .check_n("email_all", "*", 1, state.config.email_per_hour, HOUR)
+            .is_ok()
+    {
+        let code = state.invite_codes.issue(&invite.info.id);
+        let body = format!(
+            "Your OpenBase confirmation code is {code}\n\n\
+             Enter it on the sign-up page within 15 minutes to accept your invitation.\n\
+             If you did not ask for it, you can ignore this email.\n"
+        );
+        email::send_in_background(
+            state.mailer.clone(),
+            address.to_string(),
+            "Your OpenBase confirmation code".into(),
+            body,
+        );
+    }
+    Ok(Some(
+        (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": {
+                "code": "email_code_required",
+                "message": "this invite is for one email address: enter the code we emailed to it",
+            } })),
+        )
+            .into_response(),
+    ))
 }
 
 fn invite_only() -> AppError {
@@ -208,7 +303,7 @@ async fn login(
 ) -> AppResult<Response> {
     state
         .limiter
-        .check("login_ip", &client.ip, LOGIN_IP_PER_MINUTE, MINUTE)?;
+        .check("login_ip", &client.rate_key(), LOGIN_IP_PER_MINUTE, MINUTE)?;
     // The email becomes a rate-limiter key and an audit-log field, so it must
     // be a plausible address (at most 254 bytes) before it is used for either.
     let Ok(email) = users::normalize_email(&req.email) else {
@@ -217,7 +312,7 @@ async fn login(
     let email_key = email.to_lowercase();
     state.limiter.check(
         "login_email_ip",
-        &format!("{email_key}\0{}", client.ip),
+        &format!("{email_key}\0{}", client.rate_key()),
         LOGIN_EMAIL_IP_PER_HOUR,
         HOUR,
     )?;
@@ -298,7 +393,7 @@ async fn login(
             two_factor_required: true,
         }
     } else {
-        reset_login_limits(&state, &email_key, &client.ip);
+        reset_login_limits(&state, &email_key, &client.rate_key());
         LoginResponse {
             user: Some(user.to_api()),
             two_factor_required: false,
@@ -316,6 +411,7 @@ enum SecondFactor {
 async fn login_2fa(
     State(state): State<AppState>,
     client: ClientInfo,
+    headers: HeaderMap,
     jar: CookieJar,
     ApiJson(req): ApiJson<TwoFactorCode>,
 ) -> AppResult<Response> {
@@ -330,14 +426,11 @@ async fn login_2fa(
     // exist (that would let one client grow the limiter without bound).
     state.limiter.check(
         "login_2fa_ip",
-        &client.ip,
+        &client.rate_key(),
         LOGIN_2FA_IP_PER_10_MIN,
         10 * MINUTE,
     )?;
-    let Some(raw) = jar
-        .get(state.config.session_cookie_name())
-        .map(|c| c.value().to_string())
-    else {
+    let Some(raw) = cookie_value(&headers, state.config.session_cookie_name()) else {
         return Ok(expired());
     };
     let pending_hash = hash_token(&raw);
@@ -405,7 +498,7 @@ async fn login_2fa(
             "that code is not valid; check your authenticator app and try again",
         )),
         SecondFactor::Ok(user, token) => {
-            reset_login_limits(&state, &user.email.to_lowercase(), &client.ip);
+            reset_login_limits(&state, &user.email.to_lowercase(), &client.rate_key());
             state.limiter.reset("login_2fa_user", &user.id);
             let jar = jar.add(session::cookie(&state.config, token));
             let body = LoginResponse {
@@ -422,12 +515,10 @@ async fn login_2fa(
 async fn logout(
     State(state): State<AppState>,
     client: ClientInfo,
+    headers: HeaderMap,
     jar: CookieJar,
 ) -> AppResult<(CookieJar, Json<OkResponse>)> {
-    if let Some(raw) = jar
-        .get(state.config.session_cookie_name())
-        .map(|c| c.value().to_string())
-    {
+    if let Some(raw) = cookie_value(&headers, state.config.session_cookie_name()) {
         let hash = hash_token(&raw);
         state
             .db
@@ -554,7 +645,9 @@ async fn reset_request(
     client: ClientInfo,
     ApiJson(req): ApiJson<PasswordResetRequest>,
 ) -> AppResult<Json<OkResponse>> {
-    state.limiter.check("reset_request", &client.ip, 5, HOUR)?;
+    state
+        .limiter
+        .check("reset_request", &client.rate_key(), 5, HOUR)?;
     if !state.email.enabled() {
         return Ok(ok());
     }
@@ -617,7 +710,9 @@ async fn reset_confirm(
     client: ClientInfo,
     ApiJson(req): ApiJson<PasswordResetConfirm>,
 ) -> AppResult<Json<OkResponse>> {
-    state.limiter.check("reset_confirm", &client.ip, 20, HOUR)?;
+    state
+        .limiter
+        .check("reset_confirm", &client.rate_key(), 20, HOUR)?;
     password::validate_new_password(&req.new_password)?;
     let invalid = || AppError::bad_request("this reset link is invalid or has expired");
     // Check the token before spending a password hash on it.
@@ -691,12 +786,48 @@ async fn totp_enable(
     State(state): State<AppState>,
     actor: Actor,
     client: ClientInfo,
-    ApiJson(req): ApiJson<TwoFactorCode>,
-) -> AppResult<Json<User>> {
+    ApiJson(req): ApiJson<TwoFactorEnable>,
+) -> AppResult<Response> {
     actor.require_capability(Capability::SessionOnly)?;
     state
         .limiter
         .check("2fa_manage", &actor.user_id, 10, 10 * MINUTE)?;
+    // Turning it on signs every other session out and a password reset does not clear it, so
+    // whoever does it first can lock the owner out. A session cookie stolen some time ago must
+    // not be enough: ask for the password, or a sign-in from the last few minutes.
+    let (uid, session_hash) = (actor.user_id.clone(), actor.session_hash.clone());
+    let (user, session_started) = state
+        .db
+        .read(move |c| {
+            let started: Option<i64> = match &session_hash {
+                Some(h) => c
+                    .query_row(
+                        "SELECT created_at FROM sessions WHERE token_hash = ?1",
+                        [h],
+                        |r| r.get(0),
+                    )
+                    .optional()?,
+                None => None,
+            };
+            Ok((users::require(c, &uid)?, started))
+        })
+        .await?;
+    match req.password.filter(|p| !p.is_empty()) {
+        Some(pw) => {
+            if !verify_user_password(pw, &user.password_hash).await? {
+                return Err(AppError::forbidden("password is incorrect"));
+            }
+        }
+        None => {
+            let recent = session_started
+                .is_some_and(|t| now_ms() - t <= crate::auth::passkey::RECENT_SIGN_IN_MS);
+            if !recent {
+                return Ok(super::passkeys::reauth_required(
+                    "confirm your password to turn on two-factor authentication",
+                ));
+            }
+        }
+    }
     let user = state
         .db
         .write(move |tx| {
@@ -731,7 +862,7 @@ async fn totp_enable(
             users::require(tx, &user.id)
         })
         .await?;
-    Ok(Json(user.to_api()))
+    Ok(Json(user.to_api()).into_response())
 }
 
 async fn totp_disable(

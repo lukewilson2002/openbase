@@ -122,15 +122,16 @@ async fn an_agent_runs_the_business_without_the_ui() {
     assert_eq!(pending["invites"].as_array().unwrap().len(), 1);
     assert_eq!(pending["invites"][0]["email"], "teammate@acme.test");
 
-    // fixture: the invited person signs up with the link
-    let (res, teammate) = app
-        .signup(
-            "teammate@acme.test",
-            "teammate password 123",
-            Some(&invite_token),
-        )
-        .await;
-    res.assert_status(200);
+    // fixture: the invited person has an account and accepts the link (signing up with a link
+    // for one address needs a code mailed to it, which this server has no mail for)
+    let teammate = app.user("teammate@acme.test", "Teammate");
+    app.post(
+        &teammate,
+        &format!("/api/invites/by-token/{invite_token}/accept"),
+        json!({}),
+    )
+    .await
+    .assert_status(200);
     let teammate_id = teammate.user_id.clone().unwrap();
 
     let members = agent

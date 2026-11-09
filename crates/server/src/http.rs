@@ -173,12 +173,7 @@ async fn csrf_guard(State(state): State<AppState>, req: Request, next: Next) -> 
     let unsafe_method = !matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS);
     if unsafe_method {
         let cookie_name = state.config.session_cookie_name();
-        let has_cookie = req
-            .headers()
-            .get_all(header::COOKIE)
-            .iter()
-            .filter_map(|v| v.to_str().ok())
-            .any(|v| v.contains(cookie_name));
+        let has_cookie = crate::auth::cookie_value(req.headers(), cookie_name).is_some();
         // Exactly what the Actor extractor treats as a token: any other
         // Authorization value (e.g. Basic auth added by a proxy) leaves the
         // cookie in charge, so the CSRF header is still required.

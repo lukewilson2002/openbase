@@ -16,6 +16,19 @@ const MAX_KEY_LEN: usize = 64;
 /// Hard cap on tracked (bucket, key) pairs. When sweeping expired windows
 /// leaves the map this full, the oldest tenth is evicted.
 const MAX_ENTRIES: usize = 100_000;
+/// Buckets that count guesses and mails against one account. When the map is full these are
+/// the last entries to go: a flood of other keys (sign-up attempts, say) must not reset the
+/// counters that hold back distributed password guessing.
+const ACCOUNT_BUCKETS: &[&str] = &[
+    "login_email",
+    "login_email_ip",
+    "login_2fa",
+    "login_2fa_user",
+    "reset_email",
+    "2fa_manage",
+    "password_change",
+    "passkey_reauth",
+];
 /// Expired windows are swept at most this often (a sweep is O(entries)).
 const SWEEP_EVERY: Duration = Duration::from_secs(30);
 
@@ -77,11 +90,25 @@ impl RateLimiter {
                 .map
                 .retain(|_, (start, _, win)| now.duration_since(*start) < *win);
             if inner.map.len() >= MAX_ENTRIES {
-                let mut starts: Vec<Instant> = inner.map.values().map(|v| v.0).collect();
+                // Drop the oldest tenth of the ordinary entries; account counters stay unless
+                // they alone fill the map.
+                let ordinary = |b: &str| !ACCOUNT_BUCKETS.contains(&b);
+                let mut starts: Vec<Instant> = inner
+                    .map
+                    .iter()
+                    .filter(|((b, _), _)| ordinary(b))
+                    .map(|(_, v)| v.0)
+                    .collect();
+                let only_ordinary = starts.len() >= MAX_ENTRIES / 10;
+                if !only_ordinary {
+                    starts = inner.map.values().map(|v| v.0).collect();
+                }
                 let cut = starts.len() / 10;
                 let (_, oldest_kept, _) = starts.select_nth_unstable(cut);
                 let oldest_kept = *oldest_kept;
-                inner.map.retain(|_, (start, _, _)| *start >= oldest_kept);
+                inner.map.retain(|(b, _), (start, _, _)| {
+                    *start >= oldest_kept || (only_ordinary && !ordinary(b))
+                });
             }
         }
         let entry = inner.map.entry((bucket, key)).or_insert((now, 0, window));
@@ -490,6 +517,27 @@ mod tests {
                 .unwrap();
         }
         assert!(rl.len() <= MAX_ENTRIES, "len {}", rl.len());
+    }
+
+    /// F58: a flood of other keys at the cap must not wipe an account's guess counter.
+    #[test]
+    fn a_flood_of_other_keys_does_not_evict_account_counters() {
+        let rl = RateLimiter::default();
+        let hour = Duration::from_secs(3600);
+        for _ in 0..3 {
+            rl.check("login_email", "victim@example.com", 3, hour)
+                .unwrap();
+        }
+        // The counter is the oldest entry, so an oldest-first eviction would take it first.
+        for i in 0..(MAX_ENTRIES + 500) {
+            let _ = rl.check("signup", &format!("ip{i}"), 10, hour);
+        }
+        assert!(rl.len() <= MAX_ENTRIES);
+        assert!(
+            rl.check("login_email", "victim@example.com", 3, hour)
+                .is_err(),
+            "the account counter survived the flood"
+        );
     }
 
     #[test]

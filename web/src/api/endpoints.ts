@@ -141,8 +141,11 @@ export const api = {
     confirmPasswordReset: (body: PasswordResetConfirm) =>
       http.post<OkResponse>("/api/auth/password-reset/confirm", body, { skipAuthRedirect: true }),
     twoFactorSetup: () => http.post<TwoFactorSetup>("/api/auth/2fa/setup"),
-    /** Returns the updated user (`totp_enabled: true`). */
-    twoFactorEnable: (code: string) => http.post<User>("/api/auth/2fa/enable", { code }),
+    /**
+     * Returns the updated user (`totp_enabled: true`). A session older than 10 minutes answers 403
+     * `reauth_required` until the password is sent too.
+     */
+    twoFactorEnable: (code: string, password?: string) => http.post<User>("/api/auth/2fa/enable", password ? { code, password } : { code }),
     /** Returns the updated user (`totp_enabled: false`). */
     twoFactorDisable: (body: TwoFactorDisable) => http.post<User>("/api/auth/2fa/disable", body),
     sessions: () => http.get<SessionInfo[]>("/api/auth/sessions"),

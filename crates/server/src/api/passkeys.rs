@@ -68,12 +68,12 @@ async fn list(State(state): State<AppState>, actor: Actor) -> AppResult<Json<Vec
 }
 
 /// 403 with its own code, so the page knows to ask for the password and try again.
-fn reauth_required() -> Response {
+pub(super) fn reauth_required(message: &str) -> Response {
     (
         StatusCode::FORBIDDEN,
         Json(json!({ "error": {
             "code": "reauth_required",
-            "message": "confirm your password to add a passkey",
+            "message": message,
         } })),
     )
         .into_response()
@@ -127,7 +127,7 @@ async fn register_start(
         None => {
             let recent = session_started.is_some_and(|t| now_ms() - t <= RECENT_SIGN_IN_MS);
             if !recent {
-                return Ok(reauth_required());
+                return Ok(reauth_required("confirm your password to add a passkey"));
             }
         }
     }
@@ -283,7 +283,7 @@ async fn login_start(
 ) -> AppResult<Json<PasskeyChallenge>> {
     state.limiter.check(
         "passkey_start_ip",
-        &client.ip,
+        &client.rate_key(),
         LOGIN_START_PER_MINUTE,
         MINUTE,
     )?;
@@ -328,7 +328,7 @@ async fn login_finish(
     // Counted before anything is looked up, successful or not.
     state.limiter.check(
         "passkey_login_ip",
-        &client.ip,
+        &client.rate_key(),
         LOGIN_FINISH_PER_MINUTE,
         MINUTE,
     )?;

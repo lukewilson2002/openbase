@@ -429,7 +429,16 @@ async fn update(
                     })?;
                 Origin::Base(from)
             };
-            let (_, max_role, access) = authorize_create(tx, &actor, &origin, role, &terms)?;
+            let (authorized_ws, max_role, access) =
+                authorize_create(tx, &actor, &origin, role, &terms)?;
+            // The base picked as the origin decides which workspace was just
+            // checked. One from another workspace (say the caller's own) would
+            // pass every check there and leave the invite's own workspace
+            // unchecked, and its base list would then keep the invite alive
+            // after the caller lost their standing in this workspace.
+            if authorized_ws != invite.workspace_id()? {
+                return Err(AppError::not_found("base"));
+            }
             if role > max_role {
                 return Err(AppError::forbidden(
                     "you cannot invite someone with a role above your own",

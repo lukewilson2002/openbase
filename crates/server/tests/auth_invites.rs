@@ -554,7 +554,7 @@ async fn signup_with_invite_when_invite_only() {
 
 #[tokio::test]
 async fn signup_with_restricted_or_expired_invite() {
-    let app = TestApp::new();
+    let app = TestApp::with_config(|c| c.smtp_host = Some("smtp.example.com".into()));
     let (_, admin) = app.signup("admin@example.com", PW, None).await;
     let (ws, _) = app.workspace_with_base(&admin, "Acme");
     let res = app
@@ -572,7 +572,25 @@ async fn signup_with_restricted_or_expired_invite() {
         1,
         "no user created"
     );
+    // The right address still has to read a code mailed to it (see security_auth_phase8.rs).
     let (res, _) = app.signup("Only@Example.com", PW, Some(&token)).await;
+    res.assert_status(403);
+    assert_eq!(res.body["error"]["code"], "email_code_required");
+    let mails = app.mailer.wait_for(2).await;
+    let code = mails[1]
+        .body
+        .split_whitespace()
+        .find(|w| w.len() == 8 && w.bytes().all(|b| b.is_ascii_digit()))
+        .unwrap()
+        .to_string();
+    let res = app
+        .post(
+            &app.anon(),
+            "/api/auth/signup",
+            json!({"email": "Only@Example.com", "name": "O", "password": PW,
+                   "invite_token": token, "email_code": code}),
+        )
+        .await;
     res.assert_status(200);
 
     let res = app

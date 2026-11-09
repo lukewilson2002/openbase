@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { USER, mockApi, renderApp } from "@/test/utils";
+import { USER, apiError, mockApi, renderApp } from "@/test/utils";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -86,6 +86,34 @@ describe("account", () => {
 
     await waitFor(() => expect(api.callsTo("POST /api/auth/2fa/enable")).toHaveLength(1));
     expect(api.callsTo("POST /api/auth/2fa/enable")[0]?.body).toEqual({ code: "654321" });
+    expect(await screen.findByText("Enabled")).toBeInTheDocument();
+  });
+
+  it("asks for the password when a session is too old to turn on two-factor", async () => {
+    const user = userEvent.setup();
+    let enabled = false;
+    const api = mockApi({
+      "GET /api/auth/me": () => ({ ...USER, totp_enabled: enabled }),
+      "GET /api/auth/passkeys": [],
+      "POST /api/auth/2fa/setup": { secret: "JBSWY3DPEHPK3PXP", otpauth_url: "otpauth://totp/OpenBase:ada@example.com?secret=JBSWY3DPEHPK3PXP&issuer=OpenBase" },
+      "POST /api/auth/2fa/enable": (call) => {
+        if (!(call.body as { password?: string }).password) return apiError(403, "reauth_required", "confirm your password to turn on two-factor authentication");
+        enabled = true;
+        return { ...USER, totp_enabled: true };
+      },
+    });
+    renderApp({ route: "/account?tab=security" });
+
+    await user.click(await screen.findByRole("button", { name: /Enable two-factor/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Set up two-factor authentication" });
+    expect(within(dialog).queryByLabelText("Password")).not.toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText("Code from your app"), "654321");
+    await user.click(within(dialog).getByRole("button", { name: "Turn on" }));
+
+    await user.type(await within(dialog).findByLabelText("Password"), "hunter2hunter2");
+    await user.click(within(dialog).getByRole("button", { name: "Turn on" }));
+    await waitFor(() => expect(api.callsTo("POST /api/auth/2fa/enable")).toHaveLength(2));
+    expect(api.callsTo("POST /api/auth/2fa/enable")[1]?.body).toEqual({ code: "654321", password: "hunter2hunter2" });
     expect(await screen.findByText("Enabled")).toBeInTheDocument();
   });
 

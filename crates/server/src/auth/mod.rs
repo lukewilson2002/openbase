@@ -4,6 +4,7 @@
 //! use `Authorization: Bearer <api token>`. Both resolve to an [`Actor`].
 //! Only SHA-256 hashes of tokens are stored.
 
+pub mod invite_code;
 pub mod passkey;
 pub mod password;
 pub mod session;
@@ -11,7 +12,6 @@ pub mod totp;
 
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
-use axum_extra::extract::CookieJar;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
@@ -203,6 +203,15 @@ pub struct ClientInfo {
     /// `"unknown"` (in-process tests).
     pub ip: String,
     pub user_agent: Option<String>,
+}
+
+impl ClientInfo {
+    /// What per-address rate limits key on: the address, but for IPv6 its /64. One subscriber
+    /// usually holds a whole /64, so keying on the full address would hand an attacker 2^64
+    /// fresh budgets, enough to flood the limiter and push out other people's counters.
+    pub fn rate_key(&self) -> String {
+        crate::oauth::rate_key(&self.ip)
+    }
 }
 
 /// Compute the client IP from the request parts (see [`ClientInfo::ip`]).
@@ -510,6 +519,23 @@ pub(crate) fn bearer_from_headers(headers: &axum::http::HeaderMap) -> Option<&st
     v.strip_prefix("Bearer ").map(str::trim)
 }
 
+/// The value of the cookie named exactly `name`, read from the raw `Cookie` headers. Not through
+/// `CookieJar`, which percent-decodes names: `%5F_Host-ob_session` is a different cookie to a
+/// browser, so a sibling subdomain may set it despite the `__Host-` rules, yet the jar would
+/// hand it back as the session cookie. A literal match honours only the cookie the browser
+/// guards. With several of that name the last wins, as in the jar.
+pub(crate) fn cookie_value(headers: &axum::http::HeaderMap, name: &str) -> Option<String> {
+    headers
+        .get_all(axum::http::header::COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(';'))
+        .filter_map(|pair| pair.trim().split_once('='))
+        .filter(|(k, _)| *k == name)
+        .map(|(_, v)| v.trim().trim_matches('"').to_string())
+        .next_back()
+}
+
 pub(crate) fn bearer(parts: &Parts) -> Option<&str> {
     bearer_from_headers(&parts.headers)
 }
@@ -563,11 +589,9 @@ impl FromRequestParts<AppState> for Actor {
             }
             return found.map(|(a, _)| a).ok_or(AppError::Unauthorized);
         }
-        let jar = CookieJar::from_headers(&parts.headers);
-        let Some(cookie) = jar.get(state.config.session_cookie_name()) else {
+        let Some(token) = cookie_value(&parts.headers, state.config.session_cookie_name()) else {
             return Err(AppError::Unauthorized);
         };
-        let token = cookie.value().to_string();
         let (actor, last_seen) = state
             .db
             .read(move |c| lookup_session(c, &token))

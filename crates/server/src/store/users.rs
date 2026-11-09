@@ -293,10 +293,19 @@ pub fn set_intro_seen(conn: &Connection, id: &str, seen: bool) -> AppResult<()> 
     Ok(())
 }
 
+/// Replace the password. Reset links issued before the change stop working
+/// with it: a link that outlived the credential it was meant to replace would
+/// let whoever holds it take the account back, whichever way the password
+/// changed (settings, a reset, the command line).
 pub fn set_password_hash(conn: &Connection, id: &str, hash: &str) -> AppResult<()> {
+    let now = now_ms();
     conn.execute(
         "UPDATE users SET password_hash = ?1, updated_at = ?2 WHERE id = ?3",
-        params![hash, now_ms(), id],
+        params![hash, now, id],
+    )?;
+    conn.execute(
+        "UPDATE password_resets SET used_at = ?1 WHERE user_id = ?2 AND used_at IS NULL",
+        params![now, id],
     )?;
     Ok(())
 }
