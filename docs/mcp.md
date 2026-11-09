@@ -22,6 +22,13 @@ yourself if you would rather describe the work to an agent.
   create a password-reset link, switch off someone's 2FA, remove someone's passkeys, give a
   new user a password or set the SMTP password.
 
+**The app's words and the tools' names.** The web app says Workspace, Folder, Collection, Record,
+Property, View and Layout (Board for kanban). The tools keep the names agents already use: a folder is
+a *project*, a collection a *table*, a property a *field*, and a view's layout its `type`. A
+workspace's top-level project is the one whose collections the app shows directly under the
+workspace; the others appear as folders. Descriptions below say "project", "table" and "field"
+when they name what a tool takes.
+
 Contents: [Quick start](#quick-start) · [Set up your client](#set-up-your-client) ·
 [Connect with OAuth](#connect-with-oauth-sign-in) · [Choose a token](#choose-a-token) · [How access works](#how-access-works) · [How an agent works here](#how-an-agent-works-here) ·
 [Tools](#tools) · [Reaching everything: api_reference and api_request](#reaching-everything-api_reference-and-api_request) ·
@@ -407,7 +414,7 @@ finds names: every word of `query` has to match a name or an old name (`cart sho
 | Tool | Needs | What it does |
 |---|---|---|
 | `get_view` | any | A view's configuration, with field names |
-| `create_view` | write | Grid, form, gallery, kanban, calendar, timeline or list view, optionally personal, with a configuration. The table's page field is hidden in the new view unless the configuration names it (in `hidden_fields` or `field_order`) |
+| `create_view` | write | Grid, form, gallery, kanban (a Board in the app), calendar, timeline or list view, optionally personal, with a configuration. The table's page field is hidden in the new view unless the configuration names it (in `hidden_fields` or `field_order`) |
 | `update_view` | write | Rename, lock, or change parts of the configuration (filter, sorts, groups, hidden and ordered fields, widths, summaries, row colour, kanban / calendar / gallery / list / timeline / form settings) |
 | `delete_view` | write | Delete to the trash |
 | `reorder_views` | write | Order of a table's views, for everyone: the listed ones take their own places in the new order, the rest stay. Shared views need the creator role; your own personal views the editor role. The default grid is not one of the views |

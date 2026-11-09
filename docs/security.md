@@ -5,6 +5,9 @@ administrator has to configure, and the risks that were looked at and accepted.
 The limits are the values in the code today; rate limits and budgets are in
 memory and start over when the server restarts.
 
+Words: the web app says Workspace, Folder, Collection, Record and Property. The API, the MCP tools and
+this document keep the names in the code: project (the API's "base"), table and field.
+
 Contents: [Threat model](#threat-model) · [Checklist for administrators](#checklist-for-administrators) ·
 [Built-in protections](#built-in-protections) ·
 [Sign-in, sessions, tokens, invites and email](#sign-in-sessions-tokens-invites-and-email) ·
@@ -346,7 +349,10 @@ ChatGPT's own servers) that holds valid tokens. Revoke from **Connected apps**.
 - **Open event streams** end when their session or API token is deleted or
   expires, the user is deactivated, or access is lost: removal from the workspace or
   the project taken off their list publishes `base_changed`, which re-checks access at
-  once (and it is re-checked every 60 s anyway).
+  once (and it is re-checked every 60 s anyway). The workspace stream
+  (`GET /api/workspaces/{id}/events`, which Home uses) relays only the projects the caller
+  can open, tells a client when it gains or loses one, never reports who is viewing, answers
+  `404` to a non-member and `429` once a user holds 20 of them.
 - **Invites** always join a workspace, for every project or a list of projects. They are
   valid only while their creator is active and holds the invited role as an Owner of
   the workspace or, for an invite limited to some projects, as a Creator who can still

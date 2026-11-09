@@ -8,8 +8,9 @@
 # OpenBase
 
 OpenBase is a self-hosted alternative to Airtable for individuals and very small
-businesses: tables, linked records, formulas, grid / kanban / calendar / gallery /
-timeline / list / form views, automations, sharing and an Airtable-compatible API.
+businesses: collections of records, linked records, formulas, pages, and grid / board /
+calendar / gallery / timeline / list / form layouts, automations, sharing and an
+Airtable-compatible API.
 You run it on a small server you control, and your data stays in one folder.
 
 - **One process, one data directory.** The server is a single Rust program
@@ -17,7 +18,7 @@ You run it on a small server you control, and your data stays in one folder.
   (`openbase.db`), uploaded files (`attachments/`) and backups (`backups/`) all
   live in one directory. No Postgres, no Redis, no Node at runtime.
 - **Built for a small VPS.** Idle, the server uses about 18 MB of memory; a
-  50,000-record table stayed under about 105 MB in our tests
+  50,000-record collection stayed under about 105 MB in our tests
   ([measured numbers](#resource-usage-and-scale), taken on a fast laptop, not on a
   $5 VPS).
 - **No paid tier.** No license keys, no feature flags. Dual licensed
@@ -44,44 +45,56 @@ and password reset, by email when SMTP is configured, otherwise through an admin
 reset link or `openbase reset-password`. Passkey sign-in (Touch ID, Windows Hello,
 a phone, a security key or a password manager: no username, no password, and no
 two-factor code, because a passkey is verified on the device), TOTP two-factor
-authentication, profiles with time zones, and personal access tokens (read or write, optionally
-limited to some projects). Admin pages cover users, outgoing email (SMTP settings
+authentication, profiles with a time zone and the first day of the week, and personal access tokens (read, read and write, or
+full control, optionally limited to some folders). Admin pages cover users, outgoing email (SMTP settings
 and a "Send test email" button, no restart needed), instance stats, the audit log
 and backups (list, create now, download).
 
-**Workspaces and sharing.** People get access by joining a workspace, with one
-of five roles (owner, creator, editor, commenter, viewer) and either every project
-of the workspace, including projects made later, or a picked list of projects. Owners
-always have every project. Invites by link, or by email if SMTP is set up; a
-creator can invite people to the projects they can open. Read-only view share
-links (optional password) and public form links show data to people outside.
+**Home, workspaces and sharing.** Each workspace has a Home: a box that captures a thought as a
+draft or a record (a date written in words, such as "friday", becomes the record's date),
+what is due soon from every collection that has a date, recent records, and the
+drafts to file. People get access by joining a workspace, with one of five roles
+(owner, creator, editor, commenter, viewer) and either every folder of the workspace,
+including folders made later, or a picked list of folders. Owners always have every
+folder. A workspace's collections sit directly under it, in its top-level folder; other
+folders hold their own. Invites by link, or by email if SMTP is set up; a creator can
+invite people to the folders they can open. Read-only view share links (optional
+password) and public form links show data to people outside.
 
-**Projects, tables and fields.** Create, rename, duplicate (with or without
-records), delete and restore projects and tables. 28 field types: single line text,
+**Folders, collections and properties.** Workspaces, folders and collections each have a
+color. Create, rename, duplicate (with or without records), delete and restore
+folders and collections. A collection can name what its records are called ("client")
+and which dates and checkbox Home reads. 28 property types: single line text,
 long text (plain or Markdown), number, currency, percent, duration, rating,
 checkbox, single and multiple select, date (optional time, formats, time zones),
 email, URL, phone, attachment (with previews: images, a PDF's first page, a video's first frame), link to another record (paired
 both ways), user, formula, lookup, rollup, count, created / last modified time,
 created / last modified by, autonumber, barcode and button (opens a URL computed
-by a formula). Fields support descriptions and defaults. Changing a field's type
-converts its data. You can change the primary field. Deleted fields can be
-restored.
+by a formula). Properties support descriptions and defaults. Changing a property's type
+converts its data. You can change the title property (the primary field). Deleted
+properties can be restored. Links work between collections of the same folder.
 
 **Formulas.** Airtable-compatible syntax and the full Airtable function list,
 including date formatting and arithmetic, time zones, `WORKDAY` and regex
 functions. Formulas, lookups, rollups and counts are stored with the record and
 recomputed when their inputs change.
 
-**Records.** Create, edit, delete and restore records, in batches. Manual
-ordering, a page for each record, duplicating, comments with @mentions and
-in-app notifications, per-record revision history, attachments, copy and paste of
-ranges, a fill handle, undo / redo and search.
+**Records and pages.** Create, edit, delete and restore records, in batches. Every
+record is a page with its own address: its properties on top and, below them, a
+page of rich text that can hold images and files, @mentions and small tables of
+its linked records or of a view (an `openbase` code block, see
+[docs/mcp.md](docs/mcp.md#embedding-records-and-views-in-rich-text)). Previous
+and next record follow the view you came from. Manual ordering, duplicating,
+comments with @mentions and in-app notifications, per-record revision history,
+attachments, copy and paste of ranges, a fill handle, undo / redo and search.
 
-**Views.** Grid, form, gallery, kanban, calendar, timeline (with swimlanes and
-Gantt-style dependency arrows) and list. Every view supports nested filters,
-sorts, up to three grouping levels, hidden / reordered / resized fields, frozen
-columns, row height, row colouring, summary-bar aggregations, personal and locked
-views, and CSV export.
+**Views and layouts.** A view shows a collection in a layout: grid, form, gallery,
+board, calendar, timeline (with swimlanes and Gantt-style dependency arrows) or
+list. Every view supports nested filters, sorts, up to three grouping levels,
+hidden / reordered / resized properties, frozen columns, row height, row
+colouring, summary-bar aggregations, personal and locked views, and CSV export.
+A change to a view is a draft on your device until you choose Save as view or
+Update view.
 
 **Live collaboration.** Changes appear in other open tabs within moments, via
 Server-Sent Events. If two people edit the same cell, the last write wins, and
@@ -100,11 +113,12 @@ clients and n8n / Make / Zapier HTTP steps work once you change the base URL.
 `/mcp`. An agent that you connect with a personal access token, or by signing in
 from its connector screen (Claude, ChatGPT; OAuth is built in), can do everything
 you can do in the web app, within the access you give it, so you do not have to use the app
-yourself if you would rather not: build projects, tables, all 28 field types and views,
+yourself if you would rather not: build folders, collections, all 28 property types and views,
 edit records, run formulas, set up automations and public forms, invite people,
 import and export CSV, upload files, read history and notifications, and (for
-administrators) manage users, email settings and backups. Workspaces, projects and
-tables can be given icons. About 70 tools, plus a generic request tool for anything
+administrators) manage users, email settings and backups. Workspaces, folders and
+collections have colors, and the tools read Home, choose a workspace's top-level
+folder, set a collection's page property and Home settings. About 70 tools, plus a generic request tool for anything
 else. **Account -> AI assistants** shows the address and short steps for Claude, ChatGPT and
 other clients, and lists the connected apps you signed in with, each revocable. Passwords (including the SMTP password and
 password-reset links), two-factor settings, passkeys, sessions and API tokens stay out of
@@ -126,7 +140,7 @@ docker-compose file with Caddy for automatic HTTPS, and a systemd unit.
 | Sync and vendor integrations (Slack, Gmail, Jira, ...) | They depend on outside services and break easily. Webhooks, HTTP requests and SMTP cover most needs. |
 | Email-received automation trigger | It would need an inbound mail server. |
 | SSO (SAML / OIDC) | Too much setup and support for a deployment of 25 users or fewer. Passwords, passkeys and TOTP 2FA are solid. |
-| Field- and table-level permissions | Every write path would need an extra check. Five roles plus a per-member choice of projects are enough for small teams. |
+| Property- and collection-level permissions | Every write path would need an extra check. Five roles plus a per-member choice of folders are enough for small teams. |
 | S3 storage, multiple nodes, Postgres | Each adds a moving part. The design is one node, local disk and backups. |
 | Excel (.xlsx) and Airtable-base import | CSV covers it, since both Airtable and Excel export CSV. |
 | Airtable-style webhooks API | Automations ("record created / updated -> HTTP request") cover outbound notifications. |
@@ -262,7 +276,7 @@ in `deploy/.env`; with systemd in `/etc/openbase/openbase.env`.
 | `OPENBASE_OPEN_SIGNUP` | `false` | Let anyone create an account. When false, new users need an invite (the first account is always allowed and becomes admin). |
 | `OPENBASE_TRUST_PROXY` | `false` | Take the client address from the last `X-Forwarded-For` entry. Enable only when OpenBase can be reached solely through the reverse proxy that sets it; see [docs/security.md](docs/security.md). The Compose file sets it for you. |
 | `OPENBASE_MAX_UPLOAD_MB` | `100` | Maximum size of one uploaded file, in MB. |
-| `OPENBASE_MAX_INBOX_MB` | `200` | Maximum total size of the files one user keeps in their inbox (uploaded but not yet filed into a project), in MB. |
+| `OPENBASE_MAX_INBOX_MB` | `200` | Maximum total size of the files one user keeps in their inbox (uploaded but not yet filed into a folder), in MB. |
 | `OPENBASE_BACKUP_HOUR` | `3` | Hour (0-23, server local time, see `TZ`) for the daily automatic backup. `-1` turns automatic backups off. |
 | `OPENBASE_BACKUP_KEEP` | `7` | Number of automatic backups to keep. |
 | `OPENBASE_TRASH_DAYS` | `30` | Days deleted items stay in the trash. |
@@ -360,6 +374,9 @@ systemd: replace `/usr/local/bin/openbase` with the new release binary and `syst
 When a new version changes the database schema, OpenBase first writes a
 pre-migration snapshot (`backups/pre-migration-v<old>-<timestamp>.db`) and refuses
 to start if it cannot. It never opens a database written by a newer version.
+The upgrade that introduced Home, record pages and collection pages moves the database to schema 17 (no value you
+entered changes; the [CHANGELOG](CHANGELOG.md) says what it adds), and, when OpenBase is served over https, signs
+everyone out once because the session cookie is now `__Host-ob_session`.
 Rolling back means running the previous version again (pin `OPENBASE_VERSION=<previous release>`)
 and restoring your pre-upgrade backup. Details, and the optional automatic updates, in
 [docs/self-hosting.md](docs/self-hosting.md#8-upgrading).
@@ -377,9 +394,9 @@ it on your own server.
 
 | | Limit | Status |
 |---|---|---|
-| Records per table | 50,000 comfortable, 100,000 hard cap | 50,000 measured; the 100,000 cap is enforced but not benchmarked |
-| Fields per table | 500 | enforced |
-| Tables per project | 200 | enforced |
+| Records per collection | 50,000 comfortable, 100,000 hard cap | 50,000 measured; the 100,000 cap is enforced but not benchmarked |
+| Properties per collection | 500 | enforced |
+| Collections per folder | 200 | enforced |
 | Upload size | 100 MB per file (`OPENBASE_MAX_UPLOAD_MB`) | enforced |
 | CSV import | 100,000 rows, 20 MB, 3,000,000 cells | enforced |
 | Concurrent active users | about 25 | design target, not load-tested |
@@ -393,8 +410,8 @@ it on your own server.
 | Server idle, release binary, right after start (RSS) | 17.6 MB |
 | Container idle (`/proc` RSS of the server / `docker stats`) | 19.9 MB / 6.4 MiB (`docker stats` leaves out page cache) |
 | After the first password sign-in (a password hash uses 19 MiB while it runs) | 38 MB on macOS; 18 MB in the Linux container |
-| 50,000-record table loaded through the API, 11 fields incl. a formula | 58 MB |
-| ...after fetching the first page of that table | 77 MB |
+| 50,000-record collection loaded through the API, 11 properties incl. a formula | 58 MB |
+| ...after fetching the first page of that collection | 77 MB |
 | ...after a sorted query, a write and 8 simultaneous cold searches | 104 MB |
 | Same load in a container limited to 1 CPU and 1 GB | 101 MB peak RSS |
 
@@ -408,7 +425,7 @@ rename; neither was repeated. Sizes are in MB of 10^6 bytes.)
 ### Measured: speed at 50,000 records
 
 From the in-process scale test (`cargo test -p openbase --release --test scale --
---ignored --nocapture`, three runs; 50,000 orders with 11 fields incl. a link, a
+--ignored --nocapture`, three runs; 50,000 orders with 11 properties incl. a link, a
 lookup and a formula, plus 1,000 customers):
 
 | | Result |
@@ -445,14 +462,14 @@ we have not measured.
 | Memory, under 60 MB idle | met (18 MB) |
 | Memory, under 300 MB under load at 50k rows | met (at most 104 MB over HTTP) |
 
-Not measured: a real 1 vCPU VPS, 100,000-record tables, 25 simultaneous users,
+Not measured: a real 1 vCPU VPS, 100,000-record collections, 25 simultaneous users,
 upload-heavy workloads, long-running memory growth, or the speed of an amd64 build (the
 amd64 image does build and passes `scripts/smoke-docker.sh`, run under emulation on an arm64
 laptop; its size and memory were not measured). The systemd unit passes `systemd-analyze verify` but has not been run on a real systemd
 host. The container build and the full install / backup / restore lifecycle were
 run end to end on the laptop (`scripts/smoke-docker.sh`, `scripts/smoke-install.sh`).
 
-Disk: the 50,000-record test database with 11 fields compressed to a 5.7 MB
+Disk: the 50,000-record test database with 11 properties compressed to a 5.7 MB
 backup archive. Each backup holds the database **and every attachment**, so
 with the default `OPENBASE_BACKUP_KEEP=7` plan for roughly eight times your
 database plus attachments.
@@ -472,7 +489,7 @@ in [docs/security.md](docs/security.md). Read the checklist before going live.
 ## API
 
 The Airtable-compatible API lives under `/api/v1` and takes personal access
-tokens (create one under **Account -> Tokens**):
+tokens (create one under **Account -> API tokens**):
 
 ```sh
 curl -H "Authorization: Bearer $TOKEN" https://base.example.com/api/v1/meta/bases

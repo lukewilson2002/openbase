@@ -13,12 +13,17 @@ in `crates/core/src/api` (exported to TypeScript in `web/src/api/types`). This
 document covers the Airtable-compatible API in full, and summarises the public
 links and CSV endpoints.
 
-**Projects are called "bases" in the API.** OpenBase and its web app say *project*
-(a project holds tables, and lives in a workspace), but the API keeps the older
-name so that existing clients and Airtable-compatible tools keep working: routes
-are `/api/bases/...` and `/api/v1/meta/bases`, fields are `base_id`, `base_ids`
-and `all_bases`, events are `base_changed`, and ids look like `appXXXX`. This
-document says "project" in prose and keeps every route and field name exact.
+**The app's words and the API's names.** The web app says Workspace, Folder, Collection,
+Record, Property, View, Layout and Page; a Kanban layout is called Board. The API, the MCP
+tools and the stored data keep the older names, so that existing clients and
+Airtable-compatible tools keep working and nothing had to be renamed: a folder is a
+*project* here (the API calls it a "base": routes are `/api/bases/...` and
+`/api/v1/meta/bases`, fields are `base_id`, `base_ids` and `all_bases`, events are
+`base_changed`, and ids look like `appXXXX`), a collection is a *table*, a property is a
+*field*, and a view's layout is its `type` (the Board layout is the `kanban` type). A workspace's top-level
+project is the one whose collections the app shows directly under the workspace; every
+other project is a folder. This document says "project", "table" and "field" in prose
+where it names API objects and keeps every route and field name exact.
 
 ---
 
@@ -648,7 +653,7 @@ Field `type` names and options:
 | `button` | button | `{label}` |
 
 Views are the table's shared views plus the caller's own personal views. View
-types: `grid`, `form`, `gallery`, `kanban`, `calendar`, `timeline`, and `list`
+types (the app's layouts): `grid`, `form`, `gallery`, `kanban` (a Board in the app), `calendar`, `timeline`, and `list`
 (OpenBase's list view; Airtable has no equivalent).
 
 ### 2.4 Listing records

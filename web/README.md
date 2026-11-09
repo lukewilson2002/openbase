@@ -208,11 +208,33 @@ toggle, an optional `h1`, actions, the search button; on a phone the `PhoneHeade
 its own column (header, then a `min-h-0 flex-1` body).
 
 Routes (`App.tsx`; `routes.test.tsx` holds the table): `/` goes to the last workspace's Home (`workspaceToOpen` in `pages/workspace/lastWorkspace.ts`)
-or shows first run; `/workspace/:id` is Home (for now the Inbox's capture box until HOME-1 to HOME-11 rebuild it); `/workspace/:id/collections` is
+or shows first run; `/workspace/:id` is Home (see "Home"); `/workspace/:id/collections` is
 the phone's Collections tab and redirects to Home on a desktop; `/notifications` is a screen of its own and `/inbox` redirects to Home;
 `/workspace/:id/automations` lists automations by folder and links to the unchanged editor route. `lib/topLevel.ts` splits a workspace's
 projects into the top level and the folders the person can open (NAV-10: `GET /api/workspaces` lists only openable projects and drops
 `root_base_id` when the top level is not one of them).
+
+### Home (HOME-1 to HOME-11, `src/pages/home`)
+
+`/workspace/:id` is the workspace's Home. `HomePage` shows a capture box, the person's drafts (the old Inbox page's contents), Due soon and
+Recently changed. The three lists come from one request, `GET /api/workspaces/{id}/home` (`api.workspaces.home`), and stay live through
+the workspace stream, `GET /api/workspaces/{id}/events` (`api/events.ts`, one connection for every folder: a browser allows about six per
+site). The page is a container: the lists sit side by side from 760 px of column, whatever the screen.
+
+- **Capture (`CaptureBox`, `capture.ts`).** The first line is the title and further lines the page. A "Goes to" chip (`CollectionPicker`) picks the
+  collection (the last one used, else Inbox, which keeps a draft to file later); a date phrase in the title becomes a chip on the collection's
+  Home date (`lib/dateGuess`, a deterministic parser; taking the chip off puts the words back, and `DateChipPicker` changes the date); the dashed
+  `PropertyChip` sets any other property, and a creator can start a new one from the value (`lib/guessType`, shared with the record page's Add
+  property). Files pasted or dropped on the card go to the collection's first attachment property. Unsent text is kept on the device. The rules are
+  plain functions of their inputs, tested without a screen (`capture.test.ts`).
+- **Due soon (`DueSoon`, `dueDates.ts`).** Records of the collections that have a Home date, from 30 days ago to 7 ahead and not done, oldest first,
+  at most 50. The Done checkbox takes a record off Home with Undo and is disabled where the person cannot edit. The words ("Today", "3 days
+  ago") come from the server's own `today`, so a row and its `overdue` flag never disagree.
+- **Recently changed (`RecentlyChanged`)** is the 10 records most recently created or edited that the person can see; "All activity" opens History.
+- **Drafts (`InboxCard`, `EditDraftDialog`, `FileDraftDialog`, `targets.ts`).** A draft opens to be edited (`PATCH /api/inbox/{id}`) and is filed
+  through the same form a record page uses (`POST /api/inbox/{id}/file`). Drafts belong to the person, so they show on every workspace's Home.
+- **Speed.** Home is a lazy route (`App.tsx`), so a collection's first screen does not load it; see "Bundle". The server side meets HOME-11 (under 300 ms
+  for 20 collections and 100,000 records): `cargo test --release -p openbase --test home_perf -- --ignored --nocapture`.
 
 ### The sidebar (NAV-1 to NAV-4, NAV-6, NAV-10)
 
@@ -358,7 +380,7 @@ open (rename, delete and share a view, the collection's settings) are `BaseDialo
   and the primary New button (editors and up) named by `newRecordLabel` (the collection's record name, else "New record"). Above the
   title a collection in a folder shows the folder's name with an 8 px mark; below it the description, click-to-edit for creators
   (Enter or blur saves, Escape cancels). A "…" beside the title opens the settings (creators). On a phone `PhoneHeader` holds the back
-  link, Share, + and the search, and the title block sits under it with the whole row (the 390 px truncation of Phase 3 is gone);
+  link, Share, + and the search, and the title block sits under it with the whole row (a long name wraps rather than being cut at 390 px);
   who is viewing is left out there.
 - **The New button reaches the layout through `views/common/addRecord.tsx`.** Every layout adds a record its own way, so `ViewFrame`
   and `GridView` call `useRegisterAddRecord(onAdd)` while they are shown and the header's `useAddRecord()` runs it; with nothing
@@ -525,7 +547,7 @@ Date writes honour the field: a date-only field stores `YYYY-MM-DD`, a field wit
 | `src/api/sharing.ts` | `sharesApi` (manage links), `publicApi` (public form / shared view / attachments), `csvApi` (export, import into a table, new table); `ImportFailedError` carries the problem rows of a refused import |
 | `src/lib/forms/` | Pure logic: `formConfig.ts` (builder edits, what a form may hold, which fields the public form leaves out), `publicValues.ts` (what a visitor typed -> `values`, with validation), `drafts.ts` (the same for the internal fill-in mode) |
 | `src/lib/csv/` | The CSV preview parser (BOM, delimiter detection, quotes), `mapping.ts` (the column names the server derives, auto matching, payload) and `read.ts` (size / encoding checks) |
-| `src/lib/dateGuess/` | Deterministic date-phrase parser for capture (HOME-4): `guessDate(text, {now, timeZone, weekStart})` finds one phrase (today, tomorrow, weekdays, `next Friday`, `Nov 14`, `11/14`, `9am`, ISO), resolves it and returns the text without it; `restorePhrase` puts the words back. Pure: the clock is injected. Not wired into the UI yet |
+| `src/lib/dateGuess/` | Deterministic date-phrase parser for capture (HOME-4): `guessDate(text, {now, timeZone, weekStart})` finds one phrase (today, tomorrow, weekdays, `next Friday`, `Nov 14`, `11/14`, `9am`, ISO), resolves it and returns the text without it; `restorePhrase` puts the words back. Pure: the clock is injected. Home's capture box reads it (`pages/home/capture.ts`) |
 | `src/lib/guessType/` | The FLD-1 type guesser: `guessType(value)` returns a field type, complete options and the table row that matched. `examples.json` is the example table shared with the CSV importer's `infer_kind` (a Rust test in `store/csv_io.rs` reads the same file); add a row when a rule changes |
 | `src/lib/phraseFilter/` | The COL-4 phrase parser: `parsePhrase(text, {fields, userId, collaborators, now, timeZone, weekStart})` returns ranked candidates for the filter bar, using only existing operators: `filter` ("Next follow-up is this week"), `long-text` ("Notes contain “…”", only beside a filter reading) and one `search` ("Search every property for “…”"). Each carries a `condition` ready for a chip, a `label` of `property`, `operator` and `value` parts for bold rendering, and a `score`; empty text gives none and text it cannot read gives the search suggestion alone. A property needs an operator or a value that reads one way ("Name Dana" is not a filter, "Status Won" is); a bare value finds its property only when exactly one can hold it. `this week`, `next week`, `last week`, `this/next/last month` and `this year` write the BE-7 calendar operands; `me` and `mine` write the `"me"` marker. Pass `fields` without the Page property. `ViewFilterBar` runs it. `describeCondition` / `conditionLabel` (`describe.ts`) read any condition back in the same words, for chips |
 | `src/views/form/` | The form view: `FormBuilder` (settings, `FormFieldList` with dnd-kit reorder, live preview through `FormSurface` with the record editors in their `form` variant) and `FormFill` (signed-in editors create a record through the normal records API) |
@@ -581,6 +603,21 @@ Not in the UI because the server has no endpoint for it: duplicating an automati
 (the saved automation's `next_run_at` is shown instead), re-showing a webhook token.
 
 ### Bundle
+
+Routes load on demand as well as views: Home, a record page, notifications, the two workspace lists, account, admin, members, settings,
+history and the trash are `React.lazy` routes in `App.tsx` (DONE-10: a record page brings the record editors, the Markdown renderer
+and the link previews, Home the capture box and its pickers; a collection's first screen needs none of them). Keep `App.tsx`'s static
+imports to the shell and the screens every visit meets, and check the effect with `scripts/perf-compare.sh` (below).
+
+**Speed against `main` (`scripts/perf-compare.sh`, `web/e2e/perf/compare.mjs`).** It builds a release server with this client embedded for this
+checkout and for `main` (a temporary worktree under `.claude/worktrees/perf-main` with its own target directory, removed afterwards; it stops when
+less than 60 GB is free), loads 50,000 records into each through the API and, alternating the two, opens the collection in Chrome five times from a
+fresh browser context (after one discarded warm-up run per side). The time is `performance.now()` in the page when the grid's first row has text
+and two frames have passed. It also adds up the JavaScript the first screen loads: the entry chunk plus everything it imports statically.
+Pass: no more than 10% slower and no larger entry JavaScript. Measured on 2026-11-09 on a laptop (release servers, Chrome): median 733 ms on
+this branch against 767 ms on `main` (-4.4%); entry JavaScript 759 KiB (251 KiB gzip, 31 files) against 907 KiB (304 KiB gzip, 61 files)
+(-16%). Before Home and the record page became lazy routes the entry was 1,097 KiB, 21% above `main`.
+
 
 The app shell (`index-*.js` plus the chunks it needs on every page, see `vite build` output) is kept small by loading
 what most visits never use on demand: the grid, the other views, automations, account, admin, the public pages, and the
