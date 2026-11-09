@@ -16,18 +16,16 @@
 //! the cheap read-only checks that need no fetch (a registered client and its redirect address)
 //! still run, so an obviously broken link is explained before the sign-in rather than after it.
 //!
-//! Errors follow RFC 6749 4.1.2.1: while the client or the redirect URI cannot be trusted the
-//! user sees an error page and nothing is redirected (an open redirect would otherwise be
-//! possible); once both are verified, errors go back to the client's redirect URI with `error`,
-//! `state` and the issuer (`iss`, RFC 9207, which protects clients that talk to several
-//! authorization servers against mix-up attacks).
+//! Errors are shown on an error page and never redirected to the client (RFC 9700 4.11.2): any
+//! visitor can register a client, so a redirect address that matches a client's is not a
+//! trusted one, and redirecting to it would make this origin an open redirector. The redirect
+//! address is used only after a signed-in person has seen it on the consent page.
 
 use std::time::Duration;
 
 use axum::extract::{RawQuery, State};
-use axum::http::{HeaderValue, StatusCode, header};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum_extra::extract::CookieJar;
 
 use super::{normalize_resource, parse_params, rate_key, redirect, scope};
 use crate::auth::{ClientInfo, lookup_session, stamp_session_use};
@@ -122,7 +120,7 @@ fn is_challenge(s: &str) -> bool {
 pub async fn authorize(
     State(state): State<AppState>,
     client_info: ClientInfo,
-    jar: CookieJar,
+    headers: HeaderMap,
     RawQuery(query): RawQuery,
 ) -> Response {
     if !state.config.oauth_enabled() {
@@ -157,18 +155,15 @@ pub async fn authorize(
 
     // Who is looking? Only a signed-in person (a session cookie; never a bearer token) may have
     // anything stored or fetched on their behalf.
-    let user = match jar.get(state.config.session_cookie_name()) {
-        Some(cookie) => {
-            let token = cookie.value().to_string();
-            match state.db.read(move |c| lookup_session(c, &token)).await {
-                Ok(Some((actor, last_seen))) => {
-                    stamp_session_use(&state, &actor, last_seen).await;
-                    Some(actor)
-                }
-                Ok(None) => None,
-                Err(e) => return e.into_response(),
+    let user = match crate::auth::cookie_value(&headers, state.config.session_cookie_name()) {
+        Some(token) => match state.db.read(move |c| lookup_session(c, &token)).await {
+            Ok(Some((actor, last_seen))) => {
+                stamp_session_use(&state, &actor, last_seen).await;
+                Some(actor)
             }
-        }
+            Ok(None) => None,
+            Err(e) => return e.into_response(),
+        },
         None => None,
     };
     if let Some(user) = &user
@@ -239,48 +234,31 @@ pub async fn authorize(
         );
     }
 
-    // 2. From here on the redirect address is trusted: report problems to the client.
-    let issuer = state.config.oauth_issuer();
+    // 2. The redirect address matches what the client registered, but anyone can register a
+    //    client (and a CIMD document is self-published), so matching is no reason to trust it
+    //    (RFC 9700 4.11.2). A problem with the request is shown on this page and never sent to
+    //    that address: otherwise a crafted link on this origin, which needs no session, would
+    //    bounce a visitor to any site the attacker registered. The address is only used once a
+    //    signed-in person has seen it on the consent page.
     let state_param = params.get("state").map(String::as_str);
-    let fail = |error: &str, description: &str| -> Response {
-        let mut pairs = vec![("error", error), ("error_description", description)];
-        if let Some(s) = state_param.filter(|s| s.len() <= MAX_STATE_LEN) {
-            pairs.push(("state", s));
-        }
-        match redirect_url(redirect_uri, &pairs, &issuer) {
-            Some(url) => found(&url),
-            None => error_page(StatusCode::BAD_REQUEST, description),
-        }
-    };
+    let fail = |description: &str| -> Response { error_page(StatusCode::BAD_REQUEST, description) };
     if state_param.is_some_and(|s| s.len() > MAX_STATE_LEN) {
-        return fail("invalid_request", "the state parameter is too long");
+        return fail("the state parameter is too long");
     }
     if params.get("response_type").map(String::as_str) != Some("code") {
-        return fail(
-            "unsupported_response_type",
-            "only response_type=code is supported",
-        );
+        return fail("only response_type=code is supported");
     }
     let Some(challenge) = params.get("code_challenge").filter(|c| is_challenge(c)) else {
-        return fail(
-            "invalid_request",
-            "a code_challenge (PKCE, S256) is required",
-        );
+        return fail("a code_challenge (PKCE, S256) is required");
     };
     if params.get("code_challenge_method").map(String::as_str) != Some("S256") {
-        return fail(
-            "invalid_request",
-            "code_challenge_method must be S256 (plain PKCE is not supported)",
-        );
+        return fail("code_challenge_method must be S256 (plain PKCE is not supported)");
     }
     let resource = state.config.mcp_resource();
     if let Some(requested) = params.get("resource")
         && normalize_resource(requested) != resource
     {
-        return fail(
-            "invalid_target",
-            &format!("this server issues tokens for {resource} only"),
-        );
+        return fail(&format!("this server issues tokens for {resource} only"));
     }
     let (requested_scope, _) = scope::requested(params.get("scope").map(String::as_str));
 

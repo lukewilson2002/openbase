@@ -302,71 +302,46 @@ async fn the_error_page_does_not_echo_markup() {
     assert!(!html.contains("<script>alert"), "{html}");
 }
 
+/// F8: anyone can register a client, so a request problem is never sent to its redirect address:
+/// not to a visitor without a session (an open redirector on this origin) and not to a
+/// signed-in person either. The page explains it and nothing is stored.
 #[tokio::test]
-async fn problems_after_the_redirect_is_verified_go_back_to_the_client_with_state_and_issuer() {
+async fn problems_with_the_request_are_shown_and_never_redirected() {
     let fx = Fx::new().await;
     let (_, challenge) = pkce();
-    let bad_challenge = "short";
-    for (label, extra, error) in [
-        (
-            "response_type",
-            vec![("response_type", "token")],
-            "unsupported_response_type",
-        ),
-        (
-            "no response_type",
-            vec![("response_type", "")],
-            "unsupported_response_type",
-        ),
-        (
-            "no challenge",
-            vec![("code_challenge", "")],
-            "invalid_request",
-        ),
-        (
-            "malformed challenge",
-            vec![("code_challenge", bad_challenge)],
-            "invalid_request",
-        ),
-        (
-            "plain method",
-            vec![("code_challenge_method", "plain")],
-            "invalid_request",
-        ),
-        (
-            "no method",
-            vec![("code_challenge_method", "")],
-            "invalid_request",
-        ),
+    let long = "s".repeat(2000);
+    for (label, extra) in [
+        ("response_type", vec![("response_type", "token")]),
+        ("no response_type", vec![("response_type", "")]),
+        ("no challenge", vec![("code_challenge", "")]),
+        ("malformed challenge", vec![("code_challenge", "short")]),
+        ("plain method", vec![("code_challenge_method", "plain")]),
+        ("no method", vec![("code_challenge_method", "")]),
         (
             "other resource",
             vec![("resource", "https://other.example/mcp")],
-            "invalid_target",
         ),
         (
             "resource with a path",
             vec![("resource", "http://localhost:8080/mcp/extra")],
-            "invalid_target",
         ),
+        ("long state", vec![("state", long.as_str())]),
     ] {
-        let res = authorize_with(&fx.app, &fx.client_id, CB, &challenge, &extra).await;
-        assert_eq!(res.status, 302, "{label}");
-        let loc = location(&res);
-        assert!(loc.starts_with(&format!("{CB}?")), "{label}: {loc}");
-        let q = query_of(&loc);
-        assert_eq!(q["error"], error, "{label}");
-        assert_eq!(q["state"], "xyz-state", "{label}");
-        assert_eq!(q["iss"], "http://localhost:8080", "{label}");
-        assert!(q.contains_key("error_description"), "{label}");
-        assert!(!q.contains_key("code"));
+        let signed_in = authorize_with(&fx.app, &fx.client_id, CB, &challenge, &extra).await;
+        let visitor =
+            authorize_with_anonymous(&fx.app, &fx.client_id, CB, &challenge, &extra).await;
+        for (who, res) in [("signed in", signed_in), ("visitor", visitor)] {
+            res.assert_status(400);
+            assert!(
+                !res.headers.contains_key("location"),
+                "{label} ({who}): must not redirect"
+            );
+            assert!(
+                String::from_utf8_lossy(&res.bytes).contains("Cannot connect the app"),
+                "{label}"
+            );
+        }
     }
-    // An over-long state cannot be reflected; the error still goes back.
-    let long = "s".repeat(2000);
-    let res = authorize_with(&fx.app, &fx.client_id, CB, &challenge, &[("state", &long)]).await;
-    assert_eq!(res.status, 302);
-    let q = query_of(&location(&res));
-    assert_eq!(q["error"], "invalid_request");
-    assert!(!q.contains_key("state"));
     assert_eq!(fx.count("SELECT count(*) FROM oauth_requests"), 0);
 }
 
