@@ -293,6 +293,20 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   endpoint and `list_records` / `aggregate_records`; another one is `429 RATE_LIMIT_REACHED` with
   `Retry-After: 1` instead of queueing for the four read connections that sign-in and every read
   share. Formulas that worked before give the same results.
+- **Sign-in, invites and cookies.** (Behaviour changes, session-only; no REST data or MCP tool changes.)
+  An invite limited to one email address is no longer accepted because the sign-up form says the address:
+  `POST /api/auth/signup` mails an 8-digit code to the invited address and answers 403 `email_code_required`
+  until the request is sent again with it as `email_code` (the sign-up page asks for it); a server without
+  email refuses such a sign-up and says to send an invite without an address. A signed-in person accepting
+  with an existing account is unchanged. `GET /oauth/authorize` shows a request problem on an error page
+  instead of redirecting it to the app's address, which anyone can register. Changing the password (in
+  settings, by a reset link or `openbase reset-password`) voids reset links issued before. Turning on
+  two-factor authentication needs the password when the session is older than 10 minutes
+  (`POST /api/auth/2fa/enable` answers 403 `reauth_required`). `PATCH /api/invites/{id}` refuses a base of
+  another workspace, and an invite whose creator lost a base stays void when that base goes to the trash.
+  The session cookie is matched by its exact name, so a percent-encoded look-alike planted from a sibling
+  subdomain is ignored. Sign-in, sign-up and reset limits count an IPv6 /64 as one address, and a flood of
+  other requests no longer evicts the per-account sign-in counters.
 - **A share link's visitor can no longer change the view's filter.** `POST /api/public/shares/{token}/query`
   used to let a `transient.filter` replace the saved filter, which showed every record of the collection
   in the shown properties, including the ones the filter hides. It now answers 400 for a `transient`

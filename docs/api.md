@@ -81,7 +81,18 @@ some projects who creates or duplicates a project gets it added to their list.
   every project unless `base_ids` is given) or `POST /api/bases/{id}/invites`
   (creators of that project; that project unless `base_ids` lists other projects they can
   open; never `all_bases`, never above their role). Accepting keeps the higher
-  of the invited and existing role and adds up the projects.
+  of the invited and existing role and adds up the projects. `PATCH /api/invites/{id}` takes
+  only projects of the invite's own workspace (404 for any other).
+- Signing up with an invite that names an email address (`POST /api/auth/signup` with
+  `invite_token`) is confirmed with a code. The first request (no `email_code`) creates nothing:
+  it mails an 8-digit code to the invited address (a few an hour per invite, good for 15 minutes,
+  five tries) and answers 403 `email_code_required`; send the sign-up again with the code in
+  `email_code`. Without email set up on the server it answers 403 and says so. Invites without an
+  address, and a signed-in person accepting with `POST /api/invites/by-token/{token}/accept`,
+  are unchanged. This is session-only, like the rest of sign-up, so there is no MCP tool for it.
+- `POST /api/auth/2fa/enable` takes `{ "code", "password"? }`. A session older than 10 minutes
+  must send the password too; without it the answer is 403 `reauth_required` (the same rule as
+  adding a passkey).
 - `POST /api/workspaces/{id}/bases` accepts `empty: true` for a project without
   tables; by default it starts with "Table 1".
 - Every new table, a project's "Table 1" or one added with `POST /api/bases/{id}/tables`,

@@ -278,7 +278,7 @@ ChatGPT's own servers) that holds valid tokens. Revoke from **Connected apps**.
 
 | What | Limit |
 |---|---|
-| Password attempts, per client address | 10 per minute |
+| Password attempts, per client address | 10 per minute (an IPv6 address counts as its /64, as do the sign-up, reset, second-factor and passkey limits below) |
 | Password attempts, per account and client address | 10 per hour (reset on success) |
 | Password attempts, per account from anywhere | 60 per hour (reset on success). Deliberately high: when it trips the real owner is locked out too, so it only stops distributed guessing |
 | Login email | must be a plausible address of at most 254 bytes, checked before it is used as a limiter key or audit field; anything else answers the usual 401 and is not logged |
@@ -292,6 +292,7 @@ ChatGPT's own servers) that holds valid tokens. Revoke from **Connected apps**.
 | Pending passkey ceremonies | 5 minutes each, used once, at most 10,000 of each kind in memory |
 | Passkeys per account | 20 |
 | Sign-up, per client address | 10 per hour |
+| Confirmation codes for an invite to one address | 3 mails an hour per invite (and the instance's email budget), 8 digits, 15 minutes, 5 wrong tries per code and 30 per hour per invite |
 | Password-reset requests, per client address / per mailbox | 5 per hour / 3 per hour (extra requests are answered 200 and send nothing) |
 | Invite and automation emails | `OPENBASE_EMAIL_PER_USER_HOUR` (100) per user and `OPENBASE_EMAIL_PER_HOUR` (500) per instance; each recipient counts. Over the limit: invite creation answers 429, an automation run fails with an explanatory error |
 | Airtable-compatible API (`/api/v1`) | `OPENBASE_V1_RATE_PER_TOKEN` (5 per second) per token and `OPENBASE_V1_RATE_PER_USER` (50 per second) per user; over the limit answers 429 |
@@ -364,7 +365,23 @@ ChatGPT's own servers) that holds valid tokens. Revoke from **Connected apps**.
   revive the link). Creators can never invite to every project or to a project they cannot
   open. Accepting raises an existing member's workspace role only when its terms were
   last set by an owner acting for the whole workspace, not through a token limited to
-  some projects (recorded on the invite when its terms are set).
+  some projects (recorded on the invite when its terms are set). A listed project of another
+  workspace gives nothing and counts for nothing, and projects in the trash count when asking
+  whether the creator can still open them, so trashing the one project a creator lost does not
+  bring their voided invite back.
+- **An invite for one email address is confirmed by mail.** Signing up with it needs an 8-digit
+  code the server sends to that address, so holding a leaked link is not enough to sign up as
+  the invitee. The preview of an invite (`GET /api/invites/by-token/{token}`) still shows the
+  address, which is harmless now. Not covered: a person who already has an account under that
+  address accepts without a code, and addresses are not verified when an account is created
+  (see Accepted risks).
+- Changing the password by any route (settings, reset link, `openbase reset-password`) voids
+  reset links issued earlier. Turning on two-factor authentication, which ends the other
+  sessions and which a reset does not clear, needs the password from a session older than 10
+  minutes.
+- The session cookie is read from the raw `Cookie` header by its exact name. A cookie whose name
+  only decodes to `__Host-ob_session` (`%5F_Host-ob_session`) is not one: browsers do not apply
+  the `__Host-` rules to it, so a sibling subdomain could plant it.
 
 ## Passkeys
 
@@ -475,6 +492,25 @@ its own link field (self-linked tables) correctly.
 
 Authentication and email:
 
+- **The first account becomes the administrator, and nothing proves it is the operator.** While the
+  instance has no users, `GET /api/setup` says `needs_setup: true` and the first `POST /api/auth/signup`,
+  from anyone who can reach the server, creates the administrator. A one-time setup secret would
+  change the first-run screen the operator uses, so it is not built; the guard is operational:
+  create the administrator (the sign-up page, or `openbase create-admin`) before the server is
+  reachable from anywhere but your own machine (publish the port or the proxy only afterwards, or
+  start it on `127.0.0.1` first), and check **Admin → Users** afterwards. `openbase create-admin`
+  does not refuse on an instance that already has users, so after a suspected early sign-up remove
+  the unknown administrator in **Admin → Users** and rotate everything it could have seen.
+- **Account addresses are not verified.** A sign-up with an open instance or an invite without an
+  address takes the typed address as it is. Someone can register an address they do not own and
+  accept an invite to one address from that account (the invite itself needs its link), and on an
+  instance with open sign-up they can hold an address before its owner does. Keep sign-up
+  invite-only (the default); an invite to one address needs the code described above only for a new
+  account.
+- **A sign-in flood from many networks can still wear down the per-account counters.** They are kept
+  when the limiter is full of other keys and per-address limits count an IPv6 /64 as one address,
+  but an attacker with very many IPv4 addresses or /64 prefixes can still create enough
+  different sign-in keys to evict them. Enable two-factor authentication on important accounts.
 - **Anyone can register an OAuth client** (dynamic registration is open by design: that is
   how Claude Code and others work), **and anyone can publish a client metadata document**
   (a `client_id` that is an `https://` URL with a name and redirect addresses of their

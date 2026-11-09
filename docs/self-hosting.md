@@ -200,7 +200,9 @@ sudo -u openbase env OPENBASE_DATA_DIR=/var/lib/openbase openbase --help
 
 The first account created through the sign-up page becomes the
 administrator. Do this right after the first start, before you share the
-URL. Afterwards, new accounts need an invite unless
+URL, and before the server is reachable from the internet: until that account
+exists anyone who can reach the sign-up page can take it (start it on
+`127.0.0.1`, or keep the port closed, until you have signed up). Afterwards, new accounts need an invite unless
 `OPENBASE_OPEN_SIGNUP=true`.
 
 You can also create an administrator from the command line (for example
