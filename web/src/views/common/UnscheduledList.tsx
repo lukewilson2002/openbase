@@ -80,7 +80,7 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, desc
     );
 
   if (!open) {
-    const label = count === null ? "Show unscheduled records" : `Show unscheduled records, ${count}`;
+    // No aria-label: the drawn "Unscheduled · 3" is the name and aria-expanded says what the button does (WCAG 2.5.3).
     if (stacked) {
       return (
         <button
@@ -88,7 +88,6 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, desc
           type="button"
           onClick={onToggle}
           aria-expanded={false}
-          aria-label={label}
           className={cn("absolute bottom-3 left-3 z-10 flex h-10 items-center gap-2 rounded-pill border border-line bg-surface px-3.5 text-label font-semibold shadow-pop", dropActive && dropClass)}
         >
           <Inbox aria-hidden className="size-4 text-muted" />
@@ -102,7 +101,6 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, desc
         type="button"
         onClick={onToggle}
         aria-expanded={false}
-        aria-label={label}
         className={cn("flex w-11 shrink-0 flex-col items-center gap-2 border-l border-line py-3 text-label font-semibold text-muted hover:bg-hover hover:text-fg", columnBg, dropActive && dropClass)}
       >
         <ChevronsLeft aria-hidden className="size-4" />
@@ -169,7 +167,7 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, desc
                   r,
                   <RecordSummary
                     title={
-                      <button type="button" onClick={() => onOpen(r.id)} className="max-w-full truncate text-left text-label font-semibold hover:underline">
+                      <button type="button" onClick={() => onOpen(r.id)} className="min-h-6 max-w-full truncate text-left text-label font-semibold hover:underline">
                         {title}
                       </button>
                     }

@@ -10,6 +10,7 @@ import { ColorSwatchPicker } from "./color-swatch-picker";
 import { ConfirmDialog } from "./confirm-dialog";
 import { FIELD_TYPE_ICONS, FIELD_TYPE_LABELS } from "./field-type-icon";
 import { Field, Input } from "./input";
+import { Table, THead, Th, TBody, Tr, Td } from "./table";
 import { ToastProvider, useToast } from "./toast";
 import { COLORS } from "@/lib/colors";
 import { ThemeProvider, useTheme } from "@/theme/ThemeProvider";
@@ -50,8 +51,15 @@ describe("Avatar", () => {
     expect(initials("ada")).toBe("A");
     expect(initials("", "grace.hopper@example.com")).toBe("GH");
     expect(initials(null, null)).toBe("?");
+    // The initials are generated content, not text, so a control that is named by something else has no drawn text of the face's to hold.
     render(<Avatar name="Ada Lovelace" />);
-    expect(screen.getByRole("img", { name: "Ada Lovelace" })).toHaveTextContent("AL");
+    expect(screen.getByRole("img", { name: "Ada Lovelace" })).toHaveAttribute("data-initials", "AL");
+    expect(screen.getByRole("img", { name: "Ada Lovelace" })).toHaveTextContent("");
+  });
+
+  it("can sit beside the name in text, hidden from assistive technology", () => {
+    render(<Avatar name="Ada Lovelace" decorative />);
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
   it("is a solid circle in the person's own accent colour, the same wherever they appear", () => {
@@ -72,6 +80,29 @@ describe("Avatar", () => {
     // Picked by the same hash as when faces were light tints, so nobody changes colour.
     expect(avatarColor("ada@example.com")).toBe("gray");
     expect(avatarColor("grace@example.com")).toBe("cyan");
+  });
+});
+
+describe("Table", () => {
+  it("is a named region the keyboard can reach, because it scrolls sideways, and its column headers carry scope (A11Y-3, A11Y-7)", () => {
+    render(
+      <Table label="Users" minWidth="40rem">
+        <THead>
+          <Tr>
+            <Th>Name</Th>
+            <Th>Email</Th>
+          </Tr>
+        </THead>
+        <TBody>
+          <Tr>
+            <Td>Ada</Td>
+            <Td>ada@example.com</Td>
+          </Tr>
+        </TBody>
+      </Table>,
+    );
+    expect(screen.getByRole("region", { name: "Users" })).toHaveAttribute("tabindex", "0");
+    for (const header of screen.getAllByRole("columnheader")) expect(header).toHaveAttribute("scope", "col");
   });
 });
 

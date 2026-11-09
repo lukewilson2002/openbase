@@ -73,3 +73,24 @@ describe("a link field among other values", () => {
     expect(within(container).queryByRole("button", { name: "Show less" })).toBeNull();
   });
 });
+
+describe("RecordSummary plain (inside an option of a listbox)", () => {
+  const url = field("url", {}, { id: "fld_url", name: "Site" });
+  const link = field("link", { linked_table_id: "tbl2", inverse_field_id: null, single: false } as never, { id: "fld_link", name: "Tasks" });
+  const record = makeRecord({ fld_url: "https://example.com", fld_link: ["One", "Two", "Three", "Four"].map((name, i) => ({ id: `rec${i}`, name })) });
+
+  it("draws a link and the \"+N more\" as controls when it is not plain", () => {
+    render(<RecordSummary title={<b>Rec</b>} record={record} fields={[url, link]} format={testFormat} detailed />);
+    expect(screen.getByRole("link", { name: /example\.com/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "+1 more" })).toBeInTheDocument();
+  });
+
+  it("draws them as text when plain: a control may not sit inside an option (A11Y-7)", () => {
+    const { container } = render(<RecordSummary title={<b>Rec</b>} record={record} fields={[url, link]} format={testFormat} detailed plain />);
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(container).toHaveTextContent("example.com");
+    expect(container).toHaveTextContent("+1 more");
+  });
+});
+

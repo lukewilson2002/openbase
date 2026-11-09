@@ -119,7 +119,7 @@ describe("structure", () => {
     const history = within(nav).getByRole("link", { name: "History" });
     const trash = within(nav).getByRole("link", { name: "Trash" });
     const settings = within(nav).getByRole("link", { name: "Workspace settings" });
-    const account = await within(nav).findByRole("button", { name: "Account menu" });
+    const account = await within(nav).findByRole("button", { name: /^Account menu/ });
     const order = [switcher, search, home, notifications, automations, heading, history, trash, settings, account];
     for (let i = 1; i < order.length; i++) expect(order[i - 1]!.compareDocumentPosition(order[i]!) & Node.DOCUMENT_POSITION_FOLLOWING, `${i}`).toBeTruthy();
     expect(history).toHaveAttribute("href", "/history?workspace=wsp1");
@@ -210,7 +210,7 @@ describe("structure", () => {
   it("sets Notifications apart from the pages: it opens beside the sidebar and shows the unread count", async () => {
     const user = userEvent.setup();
     render({ extra: { "GET /api/notifications": { notifications: [], unread: 4 } } });
-    const row = await within(menu()).findByRole("button", { name: "Notifications, 4 unread" });
+    const row = await within(menu()).findByRole("button", { name: /^Notifications ?4 ?unread$/ });
     expect(row).toHaveTextContent("4");
     expect(row).not.toHaveAttribute("aria-current");
     await user.click(row);
@@ -631,13 +631,13 @@ describe("workspace switcher (NAV-3, NAV-4, NAV-6)", () => {
     expect(radios.at(-1)!.compareDocumentPosition(items[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("owns only items, groups and separators: the drag live region sits in a group, not beside the items", async () => {
+  it("owns only items, groups and separators: the drag live region is drawn in the page's body, not in the menu", async () => {
     const user = userEvent.setup();
     render();
     const menuEl = await open(user);
-    // axe: aria-required-children fails on a status that is a direct child of a menu.
-    expect(menuEl.querySelector(':scope > [role="status"]')).toBeNull();
-    expect(menuEl.querySelector('[role="group"] > [role="status"]')).not.toBeNull();
+    // axe: aria-required-children fails on a status inside a menu.
+    expect(menuEl.querySelector('[role="status"]')).toBeNull();
+    expect(document.body.querySelector(':scope > [role="status"]')).not.toBeNull();
   });
 
   it("goes to another workspace's Home and remembers it", async () => {

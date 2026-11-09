@@ -29,7 +29,7 @@ describe("on a desktop", () => {
   it("opens Comments in a 360 px panel beside the page, and the button counts the comments", async () => {
     renderRecordPage({ table, record, routes });
     await ready();
-    const button = await screen.findByRole("button", { name: "Comments (2)" });
+    const button = await screen.findByRole("button", { name: "Comments, 2" });
     expect(button).toHaveTextContent("2");
     expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
     await userEvent.click(button);
@@ -63,20 +63,20 @@ describe("on a desktop", () => {
       },
     });
     await ready();
-    await userEvent.click(await screen.findByRole("button", { name: "Comments (2)" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Comments, 2" }));
     const box = await screen.findByRole("textbox", { name: "Write a comment" });
     act(() => box.focus());
     act(() => {
       (box as HTMLElement & { editor: Editor }).editor.commands.insertContent("Third");
     });
     await userEvent.click(screen.getByRole("button", { name: "Comment" }));
-    expect(await screen.findByRole("button", { name: "Comments (3)" })).toHaveTextContent("3");
+    expect(await screen.findByRole("button", { name: "Comments, 3" })).toHaveTextContent("3");
   });
 
   it("remembers which panel was open for the next record, and does not take the keyboard", async () => {
     const first = renderRecordPage({ table, record, routes });
     await ready();
-    await userEvent.click(await screen.findByRole("button", { name: "Comments (2)" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Comments, 2" }));
     await screen.findByRole("complementary", { name: "Comments" });
     expect(stored()).toBe("comments");
     first.unmount();
@@ -93,7 +93,7 @@ describe("on a desktop", () => {
   it("switches between Comments and History in the same panel, and forgets a panel that was closed", async () => {
     renderRecordPage({ table, record, routes });
     await ready();
-    await userEvent.click(await screen.findByRole("button", { name: "Comments (2)" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Comments, 2" }));
     await userEvent.click(screen.getByRole("button", { name: "History" }));
     const panel = await screen.findByRole("complementary", { name: "History" });
     // The list scrolls and has nothing to focus in it, so it takes the focus itself (axe: scrollable-region-focusable).
@@ -114,7 +114,7 @@ describe("on a desktop", () => {
   it("closes the panel on Escape and gives the focus back to its button, before the page is left", async () => {
     const { props } = renderRecordPage({ table, record, routes });
     await ready();
-    const button = await screen.findByRole("button", { name: "Comments (2)" });
+    const button = await screen.findByRole("button", { name: "Comments, 2" });
     await userEvent.click(button);
     await screen.findByRole("complementary", { name: "Comments" });
     await userEvent.keyboard("{Escape}");
@@ -129,7 +129,7 @@ describe("on a phone", () => {
   it("opens Comments as a full-screen sheet, with the count on the header's button", async () => {
     renderRecordPage({ table, record, routes, phone: true });
     await ready();
-    const button = await screen.findByRole("button", { name: "Comments (2)" });
+    const button = await screen.findByRole("button", { name: "Comments, 2" });
     expect(button).toHaveTextContent("2");
     await userEvent.click(button);
     const sheet = await screen.findByRole("dialog", { name: "Comments" });
@@ -164,7 +164,7 @@ describe("on a phone", () => {
   it("does not remember a sheet, so a page never opens covered", async () => {
     const first = renderRecordPage({ table, record, routes, phone: true });
     await ready();
-    await userEvent.click(await screen.findByRole("button", { name: "Comments (2)" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Comments, 2" }));
     await screen.findByRole("dialog", { name: "Comments" });
     expect(stored()).toBeNull();
     first.unmount();

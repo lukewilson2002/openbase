@@ -38,6 +38,7 @@ import { CellValue } from "../CellValue";
 import { useOptionalEditorEnv } from "../editors/env";
 import { LinkChip } from "../editors/LinkEditor";
 import { LinkedRecordList } from "./LinkedRecordList";
+import { usePlainValues } from "../plainValues";
 
 /** Fields a card shows under its title, at most. */
 export const PREVIEW_FIELDS = 3;
@@ -576,10 +577,11 @@ export const LINK_CHIPS_SHOWN = 3;
 export function LinkChipList({ field, chips, format, emails, className }: { field: Field; chips: readonly { id?: string; text: string }[]; format: FormatCtx; emails?: ReadonlyMap<string, string>; className?: string }) {
   const [all, setAll] = useState(false);
   const env = useOptionalEditorEnv();
+  const plain = usePlainValues();
   const inside = useContext(InsidePeek);
   const host = useContext(LinkedRecordsContext);
   const linked = linkedTableOf(env?.schema, field);
-  const table = inside ? undefined : linked;
+  const table = inside || plain ? undefined : linked;
   const shown = all ? chips : chips.slice(0, LINK_CHIPS_SHOWN);
   const more = chips.length - shown.length;
   const toggle = (e: React.MouseEvent) => {
@@ -598,8 +600,8 @@ export function LinkChipList({ field, chips, format, emails, className }: { fiel
               name={c.text}
               hue={linked?.color}
               markName={linked?.name}
-              href={linked && c.id && host?.href ? host.href(linked.id, c.id) : undefined}
-              onOpen={linked && c.id && host?.open ? () => host.open!(linked.id, c.id!) : undefined}
+              href={!plain && linked && c.id && host?.href ? host.href(linked.id, c.id) : undefined}
+              onOpen={!plain && linked && c.id && host?.open ? () => host.open!(linked.id, c.id!) : undefined}
             />
           );
           return table && env?.schema && c.id ? (
@@ -620,7 +622,8 @@ export function LinkChipList({ field, chips, format, emails, className }: { fiel
             chip
           );
         })}
-        {more > 0 && (
+        {more > 0 && plain && <span className="px-1 text-meta text-muted">+{more} more</span>}
+        {more > 0 && !plain && (
           <button type="button" onClick={toggle} className="inline-flex min-h-6 shrink-0 items-center rounded-xs px-1 text-meta text-muted hover:text-fg hover:underline max-md:min-h-control-touch">
             +{more} more
           </button>

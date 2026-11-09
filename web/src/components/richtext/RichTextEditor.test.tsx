@@ -50,7 +50,7 @@ describe("RichTextEditor", () => {
     const names = within(bar)
       .getAllByRole("button")
       .map((b) => b.getAttribute("aria-label"));
-    expect(names).toEqual(["Text style", "Bold", "Italic", "Strikethrough", "Code", "Link", "Bulleted list", "Numbered list", "Task list", "Indent", "Outdent", "Quote", "Callout", "Code block", "Table", "Horizontal rule"]);
+    expect(names).toEqual([expect.stringMatching(/^Text style/), "Bold", "Italic", "Strikethrough", "Code", "Link", "Bulleted list", "Numbered list", "Task list", "Indent", "Outdent", "Quote", "Callout", "Code block", "Table", "Horizontal rule"]);
   });
 
   it("has buttons of 44 px on a phone (the comment box in its full-screen sheet), as the page's formatting bar has", async () => {
@@ -75,10 +75,10 @@ describe("RichTextEditor", () => {
     const onMarkdown = vi.fn();
     render(<Host initial="word" onMarkdown={onMarkdown} />);
     await screen.findByRole("textbox", { name: "Notes" });
-    await userEvent.click(screen.getByRole("button", { name: "Text style" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Text style/ }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Heading 3" }));
     expect(onMarkdown).toHaveBeenLastCalledWith("### word");
-    expect(screen.getByRole("button", { name: "Text style" })).toHaveTextContent("Heading 3");
+    expect(screen.getByRole("button", { name: /^Text style/ })).toHaveTextContent("Heading 3");
   });
 
   it("makes a callout of a chosen kind and changes its kind", async () => {
@@ -180,7 +180,7 @@ describe("RichTextEditor", () => {
     // No control of the toolbar is in the Tab order.
     for (const b of within(screen.getByRole("toolbar", { name: "Formatting" })).getAllByRole("button")) expect(b).toHaveAttribute("tabindex", "-1");
     await user.keyboard("{Alt>}{F10}{/Alt}");
-    expect(screen.getByRole("button", { name: "Text style" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /^Text style/ })).toHaveFocus();
     await user.keyboard("{ArrowRight}");
     expect(screen.getByRole("button", { name: "Bold" })).toHaveFocus();
     await user.keyboard("{Escape}");

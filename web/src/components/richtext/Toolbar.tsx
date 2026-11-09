@@ -105,11 +105,12 @@ const refocus = (editor: Editor) => (e: Event) => {
 
 const HEADINGS = [1, 2, 3, 4, 5, 6] as const;
 
-function ToolMenu({ editor, label, trigger, children, className }: { editor: Editor; label: string; trigger: ReactNode; children: ReactNode; className?: string }) {
+/** `current` is what the button shows (its drawn text), which the name carries after the label (WCAG 2.5.3). */
+function ToolMenu({ editor, label, current, trigger, children, className }: { editor: Editor; label: string; current?: string; trigger: ReactNode; children: ReactNode; className?: string }) {
   return (
     <DropdownMenu title={label}>
       <DropdownMenuTrigger asChild>
-        <button type="button" tabIndex={-1} aria-label={label} title={label} onMouseDown={keepFocus} className={cn(btn, className)}>
+        <button type="button" tabIndex={-1} aria-label={current ? `${label}: ${current}` : label} title={label} onMouseDown={keepFocus} className={cn(btn, className)}>
           {trigger}
         </button>
       </DropdownMenuTrigger>
@@ -275,7 +276,7 @@ export function Toolbar({ editor, canUpload }: { editor: Editor; canUpload?: boo
   // the text would show above it); a page scrolling as a whole has no bar above it, so it stays 0.
   return (
     <div role="toolbar" aria-label="Formatting" aria-orientation="horizontal" ref={ref} onKeyDown={moveAlong} className="sticky top-[var(--ob-sticky-top,0px)] z-10 flex w-full min-w-0 max-w-full shrink-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain rounded-t-md border-b border-line bg-surface px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <ToolMenu editor={editor} label="Text style" trigger={<span className="flex items-center gap-1 px-1.5 text-[0.8125rem] text-fg">{s.heading ? `Heading ${s.heading}` : "Paragraph"}<ChevronDown aria-hidden className="size-3.5 text-muted" /></span>} className="w-auto min-w-24 justify-between">
+      <ToolMenu editor={editor} label="Text style" current={s.heading ? `Heading ${s.heading}` : "Paragraph"} trigger={<span className="flex items-center gap-1 px-1.5 text-[0.8125rem] text-fg">{s.heading ? `Heading ${s.heading}` : "Paragraph"}<ChevronDown aria-hidden className="size-3.5 text-muted" /></span>} className="w-auto min-w-24 justify-between">
         <DropdownMenuItem onSelect={() => run().setParagraph().run()}>Paragraph</DropdownMenuItem>
         {HEADINGS.map((level) => (
           <DropdownMenuItem key={level} onSelect={() => run().setHeading({ level }).run()}>

@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { GroupHeader } from "@/api/types";
 import type { TableRecord } from "@/api/types";
-import { ALL_FIELDS, makeRecord } from "@/test/fields";
-import { DEFAULT_CTX } from "@/lib/cells/format";
-import { allPaths, buildOutline, flattenOutline, foldRows, groupDefaults, indentTarget, leafNodes, moveBetweenGroups, nestRows, outdentValue, parentLinkOf, placeIndexes, planDrop, rowLabel, drawnIds, withTails, type DropPlan } from "./outline";
+import { makeRecord } from "@/test/fields";
+import { allPaths, buildOutline, flattenOutline, foldRows, groupDefaults, indentTarget, leafNodes, moveBetweenGroups, nestRows, outdentValue, parentLinkOf, placeIndexes, planDrop, drawnIds, withTails, type DropPlan } from "./outline";
 
 const h = (depth: number, field_id: string, key: string, start: number, count: number, value: unknown = key): GroupHeader => ({ depth, field_id, key, label: key || "(Empty)", value: value as GroupHeader["value"], start, count });
 
@@ -244,16 +243,6 @@ describe("indent and outdent", () => {
 
   it("outdents a row whose parent is in another group by clearing the link", () => {
     expect(outdentValue(nestRows([node("a", "elsewhere")], P), "a", P)).toEqual([]);
-  });
-});
-
-describe("rowLabel", () => {
-  it("says the title, then each shown value with its field, then the description", () => {
-    const num = ALL_FIELDS.number!;
-    const done = ALL_FIELDS.checkbox!;
-    const label = rowLabel("Write docs", [{ field: num, value: 3 }, { field: done, value: true }], "Draft first", DEFAULT_CTX);
-    expect(label).toBe(`Write docs, ${num.name}: 3.00, ${done.name}: checked, Draft first`);
-    expect(rowLabel("Idea", [], "", DEFAULT_CTX)).toBe("Idea");
   });
 });
 

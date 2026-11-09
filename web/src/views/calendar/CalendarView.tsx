@@ -495,6 +495,11 @@ function CalendarInner(props: ViewProps) {
               eventContent={(arg) => <EventChip arg={arg} description={chipDescription} />}
               eventDidMount={onEventMount}
               dayCellContent={(arg) => <DayNumber arg={arg} />}
+              // FullCalendar names a day's cell by its date number alone, while the cell also draws the day's records: the
+              // name would not hold the drawn text (WCAG 2.5.3). Without it the cell is named by its content, number first.
+              dayCellDidMount={(arg) => arg.el.removeAttribute("aria-labelledby")}
+              // FullCalendar's weekday headers are `th` without a scope (A11Y-3).
+              dayHeaderDidMount={(arg) => arg.el.setAttribute("scope", "col")}
               editable={startWritable}
               droppable={startWritable}
               eventStartEditable={startWritable}

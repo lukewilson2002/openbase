@@ -101,7 +101,13 @@ export function DueSoon({ workspaceId, home }: { workspaceId: string; home: Home
                   meta={row.table_name}
                   metaHue={row.table_color}
                   metaMarkName={row.table_name}
-                  trailing={<span className={cn(row.overdue && "font-medium text-danger")}>{dueWords(row, home.today)}</span>}
+                  trailing={
+                    <span className={cn(row.overdue && "font-medium text-danger")}>
+                      {/* Red is not the only cue: the date is in words, and a screen reader is told it is late (A11Y-5). */}
+                      {row.overdue && <span className="sr-only">Overdue: </span>}
+                      {dueWords(row, home.today)}
+                    </span>
+                  }
                   href={recordPath(row.base_id, row.table_id, row.record_id)}
                   onOpen={() => navigate(recordPath(row.base_id, row.table_id, row.record_id))}
                 />

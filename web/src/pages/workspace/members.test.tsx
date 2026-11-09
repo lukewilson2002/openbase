@@ -373,7 +373,7 @@ describe("workspace settings page", () => {
     expect(current).toHaveTextContent("Household");
     expect(within(current).queryByRole("button")).toBeNull();
     expect(current.querySelector(".ob-mark-14")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Use Budget as top level" }));
+    await user.click(screen.getByRole("button", { name: "Use as top level: Budget" }));
     await waitFor(() => expect(api.callsTo("POST /api/workspaces/wsp1/top-level")[0]?.body).toEqual({ base_id: "app2" }));
     expect(await screen.findByText("Budget is now the top level")).toBeInTheDocument();
   });

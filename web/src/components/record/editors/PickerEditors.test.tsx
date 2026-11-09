@@ -37,47 +37,47 @@ describe("a pick shows at once while the editor stays mounted (a form)", () => {
   it("single select shows the picked option and Clear empties it", async () => {
     const cb = callbacks();
     inEnv(<ChoiceEditor field={status} value={null} variant="form" {...cb} />);
-    const trigger = screen.getByRole("button", { name: "Status" });
+    const trigger = screen.getByRole("button", { name: /^Status:/ });
     expect(trigger).toHaveTextContent("Select…");
     await userEvent.click(trigger);
     await userEvent.click(await screen.findByRole("button", { name: "In progress" }));
     expect(cb.onCommit).toHaveBeenCalledWith({ json: "chs2" }, undefined);
-    expect(screen.getByRole("button", { name: "Status" })).toHaveTextContent("In progress");
-    await userEvent.click(screen.getByRole("button", { name: "Status" }));
+    expect(screen.getByRole("button", { name: /^Status:/ })).toHaveTextContent("In progress");
+    await userEvent.click(screen.getByRole("button", { name: /^Status:/ }));
     await userEvent.click(await screen.findByRole("button", { name: "Clear" }));
     expect(cb.onCommit).toHaveBeenLastCalledWith({ json: null }, undefined);
-    expect(screen.getByRole("button", { name: "Status" })).toHaveTextContent("Select…");
+    expect(screen.getByRole("button", { name: /^Status:/ })).toHaveTextContent("Select…");
   });
 
   it("single person shows the picked person and Clear empties it", async () => {
     const cb = callbacks();
     inEnv(<UserEditor field={owner} value={null} variant="form" {...cb} />);
-    expect(screen.getByRole("button", { name: "Owner" })).toHaveTextContent("Assign…");
-    await userEvent.click(screen.getByRole("button", { name: "Owner" }));
+    expect(screen.getByRole("button", { name: /^Owner:/ })).toHaveTextContent("Assign…");
+    await userEvent.click(screen.getByRole("button", { name: /^Owner:/ }));
     await userEvent.click(await screen.findByRole("button", { name: /Grace Hopper/ }));
     expect(cb.onCommit).toHaveBeenCalledWith({ json: ["usr2"] }, undefined);
-    expect(screen.getByRole("button", { name: "Owner" })).toHaveTextContent("Grace Hopper");
-    await userEvent.click(screen.getByRole("button", { name: "Owner" }));
+    expect(screen.getByRole("button", { name: /^Owner:/ })).toHaveTextContent("Grace Hopper");
+    await userEvent.click(screen.getByRole("button", { name: /^Owner:/ }));
     await userEvent.click(await screen.findByRole("button", { name: "Clear" }));
-    expect(screen.getByRole("button", { name: "Owner" })).toHaveTextContent("Assign…");
+    expect(screen.getByRole("button", { name: /^Owner:/ })).toHaveTextContent("Assign…");
   });
 
   it("several people lose their chips on Clear", async () => {
     inEnv(<UserEditor field={team} value={["usr1", "usr2"]} variant="form" {...callbacks()} />);
-    const trigger = screen.getByRole("button", { name: "Team" });
+    const trigger = screen.getByRole("button", { name: /^Team:/ });
     expect(trigger).toHaveTextContent("Ada Lovelace");
     await userEvent.click(trigger);
     await userEvent.click(await screen.findByRole("button", { name: "Clear" }));
-    expect(screen.getByRole("button", { name: "Team" })).toHaveTextContent("Assign…");
+    expect(screen.getByRole("button", { name: /^Team:/ })).toHaveTextContent("Assign…");
   });
 
   it("several options lose their pills on Clear", async () => {
     inEnv(<ChoiceEditor field={tags} value={["chs1"]} variant="form" {...callbacks()} />);
-    const trigger = screen.getByRole("button", { name: "Tags" });
+    const trigger = screen.getByRole("button", { name: /^Tags:/ });
     expect(trigger).toHaveTextContent("Todo");
     await userEvent.click(trigger);
     await userEvent.click(await screen.findByRole("button", { name: "Clear" }));
-    expect(screen.getByRole("button", { name: "Tags" })).toHaveTextContent("Select…");
+    expect(screen.getByRole("button", { name: /^Tags:/ })).toHaveTextContent("Select…");
   });
 
   it("single link shows the picked record and Clear empties it", async () => {
@@ -85,14 +85,14 @@ describe("a pick shows at once while the editor stays mounted (a form)", () => {
     mockApi({ "GET /api/tables/tbl2/records/lookup": { records: [{ id: "recA", name: "Buy the domain" }] } } as never);
     const cb = callbacks();
     inEnv(<LinkEditor field={requires} value={[]} variant="form" {...cb} />);
-    expect(screen.getByRole("button", { name: "Requires" })).toHaveTextContent("Link records…");
-    await userEvent.click(screen.getByRole("button", { name: "Requires" }));
+    expect(screen.getByRole("button", { name: /^Requires:/ })).toHaveTextContent("Link records…");
+    await userEvent.click(screen.getByRole("button", { name: /^Requires:/ }));
     await userEvent.click(await screen.findByRole("option", { name: /Buy the domain/ }));
     expect(cb.onCommit).toHaveBeenCalledWith({ json: [{ id: "recA", name: "Buy the domain" }] }, undefined);
-    expect(screen.getByRole("button", { name: "Requires" })).toHaveTextContent("Buy the domain");
-    await userEvent.click(screen.getByRole("button", { name: "Requires" }));
+    expect(screen.getByRole("button", { name: /^Requires:/ })).toHaveTextContent("Buy the domain");
+    await userEvent.click(screen.getByRole("button", { name: /^Requires:/ }));
     await userEvent.click(await screen.findByRole("button", { name: "Clear" }));
-    expect(screen.getByRole("button", { name: "Requires" })).toHaveTextContent("Link records…");
+    expect(screen.getByRole("button", { name: /^Requires:/ })).toHaveTextContent("Link records…");
   });
 });
 
@@ -103,7 +103,7 @@ describe("the link picker on a phone", () => {
     const cb = callbacks();
     const many = { ...requires, options: { ...requires.options, single: false } } as typeof requires;
     inEnv(<LinkEditor field={many} value={[]} variant="form" {...cb} />);
-    await userEvent.click(screen.getByRole("button", { name: "Requires" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Requires:/ }));
     const sheet = await screen.findByRole("dialog", { name: "Requires" });
     // The sheet's own Done, not a second one in the list's footer; the keyboard stays down until the search is tapped.
     expect(within(sheet).getAllByRole("button", { name: "Done" })).toHaveLength(1);
@@ -130,7 +130,7 @@ describe("the other pickers on a phone (PH-3)", () => {
     const sheet = await screen.findByRole("dialog");
     // The sheet's own Done closes it (and so commits); the list has no second one, except a choice that is itself called Done.
     expect(within(sheet).getAllByRole("button", { name: "Done" }).length).toBe(_what === "a choice" ? 2 : 1);
-    expect(sheet).toHaveAccessibleName(trigger.getAttribute("aria-label") ?? name);
+    expect(sheet).toHaveAccessibleName(trigger.querySelector(".sr-only")?.textContent?.replace(/: $/, "") ?? name);
   });
 
   it("the grid's choice editor is a sheet whose Cancel closes the editor like Escape", async () => {

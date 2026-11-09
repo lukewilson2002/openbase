@@ -135,7 +135,7 @@ describe("CalendarView", () => {
     const side = await screen.findByRole("complementary", { name: "Unscheduled records" });
     await within(side).findByText("R3");
     await user.click(within(side).getByRole("button", { name: "Hide unscheduled records" }));
-    const strip = screen.getByRole("button", { name: "Show unscheduled records, 1" });
+    const strip = screen.getByRole("button", { name: "Unscheduled · 1" });
     expect(strip).toHaveAttribute("aria-expanded", "false");
     expect(localStorage.getItem("ob-calendar-unscheduled-folded")).toContain("viw1");
     await user.click(strip);

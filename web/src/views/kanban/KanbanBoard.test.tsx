@@ -512,7 +512,7 @@ describe("KanbanBoard", () => {
       await user.keyboard("{Enter}");
       expect(props.onOpen).not.toHaveBeenCalled();
       expect(followed).toBe(1);
-      screen.getByRole("button", { name: "Docs page" }).focus();
+      screen.getByRole("button", { name: /^Docs page/ }).focus();
       await user.keyboard("{Enter}");
       expect(props.onOpen).toHaveBeenCalledWith("r9");
     });

@@ -4,9 +4,8 @@
  * flattens it for rendering with collapsed groups hidden, and works out the field values a new
  * record inside a group should start with.
  */
-import type { Field, GroupHeader, LinkRef, TableRecord } from "@/api/types";
-import { displayText, type FormatCtx } from "@/lib/cells/format";
-import { displayShapeOf, isLinkRef } from "@/lib/cells/kinds";
+import type { GroupHeader, LinkRef, TableRecord } from "@/api/types";
+import { isLinkRef } from "@/lib/cells/kinds";
 
 export interface GroupNode {
   header: GroupHeader;
@@ -304,16 +303,6 @@ export function outdentValue(rows: readonly NestedRow[], id: string, parentField
   const parent = rows.find((r) => r.record.id === row.parentId);
   const grand = parent ? parentLinkOf(parent.record, parentFieldId) : null;
   return grand ? [grand] : [];
-}
-
-/** The text of a record's row as a screen reader says it: the title, then the shown values with their field names. */
-export function rowLabel(title: string, parts: readonly { field: Field; value: unknown }[], description: string, format: FormatCtx): string {
-  const said = parts.map(({ field, value }) => {
-    const shape = displayShapeOf(field);
-    const text = shape === "checkbox" ? (value === true ? "checked" : "unchecked") : displayText(field, value as TableRecord["values"][string], format);
-    return `${field.name}: ${text}`;
-  });
-  return [title, ...said, description].filter((x) => x !== "").join(", ");
 }
 
 /**

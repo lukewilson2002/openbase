@@ -1044,7 +1044,7 @@ function KanbanCard({
       {...listeners}
       role="button"
       tabIndex={tabStop ? 0 : -1}
-      aria-label={title}
+      // No aria-label: the card is named by what it draws, the title then its properties (WCAG 2.5.3).
       aria-roledescription={p.canEdit ? "draggable card" : "card"}
       // Once something is selected every card says whether it is part of it.
       aria-pressed={isDragging ? true : sel.count > 0 ? selected : undefined}
@@ -1058,7 +1058,7 @@ function KanbanCard({
       {...hold}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "group relative shrink-0 overflow-hidden rounded-lg border border-line bg-surface text-left outline-none transition-[border-color] hover:border-line-strong focus-visible:outline-2 focus-visible:outline-ring",
+        "group relative shrink-0 overflow-hidden rounded-lg border border-line bg-surface text-left transition-[border-color] hover:border-line-strong",
         // Press and hold starts a drag on touch screens: no text selection or iOS callout on the way.
         p.canEdit ? "cursor-grab touch-manipulation select-none [-webkit-touch-callout:none]" : "cursor-pointer",
         selected && "border-primary ring-2 ring-primary",

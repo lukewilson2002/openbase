@@ -70,11 +70,11 @@ describe("Notifications in the docked menu", () => {
     const user = userEvent.setup();
     routes(listing());
     renderShell();
-    const row = await screen.findByRole("button", { name: "Notifications, 3 unread" });
-    expect(within(screen.getByRole("navigation", { name: "Main menu" })).getByRole("button", { name: "Notifications, 3 unread" })).toBe(row);
+    const row = await screen.findByRole("button", { name: /^Notifications ?3 ?unread$/ });
+    expect(within(screen.getByRole("navigation", { name: "Main menu" })).getByRole("button", { name: /^Notifications ?3 ?unread$/ })).toBe(row);
     expect(screen.getByTestId("notifications-badge")).toHaveTextContent("3");
     expect(row).toHaveAttribute("aria-expanded", "false");
-    const panel = await openNotifications(user, "Notifications, 3 unread");
+    const panel = await openNotifications(user, /Notifications ?3 ?unread/);
     expect(row).toHaveAttribute("aria-expanded", "true");
     expect(within(panel).getByRole("heading", { name: "Notifications" })).toBeInTheDocument();
     expect(within(panel).getByText("Grace mentioned you in Launch plan")).toBeInTheDocument();
@@ -117,7 +117,7 @@ describe("Notifications in the docked menu", () => {
     const user = userEvent.setup();
     const api = routes(listing(), { "POST /api/notifications/read": { ok: true } });
     renderShell();
-    const panel = await openNotifications(user, /Notifications, 3 unread/);
+    const panel = await openNotifications(user, /Notifications ?3 ?unread/);
     await user.click(within(panel).getByRole("button", { name: /^Grace mentioned you in Launch plan/ }));
     await waitFor(() => expect(api.callsTo("POST /api/notifications/read")).toHaveLength(1));
     expect(api.callsTo("POST /api/notifications/read")[0]!.body).toEqual({ ids: ["n1"] });
@@ -139,12 +139,12 @@ describe("Notifications in the docked menu", () => {
       },
     });
     renderShell();
-    const panel = await openNotifications(user, /Notifications, 3 unread/);
+    const panel = await openNotifications(user, /Notifications ?3 ?unread/);
     await user.click(within(panel).getByRole("button", { name: /Mark "You were assigned to Fix login" as read/ }));
     await waitFor(() => expect(api.callsTo("POST /api/notifications/read")).toHaveLength(1));
     expect(api.callsTo("POST /api/notifications/read")[0]!.body).toEqual({ ids: ["n2"] });
     // The optimistic update drops the count straight away.
-    expect(await screen.findByRole("button", { name: "Notifications, 2 unread" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^Notifications ?2 ?unread$/ })).toBeInTheDocument();
     await user.click(within(panel).getByRole("button", { name: "Mark all read" }));
     await waitFor(() => expect(api.callsTo("POST /api/notifications/read")).toHaveLength(2));
     expect(api.callsTo("POST /api/notifications/read")[1]!.body).toEqual({});
@@ -218,7 +218,7 @@ describe("Notifications in the docked menu", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const api = routes(listing());
     renderShell();
-    await screen.findByRole("button", { name: /Notifications, 3 unread/ });
+    await screen.findByRole("button", { name: /Notifications ?3 ?unread/ });
     const initial = api.callsTo("GET /api/notifications").length;
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000);

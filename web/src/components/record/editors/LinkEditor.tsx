@@ -192,23 +192,18 @@ export function LinkEditor({ field, value, variant, target, initialText, addAnch
           : inPlace
           ? ({ open }) => (
               // The field's cards as they are when it is not edited (see EditableValue), with the search under them.
+              // The control is a button laid under the cards, not the box around them: the cards hold controls of their own (a
+              // link, a remove button), and a control may not sit inside a button.
               <div
-                role="button"
-                tabIndex={0}
+                role="group"
                 aria-label={field.name}
-                aria-haspopup="dialog"
                 onClick={(e) => {
                   if (!(e.target as Element).closest("button, a")) open();
                 }}
-                onKeyDown={(e) => {
-                  if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
-                    e.preventDefault();
-                    open();
-                  }
-                }}
-                className="flex min-h-8 w-full min-w-0 cursor-pointer flex-col justify-center rounded-md border border-ring px-2 py-1 pb-3 text-label outline-none focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-control-touch pointer-coarse:min-h-control-touch"
+                className="relative flex min-h-8 w-full min-w-0 cursor-pointer flex-col justify-center rounded-md border border-ring px-2 py-1 pb-3 text-label max-md:min-h-control-touch pointer-coarse:min-h-control-touch"
               >
-                {selected.length > 0 ? cards!(selected) : <span className="text-faint">Empty</span>}
+                <button type="button" aria-label={field.name} aria-haspopup="dialog" onClick={open} className="absolute inset-0 rounded-md" />
+                <div className="relative">{selected.length > 0 ? cards!(selected) : <span className="text-faint">Empty</span>}</div>
               </div>
             )
           : undefined)
@@ -260,7 +255,7 @@ export function LinkEditor({ field, value, variant, target, initialText, addAnch
                 // While choosing, a little more of each record than elsewhere, to be sure it is the right one.
                 const row = (
                   <ListboxOption id={`${listId}-${i}`} active={i === active} rich onHover={() => setActive(i)} onSelect={() => pick(r)}>
-                    {env ? <RecordSummary title={name} record={rec} fields={shownFields} format={env.format} detailed /> : name}
+                    {env ? <RecordSummary title={name} record={rec} fields={shownFields} format={env.format} detailed plain /> : name}
                   </ListboxOption>
                 );
                 // The preview opens on hover. A finger meets a record's details in the row itself, and a sheet

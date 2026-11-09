@@ -70,11 +70,12 @@ export function EditorShell({ variant, target, trigger, anchor, triggerLabel, on
   const triggerButton = (
     <button
       type="button"
-      aria-label={triggerLabel}
       aria-haspopup={asSheet ? "dialog" : undefined}
       onClick={asSheet ? () => setOpen(true) : undefined}
       className="flex min-h-8 w-full flex-wrap items-center gap-1 rounded-md border border-line-strong bg-surface px-2 py-1 text-left text-label hover:border-faint focus-visible:border-ring max-md:min-h-control-touch"
     >
+      {/* The property's name, then what is drawn: the button's name holds the drawn text (WCAG 2.5.3). */}
+      {triggerLabel && <span className="sr-only">{triggerLabel}: </span>}
       {trigger}
     </button>
   );

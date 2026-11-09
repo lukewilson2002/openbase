@@ -79,8 +79,15 @@ export function NotificationsRow({ open, className, ...props }: { open: boolean 
   return (
     <NavRow
       aria-expanded={open}
-      aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
-      count={unread > 0 ? <span data-testid="notifications-badge" className="font-semibold text-primary-ink">{unreadBadge(unread)}</span> : undefined}
+      // No aria-label: the name is the drawn text ("Notifications 3 unread"), so what a person sees is in what a voice-control user can say (WCAG 2.5.3).
+      count={
+        unread > 0 ? (
+          <span data-testid="notifications-badge" className="font-semibold text-primary-ink">
+            {unreadBadge(unread)}
+            <span className="sr-only"> unread</span>
+          </span>
+        ) : undefined
+      }
       className={cn(open && "bg-hover", className)}
       {...props}
     >

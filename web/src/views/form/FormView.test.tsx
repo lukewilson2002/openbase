@@ -562,7 +562,7 @@ describe("conditional questions", () => {
     await user.click(within(preview).getByRole("button", { name: "Submit" }));
     expect(await screen.findByText(/Thanks/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Back to the form" }));
-    await user.click(within(screen.getByRole("region", { name: "Form preview" })).getByRole("button", { name: "Status" }));
+    await user.click(within(screen.getByRole("region", { name: "Form preview" })).getByRole("button", { name: /^Status:/ }));
     await user.click(within(within(await screen.findByRole("listbox", { name: "Status" })).getByRole("option", { name: "Todo" })).getByRole("button"));
     expect(await within(screen.getByRole("region", { name: "Form preview" })).findByText("number")).toBeInTheDocument();
   });

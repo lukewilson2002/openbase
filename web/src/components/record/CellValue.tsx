@@ -17,6 +17,7 @@ import { AttachmentThumb } from "./editors/AttachmentEditor";
 import { Pill } from "./editors/ChoiceEditor";
 import { UserChip } from "./editors/UserEditor";
 import { LinkChipList, LinkedRecordCards, useLinkCards } from "./linked/LinkedRecords";
+import { usePlainValues } from "./plainValues";
 
 export interface CellValueProps {
   field: Field;
@@ -37,6 +38,7 @@ const CHIP_ROW_PX = 20;
 export function CellValue({ field, value, format, emails, className, markdown = true, linkFiles = false }: CellValueProps) {
   const shape = displayShapeOf(field);
   const linkCards = useLinkCards();
+  const plain = usePlainValues();
   // On a shared page files are served through the share, so the cell that draws them there is the share's own.
   const share = useShareOrNull();
   const text = displayText(field, value, format);
@@ -104,7 +106,7 @@ export function CellValue({ field, value, format, emails, className, markdown = 
           <ul className="flex flex-wrap gap-1.5">
             {files.map((f) => (
               <li key={f.id} title={f.filename}>
-                {linkFiles ? (
+                {linkFiles && !plain ? (
                   <a href={attachmentsApi.downloadUrl(f.id, f.filename)} target="_blank" rel="noopener noreferrer" aria-label={f.filename} className="block rounded-sm">
                     <AttachmentThumb file={f} size={48} />
                   </a>
@@ -122,7 +124,7 @@ export function CellValue({ field, value, format, emails, className, markdown = 
     case "url":
     case "email":
     case "phone": {
-      const href = typeof value === "string" ? hrefFor(shape, value) : null;
+      const href = typeof value === "string" && !plain ? hrefFor(shape, value) : null;
       if (!text) return wrap(empty);
       return wrap(
         href ? (
@@ -138,7 +140,7 @@ export function CellValue({ field, value, format, emails, className, markdown = 
     case "button": {
       if (field.type !== "button" || typeof value !== "string" || !value) return wrap(empty);
       return wrap(
-        isSafeLink(value) ? (
+        isSafeLink(value) && !plain ? (
           <a href={value} target="_blank" rel="noopener noreferrer" className="inline-flex h-7 items-center rounded-md bg-primary px-2.5 text-xs font-medium text-primary-fg no-underline hover:bg-primary-hover">
             {field.options.label}
           </a>

@@ -50,7 +50,6 @@ import {
   outdentValue,
   parentLinkOf,
   planDrop,
-  rowLabel,
   survivorAfterDelete,
   type DropPlan,
   type GroupNode,
@@ -187,7 +186,6 @@ function Row({ row, leaf, u }: { row: NestedRow; leaf: Leaf; u: Ui }) {
   // Another group's row under the dragged one: dropping here puts the row in that group, above this one.
   const joining = isOver && drag.activeId !== null && drag.activeId !== record.id && drag.activeGroup !== leaf.path;
   const prefixValue = p.prefix ? record.values[p.prefix.id] : undefined;
-  const label = rowLabel(title, [...(p.prefix ? [{ field: p.prefix, value: prefixValue }] : []), ...shown.map((f) => ({ field: f, value: record.values[f.id] }))], description, p.format);
   const nested = !!p.parentField;
   return (
     <div
@@ -202,7 +200,8 @@ function Row({ row, leaf, u }: { row: NestedRow; leaf: Leaf; u: Ui }) {
         {...listeners}
         data-record-id={record.id}
         data-selected={selected || undefined}
-        aria-label={label}
+        // No aria-label or aria-labelledby: the row is named by what it draws, title and properties first (WCAG 2.5.3); the select and
+        // prefix boxes inside it add their own labels to the end of that.
         aria-level={leaf.depth + 1 + row.depth}
         aria-posinset={row.pos}
         aria-setsize={nested ? row.size : leaf.count}
@@ -217,7 +216,7 @@ function Row({ row, leaf, u }: { row: NestedRow; leaf: Leaf; u: Ui }) {
         {...hold}
         className={cn(
           // A card: the row is its own bordered surface, so a record reads as one thing.
-          "relative flex min-h-11 cursor-pointer flex-col justify-center gap-1 overflow-hidden rounded-lg border border-line bg-surface py-2.5 pl-4 pr-10 pointer-coarse:pr-12 outline-none hover:border-line-strong focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+          "relative flex min-h-11 cursor-pointer flex-col justify-center gap-1 overflow-hidden rounded-lg border border-line bg-surface py-2.5 pl-4 pr-10 pointer-coarse:pr-12 hover:border-line-strong focus-visible:-outline-offset-2",
           selected && "border-primary-soft-line bg-primary-soft hover:border-primary-soft-line",
           joining && "shadow-[inset_0_2px_0_var(--primary)]",
           isDragging && "shadow-pop",
@@ -323,7 +322,7 @@ function ActionRow({ navKey, level, indent, label, onActivate, u, children, clas
       data-leaf={leafPath}
       onClick={onActivate}
       style={{ paddingLeft: indent }}
-      className={cn(`flex w-full cursor-pointer items-center gap-1.5 pr-4 text-left outline-none hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring`, className)}
+      className={cn(`flex w-full cursor-pointer items-center gap-1.5 pr-4 text-left hover:bg-hover focus-visible:-outline-offset-2`, className)}
     >
       {children}
     </div>
@@ -380,8 +379,7 @@ function Records({ leaf, u }: { leaf: Leaf; u: Ui }) {
           u={u}
           className="group/add h-10 text-ui text-muted hover:text-fg pointer-coarse:h-11"
         >
-          {/* Quiet until the row is pointed at or focused (always shown on touch, which cannot hover). */}
-          <span className="flex items-center gap-1.5 opacity-70 transition-opacity group-hover/add:opacity-100 group-focus-visible/add:opacity-100 pointer-coarse:opacity-100">
+          <span className="flex items-center gap-1.5">
             <Plus aria-hidden className="size-4" /> {p.newLabel}
           </span>
         </ActionRow>
@@ -425,12 +423,11 @@ function GroupHeading({ row, u }: { row: Extract<ReturnType<typeof flattenOutlin
       aria-level={row.depth + 1}
       aria-posinset={row.node.pos}
       aria-setsize={row.node.size}
-      aria-label={`${row.node.header.label}, ${count} ${count === 1 ? "record" : "records"}`}
       data-group={row.node.path}
       onClick={() => p.onToggle(row.node.path)}
       style={{ paddingLeft: ROW_PAD + row.depth * LEVEL_PX }}
       className={cn(
-        `flex min-h-11 w-full cursor-pointer items-center gap-2.5 ${ROW_BORDER} pr-4 text-left text-[0.875rem] font-semibold outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring`,
+        `flex min-h-11 w-full cursor-pointer items-center gap-2.5 ${ROW_BORDER} pr-4 text-left text-[0.875rem] font-semibold focus-visible:-outline-offset-2`,
         headingFill(row.node.header, p),
         target && "shadow-[inset_0_0_0_2px_var(--primary)]",
       )}
@@ -438,8 +435,9 @@ function GroupHeading({ row, u }: { row: Extract<ReturnType<typeof flattenOutlin
       <ChevronDown aria-hidden className={cn("size-4 shrink-0 text-muted transition-transform duration-200", row.collapsed && "-rotate-90")} />
       <GroupMark header={row.node.header} p={p} />
       <span className="min-w-0 truncate">{row.node.header.label}</span>
-      <span aria-hidden className="inline-flex h-5 min-w-[22px] items-center justify-center rounded-full bg-hover px-[7px] text-xs font-semibold tabular-nums text-muted">
+      <span className="inline-flex h-5 min-w-[22px] items-center justify-center rounded-full bg-hover px-[7px] text-xs font-semibold tabular-nums text-muted">
         {count}
+        <span className="sr-only"> {count === 1 ? "record" : "records"}</span>
       </span>
     </div>
   );

@@ -124,6 +124,9 @@ describe("the lists (HOME-6, HOME-7)", () => {
     await openHome();
     const dueList = within(await screen.findByRole("region", { name: "Due soon" }));
     expect(dueList.getByText("3 days ago")).toHaveClass("text-danger");
+    // Red is not the only cue (A11Y-5): the late one says so to a screen reader, and the ones that are not late do not.
+    expect(dueList.getAllByText("Overdue:", { exact: false })).toHaveLength(1);
+    expect(dueList.getByText("3 days ago")).toHaveTextContent("Overdue: 3 days ago");
     expect(dueList.getByText("Today, 9:00 am")).toBeInTheDocument();
     expect(dueList.getByText("Thursday")).toBeInTheDocument();
     // A collection with no Done property gets no checkbox.

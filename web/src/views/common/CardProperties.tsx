@@ -37,6 +37,8 @@ export function CardProperties({ fields, record, format, emails, className }: Ca
         const numeric = displayShapeOf(f) === "number";
         return (
           <span key={f.id} title={f.name} className={cn("min-w-0 max-w-full", numeric && "num ml-auto text-fg")}>
+            {/* The property's name for a screen reader: the card's name is its drawn text, and a bare "3" or "Active" would not say what it is. */}
+            <span className="sr-only">{f.name}: </span>
             <CellValue field={f} value={record.values[f.id] ?? null} format={format} emails={emails} className="truncate text-meta" markdown={false} />
           </span>
         );

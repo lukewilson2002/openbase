@@ -26,14 +26,14 @@ describe("CalendarView on a phone", () => {
     setup();
     await screen.findByText("R1");
     expect(screen.queryByRole("complementary", { name: "Unscheduled records" })).not.toBeInTheDocument();
-    const pill = await screen.findByRole("button", { name: "Show unscheduled records, 1" });
+    const pill = await screen.findByRole("button", { name: "Unscheduled · 1" });
     expect(pill).toHaveClass("absolute");
   });
 
   it("opens them as a sheet under the calendar rather than a column beside it", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     setup();
-    await user.click(await screen.findByRole("button", { name: /^Show unscheduled records/ }));
+    await user.click(await screen.findByRole("button", { name: /^Unscheduled/ }));
     const sheet = await screen.findByRole("complementary", { name: "Unscheduled records" });
     expect(sheet).toHaveAttribute("data-stacked");
     expect(sheet).toHaveClass("max-h-[40%]");

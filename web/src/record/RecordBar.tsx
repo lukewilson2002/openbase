@@ -42,9 +42,9 @@ export interface RecordActions {
   remove(): void;
 }
 
-/** Comments with its count, as the button's name carries it. */
+/** Comments with its count, as the button's name carries it. "Comments, 3" and not "Comments, 3": the drawn 3 must be a word of the name (WCAG 2.5.3). */
 export function commentsLabel(count: number): string {
-  return count > 0 ? `Comments (${count})` : "Comments";
+  return count > 0 ? `Comments, ${count}` : "Comments";
 }
 
 /** The items of More, written once for the dropdown and the phone's sheet. */
@@ -87,7 +87,7 @@ export interface RecordBarProps {
 export function RecordBar({ schema, table, title, collectionHref, saveState, prevId, nextId, onNavigate, panel, panelId, onPanel, commentCount, onShare, actions }: RecordBarProps) {
   const viewers = usePresence(schema.id);
   const inFolder = !schema.is_top_level;
-  const crumb = "flex min-w-0 items-center gap-1.5 rounded-sm px-1 text-ui text-muted no-underline hover:text-fg";
+  const crumb = "flex min-h-6 min-w-0 items-center gap-1.5 rounded-sm px-1 text-ui text-muted no-underline hover:text-fg";
   return (
     <header className="flex h-13 shrink-0 items-center gap-2 border-b border-line bg-surface px-2 pt-[env(safe-area-inset-top)] md:px-4">
       <MenuToggle />
@@ -123,7 +123,8 @@ export function RecordBar({ schema, table, title, collectionHref, saveState, pre
           <Icon icon={ChevronDown} />
         </IconButton>
       </div>
-      <Link to={`/workspace/${schema.workspace_id}/members`} aria-label="Members" className="shrink-0 rounded-pill px-1 no-underline">
+      <Link to={`/workspace/${schema.workspace_id}/members`} className="inline-flex min-h-6 shrink-0 items-center rounded-pill px-1 no-underline">
+        <span className="sr-only">Members: </span>
         <BaseAvatars people={schema.people} viewers={viewers} max={3} size="sm" />
       </Link>
       <div className="flex shrink-0 items-center">

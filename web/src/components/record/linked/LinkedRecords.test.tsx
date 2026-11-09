@@ -199,9 +199,9 @@ describe("the link picker", () => {
         </EditorEnvProvider>
       </Providers>,
     );
-    const field = screen.getByRole("button", { name: "Requires" });
+    const field = screen.getByRole("group", { name: "Requires" });
     expect(within(field).getByRole("list", { name: "Linked records in Requires" })).toHaveTextContent("Buy the domain");
-    await userEvent.click(field);
+    await userEvent.click(within(field).getByRole("button", { name: "Requires" }));
     const panel = await screen.findByRole("dialog");
     // The pop-over finds and picks; the records picked are not listed again in it, nor can it clear them.
     expect(within(panel).queryByRole("list", { name: "Linked records in Requires" })).toBeNull();

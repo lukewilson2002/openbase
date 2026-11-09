@@ -160,7 +160,7 @@ function ActionCard({ index, count, step, ctx, error, hasRecord, fields, onChang
   return (
     <li className={cn("rounded-lg border bg-surface", error ? "border-danger" : "border-line")} aria-label={`Action ${index + 1}: ${label}`}>
       <div className="flex items-center gap-2 px-3 py-2">
-        <button type="button" aria-expanded={open} aria-controls={bodyId} aria-label={`${open ? "Collapse" : "Expand"} action ${index + 1}`} onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 items-center gap-2 rounded text-left">
+        <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 items-center gap-2 rounded text-left">
           {open ? <ChevronDown aria-hidden className="size-4 shrink-0 text-muted" /> : <ChevronRight aria-hidden className="size-4 shrink-0 text-muted" />}
           <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-subtle text-meta font-semibold" aria-hidden>
             {index + 1}

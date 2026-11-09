@@ -1,3 +1,4 @@
+import { itemLabel, titleOf } from "./treeTestUtils";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,11 +22,16 @@ const header = (depth: number, key: string, label: string, start: number, count:
 const groups = [header(0, "chs1", "Todo", 0, 2), header(0, "chs3", "Done", 2, 1), header(0, "", "(Empty)", 3, 1, null)];
 
 const esc = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-/** A record's row: a tree item named with its title first, then its values. */
-const row = (title: string) => screen.getByRole("treeitem", { name: new RegExp(`^${esc(title)}(,|$)`) });
-const queryRow = (title: string) => screen.queryByRole("treeitem", { name: new RegExp(`^${esc(title)}(,|$)`) });
+/** A record's row: the tree item whose title is `title` (its name is everything the row draws, so it is found by the title). */
+const rowsTitled = (title: string) => screen.queryAllByRole("treeitem").filter((el) => el.hasAttribute("data-record-id") && titleOf(el) === title);
+const row = (title: string) => {
+  const found = rowsTitled(title);
+  if (found.length !== 1) throw new Error(`expected one row titled ${title}, found ${found.length}`);
+  return found[0]!;
+};
+const queryRow = (title: string) => rowsTitled(title)[0] ?? null;
 /** A group's heading: a tree item named with the group's label and its count. */
-const head = (label: string) => screen.getByRole("treeitem", { name: new RegExp(`^${esc(label)}, \\d+ records?$`) });
+const head = (label: string) => screen.getByRole("treeitem", { name: new RegExp(`^${esc(label)} ?\\d+ ?records?$`) });
 
 function outline(over: Partial<ListOutlineProps> = {}) {
   const props: ListOutlineProps = {
@@ -65,8 +71,8 @@ describe("ListOutline", () => {
   it("shows group headers with counts and each group's records, with their fields", () => {
     outline();
     const tree = screen.getByRole("tree", { name: "Grouped records" });
-    const headers = within(tree).getAllByRole("treeitem", { name: /, \d+ records?$/ });
-    expect(headers.map((h) => h.textContent)).toEqual(["Todo2", "Done1", "(Empty)1"]);
+    const headers = within(tree).getAllByRole("treeitem", { name: /\d+ ?records?$/ });
+    expect(headers.map((h) => h.textContent)).toEqual(["Todo2 records", "Done1 record", "(Empty)1 record"]);
     expect(head("Todo")).toBeInTheDocument();
     expect(headers[0]).toHaveAttribute("aria-expanded", "true");
     // Records sit under their group in order, with the number field shown when set.
@@ -74,7 +80,7 @@ describe("ListOutline", () => {
     // A property has no label on the card; its name is the tooltip.
     expect(within(first).getByTitle("number")).toHaveTextContent("3.00");
     expect(first.querySelector("[data-row-color='red']")).not.toBeNull();
-    expect(screen.getAllByRole("treeitem", { name: /^(Write docs|Fix bug|Ship it|Idea)(,|$)/ })).toHaveLength(4);
+    expect(screen.getAllByRole("treeitem", { name: /^(Write docs|Fix bug|Ship it|Idea)/ })).toHaveLength(4);
   });
 
   it("shows the first three properties that have a value, on one line, and leaves empty ones out", () => {
@@ -110,7 +116,8 @@ describe("ListOutline", () => {
   it("puts the person's face on a person group", () => {
     const owner = ALL_FIELDS.user!;
     outline({ groups: [{ ...header(0, "usr1", "Ada Lovelace", 0, 4, ["usr1"]), field_id: owner.id }], tableFields: [name, owner] });
-    expect(head("Ada Lovelace").querySelector("[role=img]")).toHaveTextContent("AL");
+    // The face is drawn from the name's initials (generated content, not text) and says whose it is.
+    expect(head("Ada Lovelace").querySelector("[role=img]")).toHaveAttribute("data-initials", "AL");
   });
 
   it("nests up to three levels with their own counts", () => {
@@ -122,13 +129,13 @@ describe("ListOutline", () => {
       { ...header(0, "chs3", "Done", 2, 2), field_id: status.id },
     ];
     outline({ groups: nested });
-    const items = screen.getAllByRole("treeitem", { name: /, \d+ records?$/ });
+    const items = screen.getAllByRole("treeitem", { name: /\d+ ?records?$/ });
     expect(items.map((i) => [i.getAttribute("aria-level"), i.textContent])).toEqual([
-      ["1", "Todo2"],
-      ["2", "Ada1"],
-      ["3", "Urgent1"],
-      ["2", "Grace1"],
-      ["1", "Done2"],
+      ["1", "Todo2 records"],
+      ["2", "Ada1 record"],
+      ["3", "Urgent1 record"],
+      ["2", "Grace1 record"],
+      ["1", "Done2 records"],
     ]);
   });
 
@@ -142,15 +149,13 @@ describe("ListOutline", () => {
     expect(props.onToggle).toHaveBeenCalledWith(`${status.id}:chs1`);
   });
 
-  it("ends an ungrouped list with a quiet New record line, shown in full on hover, focus and touch", async () => {
+  it("ends an ungrouped list with a quiet New record line", async () => {
     const user = userEvent.setup();
     const { props } = outline({ groups: [] });
     const add = screen.getByRole("treeitem", { name: "New record" });
     const label = add.querySelector("span")!;
-    expect(label.className).toMatch(/\bopacity-70\b/);
-    expect(label.className).toContain("group-hover/add:opacity-100");
-    expect(label.className).toContain("group-focus-visible/add:opacity-100");
-    expect(label.className).toContain("pointer-coarse:opacity-100");
+    // Muted text at full strength: a faded line would not keep its contrast (A11Y-7).
+    expect(label.className).not.toMatch(/\bopacity-/);
     await user.click(add);
     expect(props.onAdd).toHaveBeenCalledWith({});
   });
@@ -384,7 +389,7 @@ describe("ListOutline tree", () => {
     expect(head("Done")).toHaveAttribute("aria-setsize", "3");
     expect(head("Done")).toHaveAttribute("aria-expanded", "true");
     // A record is one level below its group, and its name carries the values the row shows.
-    const first = within(tree).getByRole("treeitem", { name: `Write docs, ${num.name}: 3.00` });
+    const first = within(tree).getByRole("treeitem", { name: /^Write docs.*number: 3\.00/ });
     expect(first).toHaveAttribute("aria-level", "2");
     expect(first).toHaveAttribute("aria-posinset", "1");
     expect(first).toHaveAttribute("aria-setsize", "2");
@@ -394,7 +399,7 @@ describe("ListOutline tree", () => {
   it("names a row with its description and its select values too", () => {
     const notes = field("text", { multiline: true }, { id: "f_notes", name: "Notes" });
     outline({ records: [rec("r1", "Write docs", { [status.id]: "chs3", [notes.id]: "First draft" })], groups: [], fields: [status], descriptionField: notes, tableFields: [name, status, notes] });
-    expect(screen.getByRole("treeitem", { name: `Write docs, ${status.name}: Done, First draft` })).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: /^Write docs.*First draft.*single_select: Done|^Write docs.*single_select: Done.*First draft/ })).toBeInTheDocument();
   });
 
   it("draws an ungrouped list as a tree of rows, with the selection announced", () => {
@@ -443,8 +448,8 @@ describe("ListOutline prefix", () => {
       ["checkbox: Ship it", "false"],
     ]);
     // The row says it too, to a screen reader.
-    expect(row("Write docs")).toHaveAccessibleName("Write docs, checkbox: checked");
-    expect(row("Fix bug")).toHaveAccessibleName("Fix bug, checkbox: unchecked");
+    expect(row("Write docs")).toHaveAccessibleName(/checkbox: Write docs/);
+    expect(row("Fix bug")).toHaveAccessibleName(/checkbox: Fix bug/);
   });
 
   it("ticks a box in place without opening the row, and unticks it", async () => {
@@ -517,7 +522,7 @@ describe("ListOutline sub-items", () => {
   it("draws a sub-item under its parent, one level deeper, in the view's order", () => {
     nested();
     const items = screen.getAllByRole("treeitem");
-    expect(items.map((i) => [i.getAttribute("aria-label"), i.getAttribute("aria-level"), i.getAttribute("aria-expanded")])).toEqual([
+    expect(items.map((i) => [itemLabel(i), i.getAttribute("aria-level"), i.getAttribute("aria-expanded")])).toEqual([
       ["Plan", "1", "true"],
       ["Design", "2", "true"],
       ["Wire", "3", null],

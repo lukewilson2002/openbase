@@ -321,7 +321,7 @@ function GalleryCard({ record: rec, primary, fields, coverField, descriptionFiel
         role="button"
         {...nav}
         {...listeners}
-        aria-label={title}
+        // No aria-label: the card is named by what it draws, the title then its properties (WCAG 2.5.3).
         // Once something is selected a click selects, so the cards say which are.
         aria-pressed={sel.count > 0 ? selected : undefined}
         data-record-id={rec.id}
@@ -333,7 +333,7 @@ function GalleryCard({ record: rec, primary, fields, coverField, descriptionFiel
         }}
         {...hold}
         className={cn(
-          "relative block w-full cursor-pointer overflow-hidden rounded-lg border bg-surface text-left outline-none transition-[border-color] hover:border-line-strong focus-visible:outline-2 focus-visible:outline-ring",
+          "relative block w-full cursor-pointer overflow-hidden rounded-lg border bg-surface text-left transition-[border-color] hover:border-line-strong",
           selected ? "border-primary ring-2 ring-primary hover:border-primary" : "border-line",
           draggable && "select-none",
         )}

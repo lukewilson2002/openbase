@@ -107,7 +107,7 @@ describe("base shell on a desktop", () => {
     expect(within(menu()).getByRole("button", { name: "Notifications" })).toBeInTheDocument();
     // The Automations row is for creators.
     expect(within(menu()).queryByRole("link", { name: "Automations" })).not.toBeInTheDocument();
-    expect(await within(menu()).findByRole("button", { name: "Account menu" })).toBeInTheDocument();
+    expect(await within(menu()).findByRole("button", { name: /^Account menu/ })).toBeInTheDocument();
     // The workspace in the switcher, the folder under Collections, and its collections.
     expect(within(menu()).getByRole("button", { name: /^Acme/ })).toBeInTheDocument();
     expect(await within(menu()).findByRole("button", { name: "Project tracker" })).toHaveAttribute("aria-expanded", "true");
@@ -517,7 +517,7 @@ describe("base shell on a desktop", () => {
     it("shows Notifications to everyone, and History and Trash filtered to the workspace", async () => {
       openBase("viewer", { "GET /api/notifications": { notifications: [], unread: 2 } });
       await screen.findByText("Grid view coming soon");
-      expect(await within(menu()).findByRole("button", { name: "Notifications, 2 unread" })).toBeInTheDocument();
+      expect(await within(menu()).findByRole("button", { name: /^Notifications ?2 ?unread$/ })).toBeInTheDocument();
       expect(within(menu()).getByRole("link", { name: "History" })).toHaveAttribute("href", "/history?workspace=wsp1");
       expect(within(menu()).getByRole("link", { name: "Trash" })).toHaveAttribute("href", "/trash?workspace=wsp1");
     });

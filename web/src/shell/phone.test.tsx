@@ -107,7 +107,7 @@ describe("bottom navigation (PH-1)", () => {
     routes({ "GET /api/notifications": { notifications: [], unread: 3 } });
     renderApp({ route: "/workspace/wsp1" });
     const nav = await tabs();
-    expect(await within(nav).findByRole("link", { name: "Notifications, 3 unread" })).toBeInTheDocument();
+    expect(await within(nav).findByRole("link", { name: /^Notifications ?3 ?unread$/ })).toBeInTheDocument();
     expect(within(nav).getByTestId("notifications-badge")).toHaveTextContent("3");
   });
 
@@ -136,7 +136,7 @@ describe("bottom navigation (PH-1)", () => {
     const api = routes({ "GET /api/workspaces": [] });
     renderApp({ route: "/" });
     await screen.findByRole("heading", { name: "Create your first workspace" });
-    await user.click(await screen.findByRole("button", { name: "Account menu" }));
+    await user.click(await screen.findByRole("button", { name: /^Account menu/ }));
     await user.click(within(await screen.findByRole("dialog", { name: "Account" })).getByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(api.callsTo("POST /api/auth/logout")).toHaveLength(1));
   });
@@ -326,7 +326,7 @@ describe("Home on a phone (NAV-8)", () => {
   it("holds the workspace switcher, the avatar and the search, and no menu button", async () => {
     const { header } = await home();
     expect(within(header).getByRole("button", { name: /Acme/ })).toBeInTheDocument();
-    expect(within(header).getByRole("button", { name: "Account menu" })).toBeInTheDocument();
+    expect(within(header).getByRole("button", { name: /^Account menu/ })).toBeInTheDocument();
     expect(within(header).getByRole("button", { name: "Search everything" })).toBeInTheDocument();
     expect(within(header).queryByRole("button", { name: "Show menu" })).not.toBeInTheDocument();
   });
@@ -372,7 +372,7 @@ describe("Home on a phone (NAV-8)", () => {
   it("opens the profile menu as a sheet from the avatar, with the same actions as the desktop menu", async () => {
     const user = userEvent.setup();
     const { header } = await home();
-    await user.click(await within(header).findByRole("button", { name: "Account menu" }));
+    await user.click(await within(header).findByRole("button", { name: /^Account menu/ }));
     const sheet = await screen.findByRole("dialog", { name: "Account" });
     expect(within(sheet).getByText("Ada Lovelace")).toBeInTheDocument();
     expect(within(sheet).getByText("ada@example.com")).toBeInTheDocument();
@@ -389,7 +389,7 @@ describe("Home on a phone (NAV-8)", () => {
     const user = userEvent.setup();
     routes({ "GET /api/auth/me": ADMIN });
     renderApp({ route: "/workspace/wsp1" });
-    await user.click(await within(await homeHeader()).findByRole("button", { name: "Account menu" }));
+    await user.click(await within(await homeHeader()).findByRole("button", { name: /^Account menu/ }));
     const sheet = await screen.findByRole("dialog", { name: "Account" });
     expect(within(sheet).getByRole("link", { name: "Administration" })).toHaveAttribute("href", "/admin");
     await user.click(within(sheet).getByRole("button", { name: "Dark" }));
@@ -401,7 +401,7 @@ describe("Home on a phone (NAV-8)", () => {
   it("signs out from the sheet", async () => {
     const user = userEvent.setup();
     const { api, header } = await home();
-    await user.click(await within(header).findByRole("button", { name: "Account menu" }));
+    await user.click(await within(header).findByRole("button", { name: /^Account menu/ }));
     await user.click(within(await screen.findByRole("dialog", { name: "Account" })).getByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(api.callsTo("POST /api/auth/logout")).toHaveLength(1));
   });
@@ -409,7 +409,7 @@ describe("Home on a phone (NAV-8)", () => {
   it("closes the profile sheet with Escape and gives the avatar its focus back", async () => {
     const user = userEvent.setup();
     const { header } = await home();
-    const avatar = await within(header).findByRole("button", { name: "Account menu" });
+    const avatar = await within(header).findByRole("button", { name: /^Account menu/ });
     await user.click(avatar);
     await screen.findByRole("dialog", { name: "Account" });
     await user.keyboard("{Escape}");
@@ -442,7 +442,7 @@ describe("the Collections tab (NAV-7)", () => {
     expect(within(main).getByRole("link", { name: "Trash" })).toHaveAttribute("href", "/trash?workspace=wsp1");
     expect(within(main).getByRole("link", { name: "Workspace settings" })).toHaveAttribute("href", "/workspace/wsp1/settings");
     expect(within(main).getByRole("link", { name: "Automations" })).toHaveAttribute("href", "/workspace/wsp1/automations");
-    expect(within(main).getByRole("button", { name: "Account menu" })).toBeInTheDocument();
+    expect(within(main).getByRole("button", { name: /^Account menu/ })).toBeInTheDocument();
   });
 
   it("leaves out what the bar and the header already have: Home, Notifications and the search row", async () => {
@@ -459,7 +459,7 @@ describe("the Collections tab (NAV-7)", () => {
     expect(await screen.findByRole("dialog", { name: "Switch workspace" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch workspace" })).not.toBeInTheDocument());
-    await user.click(within(main).getByRole("button", { name: "Account menu" }));
+    await user.click(within(main).getByRole("button", { name: /^Account menu/ }));
     expect(await screen.findByRole("dialog", { name: "Account" })).toBeInTheDocument();
   });
 

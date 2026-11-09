@@ -25,7 +25,7 @@ function setup(role = "editor", view = gallery(), recs = records, routes: Record
 describe("GalleryView", () => {
   it("shows a card per record with title, fields, row colour and the cover image", async () => {
     setup();
-    const card = await screen.findByRole("button", { name: "R1" });
+    const card = await screen.findByRole("button", { name: /^R1/ });
     const img = card.querySelector("img")!;
     expect(img).toHaveAttribute("src", "/api/attachments/att1/thumb");
     expect(img.className).toContain("object-contain"); // fit
@@ -36,7 +36,7 @@ describe("GalleryView", () => {
 
   it("draws a card as a bordered card of radius 12 with no shadow, and the cover takes the card's top corners", async () => {
     setup();
-    const card = await screen.findByRole("button", { name: "R1" });
+    const card = await screen.findByRole("button", { name: /^R1/ });
     expect(card).toHaveClass("rounded-lg", "border", "border-line");
     expect(card.className).not.toMatch(/shadow/);
     // The cover follows the card's radius, so it is 12 as well.
@@ -45,15 +45,15 @@ describe("GalleryView", () => {
 
   it("draws a cover only on cards whose record has a picture", async () => {
     setup();
-    await screen.findByRole("button", { name: "R1" });
-    expect(screen.getByRole("button", { name: "R2" }).querySelector("img")).toBeNull();
+    await screen.findByRole("button", { name: /^R1/ });
+    expect(screen.getByRole("button", { name: /^R2/ }).querySelector("img")).toBeNull();
   });
 
   it("keeps the cover and its fit together under the layout tiles in View options", async () => {
     const user = userEvent.setup();
     const view = gallery();
     const { api } = setup("editor", view, records);
-    await screen.findByRole("button", { name: "R1" });
+    await screen.findByRole("button", { name: /^R1/ });
     const panel = await openViewOptions(user);
     expect(within(panel).getByRole("button", { name: "Gallery", pressed: true })).toBeInTheDocument();
     expect(await screen.findByRole("combobox", { name: "Cover" })).toBeInTheDocument();
@@ -65,7 +65,7 @@ describe("GalleryView", () => {
   it("says why the crop setting is off when the view has no cover", async () => {
     const user = userEvent.setup();
     setup("editor", gallery({ cover_field_id: null }));
-    await screen.findByRole("button", { name: "R1" });
+    await screen.findByRole("button", { name: /^R1/ });
     await openViewOptions(user);
     expect(await screen.findByRole("checkbox", { name: "Crop cover images" })).toBeDisabled();
     expect(screen.getByText("Choose a cover above to set how pictures fit.")).toBeInTheDocument();
@@ -73,7 +73,7 @@ describe("GalleryView", () => {
 
   it("crops covers when the view says so", async () => {
     setup("editor", gallery({ cover_crop: true }));
-    const card = await screen.findByRole("button", { name: "R1" });
+    const card = await screen.findByRole("button", { name: /^R1/ });
     expect(card.querySelector("img")!.className).toContain("object-cover");
   });
 
@@ -107,7 +107,7 @@ describe("GalleryView", () => {
     const user = userEvent.setup();
     setup("viewer", gallery(), records, { "GET /api/tables/tbl1/records/r2": records[1]! });
     expect(screen.queryByRole("button", { name: "Add record" })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: "R2" }));
+    await user.click(await screen.findByRole("button", { name: /^R2/ }));
     expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/r2");
   });
 
@@ -143,7 +143,7 @@ describe("GalleryView on a phone", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       phone();
-      const card = await screen.findByRole("button", { name: "R2" });
+      const card = await screen.findByRole("button", { name: /^R2/ });
       fireEvent.pointerDown(card, touch());
       await act(async () => void (await vi.advanceTimersByTimeAsync(300)));
       expect(screen.queryByRole("dialog", { name: "R2" })).not.toBeInTheDocument();
@@ -163,7 +163,7 @@ describe("GalleryView on a phone", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       phone();
-      const card = await screen.findByRole("button", { name: "R2" });
+      const card = await screen.findByRole("button", { name: /^R2/ });
       fireEvent.pointerDown(card, touch());
       await act(async () => void (await vi.advanceTimersByTimeAsync(300)));
       fireEvent.pointerMove(card, touch(50, 90));
@@ -178,7 +178,7 @@ describe("GalleryView on a phone", () => {
   it("shows a selection as the count and Actions, with the bulk actions in a sheet", async () => {
     const user = userEvent.setup();
     phone();
-    await screen.findByRole("button", { name: "R1" });
+    await screen.findByRole("button", { name: /^R1/ });
     await user.click(screen.getByRole("checkbox", { name: "Select R1" }));
     const bar = within(screen.getByRole("toolbar", { name: "Selected records" }));
     expect(bar.getByText("1 selected")).toBeInTheDocument();
@@ -206,33 +206,33 @@ describe("GalleryView keyboard and selection", () => {
     layOutInTwoColumns();
     const user = userEvent.setup();
     setup("editor", gallery(), four);
-    await screen.findByRole("button", { name: "R0" });
+    await screen.findByRole("button", { name: /^R0/ });
     expect(screen.getAllByRole("button", { name: /^R\d$/ }).map((c) => c.tabIndex)).toEqual([0, -1, -1, -1]);
-    screen.getByRole("button", { name: "R0" }).focus();
+    screen.getByRole("button", { name: /^R0/ }).focus();
     await user.keyboard("{ArrowRight}");
-    expect(screen.getByRole("button", { name: "R1" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /^R1/ })).toHaveFocus();
     await user.keyboard("{ArrowDown}");
-    expect(screen.getByRole("button", { name: "R3" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /^R3/ })).toHaveFocus();
     await user.keyboard("{ArrowLeft}{ArrowUp}");
-    expect(screen.getByRole("button", { name: "R0" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /^R0/ })).toHaveFocus();
     await user.keyboard("{End}");
-    expect(screen.getByRole("button", { name: "R3" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /^R3/ })).toHaveFocus();
     await user.keyboard("{Home}");
-    expect(screen.getByRole("button", { name: "R0" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /^R0/ })).toHaveFocus();
     // The card last focused is the tab stop.
     await user.keyboard("{ArrowDown}");
-    expect(screen.getByRole("button", { name: "R2" }).tabIndex).toBe(0);
-    expect(screen.getByRole("button", { name: "R0" }).tabIndex).toBe(-1);
+    expect(screen.getByRole("button", { name: /^R2/ }).tabIndex).toBe(0);
+    expect(screen.getByRole("button", { name: /^R0/ }).tabIndex).toBe(-1);
   });
 
   it("opens a card with Enter and selects it with Space", async () => {
     const user = userEvent.setup();
     setup("editor", gallery(), four, { "GET /api/tables/tbl1/records/r1": four[1]! });
-    await screen.findByRole("button", { name: "R1" });
-    screen.getByRole("button", { name: "R1" }).focus();
+    await screen.findByRole("button", { name: /^R1/ });
+    screen.getByRole("button", { name: /^R1/ }).focus();
     await user.keyboard(" ");
     expect(screen.getByTestId("where")).not.toHaveTextContent("/r/");
-    expect(screen.getByRole("button", { name: "R1" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^R1/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("toolbar", { name: "Selected records" })).toHaveTextContent("1 selected");
     await user.keyboard("{Enter}");
     expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/r1");
@@ -262,12 +262,12 @@ describe("GalleryView keyboard and selection", () => {
       "POST /api/tables/tbl1/records/duplicate": { records: [rec("c1", {}), rec("c2", {})] },
       "DELETE /api/tables/tbl1/records": null,
     });
-    await screen.findByRole("button", { name: "R0" });
+    await screen.findByRole("button", { name: /^R0/ });
     await user.keyboard("{Control>}");
-    await user.click(screen.getByRole("button", { name: "R0" }));
+    await user.click(screen.getByRole("button", { name: /^R0/ }));
     await user.keyboard("{/Control}");
     await user.keyboard("{Shift>}");
-    await user.click(screen.getByRole("button", { name: "R2" }));
+    await user.click(screen.getByRole("button", { name: /^R2/ }));
     await user.keyboard("{/Shift}");
     const bar = screen.getByRole("toolbar", { name: "Selected records" });
     expect(bar).toHaveTextContent("3 selected");
@@ -282,10 +282,10 @@ describe("GalleryView keyboard and selection", () => {
   it("asks before deleting the selection", async () => {
     const user = userEvent.setup();
     const { api } = setup("editor", gallery(), four, { "DELETE /api/tables/tbl1/records": null });
-    await screen.findByRole("button", { name: "R0" });
+    await screen.findByRole("button", { name: /^R0/ });
     await user.keyboard("{Control>}");
-    await user.click(screen.getByRole("button", { name: "R0" }));
-    await user.click(screen.getByRole("button", { name: "R3" }));
+    await user.click(screen.getByRole("button", { name: /^R0/ }));
+    await user.click(screen.getByRole("button", { name: /^R3/ }));
     await user.keyboard("{/Control}");
     await user.click(within(screen.getByRole("toolbar", { name: "Selected records" })).getByRole("button", { name: /Delete/ }));
     expect(await screen.findByRole("alertdialog")).toHaveTextContent("Delete 2 records?");
@@ -296,8 +296,8 @@ describe("GalleryView keyboard and selection", () => {
   it("selects every card with Ctrl+A and clears with Escape", async () => {
     const user = userEvent.setup();
     setup("editor", gallery(), four);
-    await screen.findByRole("button", { name: "R0" });
-    screen.getByRole("button", { name: "R0" }).focus();
+    await screen.findByRole("button", { name: /^R0/ });
+    screen.getByRole("button", { name: /^R0/ }).focus();
     await user.keyboard("{Control>}a{/Control}");
     expect(screen.getByRole("toolbar", { name: "Selected records" })).toHaveTextContent("4 selected");
     await user.keyboard("{Escape}");
@@ -307,12 +307,12 @@ describe("GalleryView keyboard and selection", () => {
   it("deletes the focused card with the Delete key, with an Undo", async () => {
     const user = userEvent.setup();
     const { api } = setup("editor", gallery(), four, { "DELETE /api/tables/tbl1/records": null });
-    await screen.findByRole("button", { name: "R2" });
-    screen.getByRole("button", { name: "R2" }).focus();
+    await screen.findByRole("button", { name: /^R2/ });
+    screen.getByRole("button", { name: /^R2/ }).focus();
     await user.keyboard("{Delete}");
     await waitFor(() => expect(api.callsTo("DELETE /api/tables/tbl1/records")[0]!.body).toEqual({ ids: ["r2"] }));
     // Focus stays in the gallery, on the card after the deleted one.
-    await waitFor(() => expect(screen.getByRole("button", { name: "R3" })).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole("button", { name: /^R3/ })).toHaveFocus());
     expect(await screen.findByText("Record deleted")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Undo" })).toBeInTheDocument();
   });
@@ -320,8 +320,8 @@ describe("GalleryView keyboard and selection", () => {
   it("does not delete for viewers", async () => {
     const user = userEvent.setup();
     const { api } = setup("viewer", gallery(), four, { "DELETE /api/tables/tbl1/records": null });
-    await screen.findByRole("button", { name: "R2" });
-    screen.getByRole("button", { name: "R2" }).focus();
+    await screen.findByRole("button", { name: /^R2/ });
+    screen.getByRole("button", { name: /^R2/ }).focus();
     await user.keyboard("{Delete}");
     expect(api.callsTo("DELETE /api/tables/tbl1/records")).toHaveLength(0);
   });
@@ -329,8 +329,8 @@ describe("GalleryView keyboard and selection", () => {
   it("opens a menu on right-click with open, select, duplicate and delete", async () => {
     const user = userEvent.setup();
     const { api } = setup("editor", gallery(), four, { "POST /api/tables/tbl1/records/duplicate": { records: [rec("c1", {})] } });
-    await screen.findByRole("button", { name: "R1" });
-    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("button", { name: "R1" }) });
+    await screen.findByRole("button", { name: /^R1/ });
+    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("button", { name: /^R1/ }) });
     const menu = await screen.findByRole("menu", { name: "Record menu" });
     expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Open record", "Select", "Duplicate record", "Move to start", "Delete record"]);
     await user.click(within(menu).getByRole("menuitem", { name: "Duplicate record" }));
@@ -340,8 +340,8 @@ describe("GalleryView keyboard and selection", () => {
   it("offers viewers the menu without duplicate or delete", async () => {
     const user = userEvent.setup();
     setup("viewer", gallery(), four);
-    await screen.findByRole("button", { name: "R1" });
-    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("button", { name: "R1" }) });
+    await screen.findByRole("button", { name: /^R1/ });
+    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("button", { name: /^R1/ }) });
     const menu = await screen.findByRole("menu", { name: "Record menu" });
     expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Open record", "Select"]);
   });
@@ -360,22 +360,22 @@ describe("GalleryView order", () => {
         return { records: [] };
       },
     });
-    await screen.findByRole("button", { name: "R0" });
-    screen.getByRole("button", { name: "R0" }).focus();
+    await screen.findByRole("button", { name: /^R0/ });
+    screen.getByRole("button", { name: /^R0/ }).focus();
     await user.keyboard("{Alt>}{ArrowRight}{/Alt}");
     await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records/move")).toHaveLength(1));
     expect(api.callsTo("POST /api/tables/tbl1/records/move")[0]!.body).toEqual({ ids: ["r0"], before_id: null, after_id: "r1" });
-    await waitFor(() => expect(screen.getAllByRole("button", { name: /^R\d$/ }).map((c) => c.getAttribute("aria-label"))).toEqual(["R1", "R0", "R2", "R3"]));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /^R\d/ }).map((c) => c.getAttribute("data-record-id"))).toEqual(["r1", "r0", "r2", "r3"]));
     expect(await screen.findByText("Record moved")).toBeInTheDocument();
     // Focus stays on the card that moved.
-    expect(screen.getByRole("button", { name: "R0" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /^R0/ })).toHaveFocus();
   });
 
   it("moves a card to the start from its menu", async () => {
     const user = userEvent.setup();
     const { api } = setup("editor", gallery(), four, { "POST /api/tables/tbl1/records/move": { records: [] } });
-    await screen.findByRole("button", { name: "R2" });
-    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("button", { name: "R2" }) });
+    await screen.findByRole("button", { name: /^R2/ });
+    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("button", { name: /^R2/ }) });
     await user.click(await screen.findByRole("menuitem", { name: "Move to start" }));
     await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records/move")[0]!.body).toEqual({ ids: ["r2"], before_id: "r0", after_id: null }));
   });
@@ -385,10 +385,10 @@ describe("GalleryView order", () => {
     const user = userEvent.setup();
     const sorted = viewWithConfig("viw1", "gallery", { sorts: [{ field_id: F.name.id, direction: "asc" }], gallery: { cover_field_id: F.cover.id, cover_crop: false } });
     const { api } = setup("editor", sorted, four, { "POST /api/tables/tbl1/records/move": { records: [] } });
-    await screen.findByRole("button", { name: "R0" });
-    screen.getByRole("button", { name: "R0" }).focus();
+    await screen.findByRole("button", { name: /^R0/ });
+    screen.getByRole("button", { name: /^R0/ }).focus();
     await user.keyboard("{Alt>}{ArrowRight}{/Alt}");
-    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("button", { name: "R2" }) });
+    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("button", { name: /^R2/ }) });
     expect(screen.queryByRole("menuitem", { name: "Move to start" })).not.toBeInTheDocument();
     expect(api.callsTo("POST /api/tables/tbl1/records/move")).toHaveLength(0);
   });
@@ -401,8 +401,8 @@ describe("GalleryView fields", () => {
     schema.tables[0]!.fields = [F.name, F.cover, ...extra];
     const values = Object.fromEntries(extra.slice(0, 6).map((f, i) => [f.id, i + 1]));
     renderView(GalleryView, { schema, viewId: "viw1", routes: { "POST /api/views/viw1/query": queryHandler({ records: [rec("r0", values), rec("r1", { f_n1: 1 })] }) } as never });
-    const card = await screen.findByRole("button", { name: "R0" });
+    const card = await screen.findByRole("button", { name: /^R0/ });
     expect(within(card).getByText("+1 more field")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "R1" }).querySelector("[data-more-fields]")).toBeNull();
+    expect(screen.getByRole("button", { name: /^R1/ }).querySelector("[data-more-fields]")).toBeNull();
   });
 });

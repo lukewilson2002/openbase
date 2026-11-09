@@ -61,18 +61,19 @@ export function BottomNav({ workspaceId }: { workspaceId: string }) {
               <Link
                 to={to[t.tab]}
                 aria-current={selected ? "page" : undefined}
-                aria-label={badge ? `${t.label}, ${unread} unread` : undefined}
-                className={cn("flex h-full flex-col items-center justify-center gap-0.5 text-meta no-underline", selected ? "font-semibold text-primary-text" : "font-medium text-muted")}
+                // The label comes first in the document and last on the screen: the name reads "Notifications 3 unread" and holds what is drawn (WCAG 2.5.3).
+                className={cn("flex h-full flex-col-reverse items-center justify-center gap-0.5 text-meta no-underline", selected ? "font-semibold text-primary-text" : "font-medium text-muted")}
               >
+                <span>{t.label}</span>
                 <span className="relative">
                   <Icon icon={t.icon} size="fit" className="size-5.5" />
                   {badge && (
                     <span data-testid="notifications-badge" className="num absolute -top-1 left-full -ml-1.5 min-w-4 rounded-pill bg-primary px-1 text-center text-meta font-semibold leading-4 text-primary-fg">
                       {unreadBadge(unread)}
+                      <span className="sr-only"> unread</span>
                     </span>
                   )}
                 </span>
-                <span>{t.label}</span>
               </Link>
             </li>
           );

@@ -97,7 +97,7 @@ function TopLevel({ ws }: { ws: WorkspaceSummary }) {
               description={current ? "Top level now" : undefined}
               action={
                 current ? undefined : (
-                  <Button aria-label={`Use ${b.name} as top level`} loading={choose.isPending && choose.variables === b.id} disabled={choose.isPending} onClick={() => choose.mutate(b.id)}>
+                  <Button aria-label={`Use as top level: ${b.name}`} loading={choose.isPending && choose.variables === b.id} disabled={choose.isPending} onClick={() => choose.mutate(b.id)}>
                     Use as top level
                   </Button>
                 )

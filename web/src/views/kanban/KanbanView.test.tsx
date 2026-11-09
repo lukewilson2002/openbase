@@ -81,10 +81,10 @@ describe("KanbanView", () => {
     expect(await screen.findByRole("listitem", { name: "Stack: Todo" })).toBeInTheDocument();
     const stackLabels = screen.getAllByRole("listitem", { name: /^Stack:/ }).map((s) => s.getAttribute("aria-label"));
     expect(stackLabels).toEqual(["Stack: Uncategorized", "Stack: Todo", "Stack: Doing", "Stack: Done"]);
-    expect(within(screen.getByRole("listitem", { name: "Stack: Todo" })).getAllByRole("button", { name: /^R\d$/ })).toHaveLength(2);
-    expect(within(screen.getByRole("listitem", { name: "Stack: Uncategorized" })).getByRole("button", { name: "R4" })).toBeInTheDocument();
+    expect(within(screen.getByRole("listitem", { name: "Stack: Todo" })).getAllByRole("button", { name: /^R\d/ })).toHaveLength(2);
+    expect(within(screen.getByRole("listitem", { name: "Stack: Uncategorized" })).getByRole("button", { name: /^R4/ })).toBeInTheDocument();
     // Cards show the visible fields (the stack field itself is left out).
-    expect(within(screen.getByRole("button", { name: "R1" })).getByText("5.00")).toBeInTheDocument();
+    expect(within(screen.getByRole("button", { name: /^R1/ })).getByText("5.00")).toBeInTheDocument();
     expect(asked[0]).toMatchObject({ offset: 0, timezone: "UTC" });
     // Each stack counts its own cards; the board has no total under it.
     expect(within(screen.getByRole("listitem", { name: "Stack: Todo" })).getByText("2 items")).toBeInTheDocument();
@@ -160,7 +160,7 @@ describe("KanbanView", () => {
 
     it("draws the description under the title, clamped, and leaves its row out", async () => {
       setupNotes(described(notes.id));
-      const card = await screen.findByRole("button", { name: "R1" });
+      const card = await screen.findByRole("button", { name: /^R1/ });
       const text = card.querySelector("[data-card-description]")!;
       expect(text.textContent).toBe("First line of the notes. Second paragraph with more words than fit on three lines of a narrow card.");
       expect(text.className).toContain("line-clamp-3");
@@ -168,12 +168,12 @@ describe("KanbanView", () => {
       expect(within(card).queryByText("Notes")).not.toBeInTheDocument();
       expect(within(card).getByText("5.00")).toBeInTheDocument();
       // A blank description draws nothing at all.
-      expect(screen.getByRole("button", { name: "R2" }).querySelector("[data-card-description]")).toBeNull();
+      expect(screen.getByRole("button", { name: /^R2/ }).querySelector("[data-card-description]")).toBeNull();
     });
 
     it("shows rich text without its markup", async () => {
       setupNotes(described(brief.id), { [brief.id]: "## Plan\n\nBuy **milk** & [eggs](https://x.test)\n- one\n- two" });
-      const card = await screen.findByRole("button", { name: "R1" });
+      const card = await screen.findByRole("button", { name: /^R1/ });
       expect(card.querySelector("[data-card-description]")!.textContent).toBe("Plan Buy milk & eggs one two");
       expect(card.querySelector("[data-card-description] a, [data-card-description] strong")).toBeNull();
       // Notes is not the description here, so it stays a row.
@@ -182,7 +182,7 @@ describe("KanbanView", () => {
 
     it("ignores a description field that is no longer text", async () => {
       setupNotes(described(total.id), { [total.id]: 3 });
-      const card = await screen.findByRole("button", { name: "R1" });
+      const card = await screen.findByRole("button", { name: /^R1/ });
       expect(card.querySelector("[data-card-description]")).toBeNull();
       expect(within(card).getByTitle("Total")).toBeInTheDocument();
     });
@@ -245,9 +245,9 @@ describe("KanbanView", () => {
     );
     await screen.findByRole("listitem", { name: "Stack: Todo" });
     layout.overlayAt(1); // R1 is the first card of the second stack (Uncategorized comes first)
-    await keyboardDrag(user, screen.getByRole("button", { name: "R1" }), ["{ArrowRight}"]);
+    await keyboardDrag(user, screen.getByRole("button", { name: /^R1/ }), ["{ArrowRight}"]);
     // The card is in its new stack at once...
-    await waitFor(() => expect(within(screen.getByRole("listitem", { name: "Stack: Doing" })).getByRole("button", { name: "R1" })).toBeInTheDocument());
+    await waitFor(() => expect(within(screen.getByRole("listitem", { name: "Stack: Doing" })).getByRole("button", { name: /^R1/ })).toBeInTheDocument());
     // ...and the server is told the new status (typecast, view form -> wire form) and the new place.
     await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
     expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toEqual({ typecast: true, records: [{ id: "r1", values: { f_status: "s2" } }] });
@@ -260,10 +260,10 @@ describe("KanbanView", () => {
     const { api } = setup("editor", board(), { "PATCH /api/tables/tbl1/records": apiError(400, "bad_request", "Status is read-only") });
     await screen.findByRole("listitem", { name: "Stack: Todo" });
     layout.overlayAt(1);
-    await keyboardDrag(user, screen.getByRole("button", { name: "R1" }), ["{ArrowRight}"]);
+    await keyboardDrag(user, screen.getByRole("button", { name: /^R1/ }), ["{ArrowRight}"]);
     await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
-    await waitFor(() => expect(within(screen.getByRole("listitem", { name: "Stack: Todo" })).getByRole("button", { name: "R1" })).toBeInTheDocument());
-    expect(within(screen.getByRole("listitem", { name: "Stack: Doing" })).queryByRole("button", { name: "R1" })).not.toBeInTheDocument();
+    await waitFor(() => expect(within(screen.getByRole("listitem", { name: "Stack: Todo" })).getByRole("button", { name: /^R1/ })).toBeInTheDocument());
+    expect(within(screen.getByRole("listitem", { name: "Stack: Doing" })).queryByRole("button", { name: /^R1/ })).not.toBeInTheDocument();
     expect(await screen.findByText(/Status is read-only/)).toBeInTheDocument();
     // The move was never attempted: the field write came first and failed.
     expect(api.callsTo("POST /api/tables/tbl1/records/move")).toHaveLength(0);
@@ -276,7 +276,7 @@ describe("KanbanView", () => {
     const { api } = setup("editor", sorted, { "PATCH /api/tables/tbl1/records": { records: [rec("r1", { [F.status.id]: "s2" })] } });
     await screen.findByRole("listitem", { name: "Stack: Todo" });
     layout.overlayAt(1);
-    await keyboardDrag(user, screen.getByRole("button", { name: "R1" }), ["{ArrowRight}"]);
+    await keyboardDrag(user, screen.getByRole("button", { name: /^R1/ }), ["{ArrowRight}"]);
     await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
     await act(async () => void (await new Promise((r) => setTimeout(r, 50))));
     expect(api.callsTo("POST /api/tables/tbl1/records/move")).toHaveLength(0);
@@ -299,7 +299,7 @@ describe("KanbanView", () => {
     const user = userEvent.setup();
     const created = rec("r9", { [F.status.id]: "s2" });
     const { api } = setup("editor", board(), { "POST /api/tables/tbl1/records": { records: [created] }, "GET /api/tables/tbl1/records/r9": created });
-    (await screen.findByRole("button", { name: "R3" })).focus();
+    (await screen.findByRole("button", { name: /^R3/ })).focus();
     await user.click(screen.getByRole("button", { name: "Add record" }));
     await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
     expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ values: { f_status: "s2" } }] });
@@ -334,7 +334,7 @@ describe("KanbanView", () => {
   it("opens the record from a card as its page, handing over the order of the stacks", async () => {
     const user = userEvent.setup();
     setup("viewer", board());
-    await user.click(await screen.findByRole("button", { name: "R3" }));
+    await user.click(await screen.findByRole("button", { name: /^R3/ }));
     expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/r3");
     // Previous and next on the page follow the stacks left to right, not the server's order.
     const trail = JSON.parse(screen.getByTestId("trail").textContent!) as { order: string[] };
@@ -346,7 +346,7 @@ describe("KanbanView", () => {
     setup("viewer");
     await screen.findByRole("listitem", { name: "Stack: Todo" });
     expect(screen.queryByRole("button", { name: /^New record in/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "R1" })).toHaveAttribute("aria-roledescription", "card");
+    expect(screen.getByRole("button", { name: /^R1/ })).toHaveAttribute("aria-roledescription", "card");
   });
 
   it("hides empty stacks and follows stack_order", async () => {
@@ -374,11 +374,11 @@ describe("KanbanView", () => {
     const asked: QueryRequest[] = [];
     const { client } = renderView(KanbanView, { schema: projectSchema("editor", [board()]), viewId: "viw1", routes: { "POST /api/views/viw1/query": queryHandler(server, asked) } });
     await screen.findByRole("listitem", { name: "Stack: Todo" });
-    expect(screen.queryByRole("button", { name: "R5" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^R5/ })).not.toBeInTheDocument();
     server.records.push(rec("r5", { [F.status.id]: "s3" }));
     // What a records_changed event does to the cache (see hooks/useBaseEvents).
     await client.invalidateQueries({ queryKey: ["records", "tbl1"] });
-    expect(await within(screen.getByRole("listitem", { name: "Stack: Done" })).findByRole("button", { name: "R5" })).toBeInTheDocument();
+    expect(await within(screen.getByRole("listitem", { name: "Stack: Done" })).findByRole("button", { name: /^R5/ })).toBeInTheDocument();
     expect(asked.length).toBeGreaterThan(1);
   });
 
@@ -554,7 +554,7 @@ describe("KanbanView", () => {
       const { api } = setup("editor", board(), { "PATCH /api/tables/tbl1/records": { records: [rec("r1", {})] }, "POST /api/tables/tbl1/records/move": { records: [] } }, { records: full });
       await screen.findByRole("listitem", { name: "Stack: Todo" });
       expect(screen.queryByRole("listitem", { name: "Stack: Uncategorized" })).not.toBeInTheDocument();
-      screen.getByRole("button", { name: "R1" }).focus();
+      screen.getByRole("button", { name: /^R1/ }).focus();
       await user.keyboard(" ");
       await act(async () => void (await new Promise((r) => setTimeout(r, 20))));
       expect(screen.getByRole("listitem", { name: "Stack: Uncategorized" })).toHaveTextContent("Drop a card here to clear its Status.");
@@ -587,13 +587,13 @@ describe("KanbanView", () => {
         server,
       );
       await screen.findByRole("listitem", { name: "Stack: Todo" });
-      screen.getByRole("button", { name: "R3" }).focus();
+      screen.getByRole("button", { name: /^R3/ }).focus();
       await user.keyboard("{Delete}");
       await waitFor(() => expect(api.callsTo("DELETE /api/tables/tbl1/records")).toHaveLength(1));
       expect(api.callsTo("DELETE /api/tables/tbl1/records")[0]!.body).toEqual({ ids: ["r3"] });
       expect(await screen.findByText("Record deleted")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Undo" })).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "R3" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^R3/ })).not.toBeInTheDocument();
     });
 
     it("asks before deleting a selection, then deletes all of it", async () => {
@@ -601,8 +601,8 @@ describe("KanbanView", () => {
       const { api } = setup("editor", board(), { "DELETE /api/tables/tbl1/records": {} });
       await screen.findByRole("listitem", { name: "Stack: Todo" });
       await user.keyboard("{Control>}");
-      await user.click(screen.getByRole("button", { name: "R1" }));
-      await user.click(screen.getByRole("button", { name: "R2" }));
+      await user.click(screen.getByRole("button", { name: /^R1/ }));
+      await user.click(screen.getByRole("button", { name: /^R2/ }));
       await user.keyboard("{/Control}");
       await user.click(within(screen.getByRole("toolbar", { name: "Selected records" })).getByRole("button", { name: "Delete" }));
       const dialog = await screen.findByRole("alertdialog");
@@ -619,8 +619,8 @@ describe("KanbanView", () => {
       const { api } = setup("editor", board(), { "POST /api/tables/tbl1/records/duplicate": { records: [rec("c1", {}), rec("c2", {})] } });
       await screen.findByRole("listitem", { name: "Stack: Todo" });
       await user.keyboard("{Control>}");
-      await user.click(screen.getByRole("button", { name: "R1" }));
-      await user.click(screen.getByRole("button", { name: "R3" }));
+      await user.click(screen.getByRole("button", { name: /^R1/ }));
+      await user.click(screen.getByRole("button", { name: /^R3/ }));
       await user.keyboard("{/Control}");
       await user.click(within(screen.getByRole("toolbar", { name: "Selected records" })).getByRole("button", { name: "Duplicate" }));
       await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records/duplicate")).toHaveLength(1));
@@ -632,8 +632,8 @@ describe("KanbanView", () => {
       const { api } = withTwoDeletes();
       await screen.findByRole("listitem", { name: "Stack: Todo" });
       await user.keyboard("{Control>}");
-      await user.click(screen.getByRole("button", { name: "R1" }));
-      await user.click(screen.getByRole("button", { name: "R2" }));
+      await user.click(screen.getByRole("button", { name: /^R1/ }));
+      await user.click(screen.getByRole("button", { name: /^R2/ }));
       await user.keyboard("{/Control}");
       await user.click(within(screen.getByRole("toolbar", { name: "Selected records" })).getByRole("button", { name: "Move to" }));
       await user.click(await screen.findByRole("menuitem", { name: "Done" }));
@@ -646,10 +646,10 @@ describe("KanbanView", () => {
       const user = userEvent.setup();
       setup("viewer", board(), { "GET /api/tables/tbl1/records/r3": records[2]! });
       await screen.findByRole("listitem", { name: "Stack: Todo" });
-      screen.getByRole("button", { name: "R3" }).focus();
+      screen.getByRole("button", { name: /^R3/ }).focus();
       await user.keyboard("{Delete}x");
       expect(screen.queryByRole("toolbar", { name: "Selected records" })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "R3" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^R3/ })).toBeInTheDocument();
     });
   });
 
@@ -666,17 +666,17 @@ describe("KanbanView", () => {
 
     it("shows as many properties as the view asks for, three on one line by default", async () => {
       const three = crowded();
-      const card = await screen.findByRole("button", { name: "R1" });
+      const card = await screen.findByRole("button", { name: /^R1/ });
       expect(card.querySelector("[data-card-properties]")!.children).toHaveLength(3); // Effort + 2 extras; the stack field is left out
       three.unmount();
       crowded({ card_field_limit: 5 });
-      expect((await screen.findByRole("button", { name: "R1" })).querySelector("[data-card-properties]")!.children).toHaveLength(5);
+      expect((await screen.findByRole("button", { name: /^R1/ })).querySelector("[data-card-properties]")!.children).toHaveLength(5);
     });
 
     it("keeps the number of properties and the cover fit from View options as a draft", async () => {
       const user = userEvent.setup();
       crowded({ cover_field_id: F.cover.id });
-      await screen.findByRole("button", { name: "R1" });
+      await screen.findByRole("button", { name: /^R1/ });
       const panel = await openViewOptions(user);
       await user.selectOptions(within(panel).getByRole("combobox", { name: "Cover image fit" }), "fit");
       await user.click(within(panel).getByRole("button", { name: /^Properties/ }));
@@ -688,7 +688,7 @@ describe("KanbanView", () => {
     it("explains the cover fit setting is waiting for a cover", async () => {
       const user = userEvent.setup();
       crowded();
-      await screen.findByRole("button", { name: "R1" });
+      await screen.findByRole("button", { name: /^R1/ });
       await openViewOptions(user);
       expect(await screen.findByRole("combobox", { name: "Cover image fit" })).toBeDisabled();
       expect(screen.getByText("Choose a cover image first.")).toBeInTheDocument();

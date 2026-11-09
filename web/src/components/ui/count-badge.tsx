@@ -1,6 +1,6 @@
 import { cn } from "@/lib/cn";
 
-/** Hidden from assistive technology: the button it sits on carries the count in its name ("Comments (3)"). */
+/** Hidden from assistive technology: the button it sits on carries the count in its name ("Comments, 3"). */
 export function CountBadge({ count, className }: { count: number; className?: string }) {
   if (count <= 0) return null;
   return (

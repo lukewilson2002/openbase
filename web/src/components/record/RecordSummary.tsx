@@ -13,6 +13,7 @@ import type { FormatCtx } from "@/lib/cells/format";
 import { displayShapeOf } from "@/lib/cells/kinds";
 import { descriptionText, fieldsToShow, isDescriptionField } from "@/views/common/cardFields";
 import { CellValue } from "./CellValue";
+import { PlainValues } from "./plainValues";
 import { CompactLinksProvider } from "./linked/LinkedRecords";
 
 /** Labels a summary shows at most (`detailed`: the extra fields after them). */
@@ -59,10 +60,12 @@ export interface RecordSummaryProps {
   format: FormatCtx;
   emails?: ReadonlyMap<string, string>;
   detailed?: boolean;
+  /** Inside an option of a listbox: the values are text, with no links or buttons in them (see PlainValues). */
+  plain?: boolean;
   className?: string;
 }
 
-export function RecordSummary({ title, record, fields, descriptionField, format, emails, detailed = false, className }: RecordSummaryProps) {
+export function RecordSummary({ title, record, fields, descriptionField, format, emails, detailed = false, plain = false, className }: RecordSummaryProps) {
   const parts = record ? summaryParts(fields, record, format, { descriptionField, detailed }) : { description: "", details: [] };
   const labels = parts.details.filter(isLabel);
   const others = parts.details.filter((f) => !isLabel(f));
@@ -72,6 +75,7 @@ export function RecordSummary({ title, record, fields, descriptionField, format,
       {parts.description && <span className={cn("w-full break-words text-meta leading-snug text-muted", detailed ? "line-clamp-2" : "line-clamp-1")}>{parts.description}</span>}
       {parts.details.length > 0 && record && (
         // A link field here is a value among others: small chips, not cards of its own.
+        <PlainValues value={plain}>
         <CompactLinksProvider value>
           {labels.length > 0 && (
             <span className="flex w-full min-w-0 flex-wrap items-center gap-1">
@@ -83,11 +87,12 @@ export function RecordSummary({ title, record, fields, descriptionField, format,
           {/* The other fields each on a line, named, as in a list: "Tasks" says what the chips after it are. */}
           {others.map((f) => (
             <span key={f.id} className="flex w-full min-w-0 items-baseline gap-1.5 text-meta">
-              <span className="max-w-[50%] shrink-0 truncate text-faint">{f.name}</span>
-              <CellValue field={f} value={record.values[f.id] ?? null} format={format} emails={emails} className="min-w-0 flex-1 truncate text-meta text-muted" markdown={false} />
+              <span className="max-w-[50%] shrink-0 truncate text-muted">{f.name}</span>
+              <CellValue field={f} value={record.values[f.id] ?? null} format={format} emails={emails} className="min-w-0 flex-1 truncate text-meta text-fg" markdown={false} />
             </span>
           ))}
         </CompactLinksProvider>
+        </PlainValues>
       )}
     </span>
   );

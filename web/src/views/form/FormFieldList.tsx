@@ -134,7 +134,7 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, onR
         <button
           type="button"
           aria-expanded={open}
-          aria-label={`Edit ${field.name}`}
+          aria-label={`Edit ${shownName}`}
           onClick={() => setOpen((o) => !o)}
           className="min-w-20 flex-1 truncate rounded text-left text-ui font-medium hover:underline"
           title="Change the label, help text and conditions"

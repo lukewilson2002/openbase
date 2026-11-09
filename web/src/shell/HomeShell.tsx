@@ -65,7 +65,7 @@ function HomeHeader({ workspaceId, title, actions, variant }: Pick<HomeShellProp
   // With no workspace there is no bottom navigation, so no Collections tab with the profile row: the avatar is the way to Sign out and the rest.
   const withAccount = variant === "home" || (variant === "tab" && !workspaces.isPending && !ws);
   const account: PhoneAction[] = user
-    ? [{ id: "account", label: "Account menu", face: <Avatar name={user.name} email={user.email} size="sm" own />, onSelect: () => setProfileOpen(true) }]
+    ? [{ id: "account", label: "Account menu", face: <Avatar name={user.name} email={user.email} size="sm" own decorative />, onSelect: () => setProfileOpen(true) }]
     : [];
   const back = workspaceId ? { to: `/workspace/${workspaceId}/collections`, label: "Collections" } : { to: "/", label: "Home" };
 

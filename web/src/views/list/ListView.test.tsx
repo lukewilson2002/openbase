@@ -1,3 +1,4 @@
+import { itemLabel } from "./treeTestUtils";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -28,14 +29,14 @@ describe("ListView", () => {
   it("renders the view's groups as a nested outline with counts", async () => {
     setup();
     await screen.findByRole("tree", { name: "Grouped records" });
-    const items = screen.getAllByRole("treeitem", { name: /, \d+ records?$/ }).map((i) => [i.getAttribute("aria-level"), i.textContent]);
+    const items = screen.getAllByRole("treeitem", { name: /\d+ ?records?$/ }).map((i) => [i.getAttribute("aria-level"), i.textContent]);
     expect(items).toEqual([
-      ["1", "Todo2"],
-      ["2", "ALAda Lovelace1"], // the face's initials, then the name
-      ["2", "GHGrace Hopper1"],
-      ["1", "Doing1"],
+      ["1", "Todo2 records"],
+      ["2", "Ada Lovelace1 record"],
+      ["2", "Grace Hopper1 record"],
+      ["1", "Doing1 record"],
     ]);
-    expect(screen.getByRole("treeitem", { name: /^R1(,|$)/ })).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: /^R1/ })).toBeInTheDocument();
     expect(screen.getByText("3 items")).toBeInTheDocument();
   });
 
@@ -45,20 +46,20 @@ describe("ListView", () => {
     await screen.findByRole("tree");
     await openViewOptions(user);
     await user.click(screen.getByRole("switch", { name: "Fold all groups" }));
-    expect(screen.queryByRole("treeitem", { name: /^R1(,|$)/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("treeitem", { name: /^R1/ })).not.toBeInTheDocument();
     expect(screen.getAllByRole("treeitem")).toHaveLength(2); // only the top level is left visible
     expect(screen.getByRole("switch", { name: "Fold all groups" })).toHaveAttribute("aria-checked", "true");
     await user.click(screen.getByRole("switch", { name: "Fold all groups" }));
-    expect(screen.getByRole("treeitem", { name: /^R1(,|$)/ })).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: /^R1/ })).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("ob-list-collapsed:viw1") ?? "[]")).toEqual([]);
   });
 
   it("collapses one group and remembers it", async () => {
     const user = userEvent.setup();
     setup();
-    await user.click(await screen.findByRole("treeitem", { name: /^Todo, \d+ records?$/ }));
-    expect(screen.queryByRole("treeitem", { name: /^R1(,|$)/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("treeitem", { name: /^R3(,|$)/ })).toBeInTheDocument();
+    await user.click(await screen.findByRole("treeitem", { name: /^Todo ?\d+ ?records?$/ }));
+    expect(screen.queryByRole("treeitem", { name: /^R1/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: /^R3/ })).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("ob-list-collapsed:viw1")!)).toEqual([`${F.status.id}:s1`]);
   });
 
@@ -76,7 +77,7 @@ describe("ListView", () => {
     const user = userEvent.setup();
     const created = rec("r9", {});
     const { api } = setup("editor", outline, { records, groups }, { "POST /api/tables/tbl1/records": { records: [created] }, "GET /api/tables/tbl1/records/r9": created });
-    (await screen.findByRole("treeitem", { name: /^R3(,|$)/ })).focus();
+    (await screen.findByRole("treeitem", { name: /^R3/ })).focus();
     await user.click(screen.getByRole("button", { name: "Add record" }));
     await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
     expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ values: { f_status: "s2" } }] });
@@ -98,7 +99,7 @@ describe("ListView", () => {
     setup("commenter", outline, { records, groups }, { "GET /api/tables/tbl1/records/r1": records[0]! });
     await screen.findByRole("tree");
     expect(screen.queryByRole("treeitem", { name: /^New record/ })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("treeitem", { name: /^R1(,|$)/ }));
+    await user.click(screen.getByRole("treeitem", { name: /^R1/ }));
     expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/r1");
   });
 
@@ -130,7 +131,7 @@ describe("ListView", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       renderView(ListView, { schema: projectSchema("editor", [outline]), viewId: "viw1", phone: true, routes: { "POST /api/views/viw1/query": queryHandler({ records, groups }) } as never });
-      const row = await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
+      const row = await screen.findByRole("treeitem", { name: /^R1/ });
       const touch = { pointerType: "touch", pointerId: 1, clientX: 40, clientY: 40, button: 0, isPrimary: true };
       fireEvent.pointerDown(row, touch);
       await act(async () => void (await vi.advanceTimersByTimeAsync(300)));
@@ -166,9 +167,9 @@ describe("ListView", () => {
     it("is chosen among the properties in View options and kept as a draft", async () => {
       const user = userEvent.setup();
       const { api } = setupNotes({});
-      await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
+      await screen.findByRole("treeitem", { name: /^R1/ });
       // Nothing is a description until the view picks one: Notes is an ordinary field.
-      expect(screen.getByRole("treeitem", { name: /^R1(,|$)/ }).querySelector("[data-row-description]")).toBeNull();
+      expect(screen.getByRole("treeitem", { name: /^R1/ }).querySelector("[data-row-description]")).toBeNull();
       await openOptionsScreen(user, "Properties");
       const select = await screen.findByRole("combobox", { name: "Description property" });
       expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["No description", "Notes"]);
@@ -179,13 +180,13 @@ describe("ListView", () => {
 
     it("reads an excerpt right under the title and leaves the field out of the row", async () => {
       setupNotes({ description_field_id: notes.id });
-      const row = await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
+      const row = await screen.findByRole("treeitem", { name: /^R1/ });
       const text = row.querySelector("[data-row-description]")!;
       expect(text.textContent).toBe("Runs entirely on local models: - A system one model - A local LLM");
       expect(text.className).toContain("line-clamp-2");
       expect(text.previousElementSibling?.textContent).toBe("R1");
       expect(within(row).queryByText("Notes")).not.toBeInTheDocument();
-      expect(screen.getByRole("treeitem", { name: /^R2(,|$)/ }).querySelector("[data-row-description]")).toBeNull();
+      expect(screen.getByRole("treeitem", { name: /^R2/ }).querySelector("[data-row-description]")).toBeNull();
     });
   });
 });
@@ -198,15 +199,15 @@ describe("ListView selection, menu and order", () => {
   it("selects rows with Ctrl-click and deletes them from the bar after asking", async () => {
     const user = userEvent.setup();
     const { api } = flatSetup("editor", { "DELETE /api/tables/tbl1/records": null });
-    await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
+    await screen.findByRole("treeitem", { name: /^R1/ });
     await user.keyboard("{Control>}");
-    await user.click(screen.getByRole("treeitem", { name: /^R1(,|$)/ }));
-    await user.click(screen.getByRole("treeitem", { name: /^R3(,|$)/ }));
+    await user.click(screen.getByRole("treeitem", { name: /^R1/ }));
+    await user.click(screen.getByRole("treeitem", { name: /^R3/ }));
     await user.keyboard("{/Control}");
     expect(screen.getByTestId("where")).not.toHaveTextContent("/r/");
     const bar = screen.getByRole("toolbar", { name: "Selected records" });
     expect(bar).toHaveTextContent("2 selected");
-    expect(screen.getByRole("treeitem", { name: /^R1(,|$)/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("treeitem", { name: /^R1/ })).toHaveAttribute("aria-selected", "true");
     await user.click(within(bar).getByRole("button", { name: /Delete/ }));
     expect(await screen.findByRole("alertdialog")).toHaveTextContent("Delete 2 records?");
     await user.click(screen.getByRole("button", { name: "Delete 2 records" }));
@@ -216,8 +217,8 @@ describe("ListView selection, menu and order", () => {
   it("duplicates from the bar and from the row menu", async () => {
     const user = userEvent.setup();
     const { api } = flatSetup("editor", { "POST /api/tables/tbl1/records/duplicate": { records: [rec("c1", {})] } });
-    await screen.findByRole("treeitem", { name: /^R2(,|$)/ });
-    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /^R2(,|$)/ }) });
+    await screen.findByRole("treeitem", { name: /^R2/ });
+    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /^R2/ }) });
     const menu = await screen.findByRole("menu", { name: "Record menu" });
     expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Open record", "Select", "Duplicate record", "Move to start", "Delete record"]);
     await user.click(within(menu).getByRole("menuitem", { name: "Duplicate record" }));
@@ -227,8 +228,8 @@ describe("ListView selection, menu and order", () => {
   it("deletes the focused row with the Delete key, with an Undo toast", async () => {
     const user = userEvent.setup();
     const { api } = flatSetup("editor", { "DELETE /api/tables/tbl1/records": null });
-    await screen.findByRole("treeitem", { name: /^R2(,|$)/ });
-    screen.getByRole("treeitem", { name: /^R2(,|$)/ }).focus();
+    await screen.findByRole("treeitem", { name: /^R2/ });
+    screen.getByRole("treeitem", { name: /^R2/ }).focus();
     await user.keyboard("{Delete}");
     await waitFor(() => expect(api.callsTo("DELETE /api/tables/tbl1/records")[0]!.body).toEqual({ ids: ["r2"] }));
     expect(await screen.findByText("Record deleted")).toBeInTheDocument();
@@ -245,23 +246,23 @@ describe("ListView selection, menu and order", () => {
         return { records: [] };
       },
     });
-    await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
-    screen.getByRole("treeitem", { name: /^R1(,|$)/ }).focus();
+    await screen.findByRole("treeitem", { name: /^R1/ });
+    screen.getByRole("treeitem", { name: /^R1/ }).focus();
     await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
     await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records/move")[0]!.body).toEqual({ ids: ["r1"], before_id: null, after_id: "r2" }));
-    await waitFor(() => expect(screen.getAllByRole("treeitem", { name: /^R\d(,|$)/ }).map((b) => b.getAttribute("aria-label"))).toEqual(["R2", "R1", "R3"]));
+    await waitFor(() => expect(screen.getAllByRole("treeitem", { name: /^R\d/ }).map(itemLabel)).toEqual(["R2", "R1", "R3"]));
     expect(await screen.findByText("Record moved")).toBeInTheDocument();
-    expect(screen.getByRole("treeitem", { name: /^R1(,|$)/ })).toHaveFocus();
+    expect(screen.getByRole("treeitem", { name: /^R1/ })).toHaveFocus();
   });
 
   it("does not offer to move rows when the view sorts", async () => {
     const user = userEvent.setup();
     const sorted = viewWithConfig("viw1", "list", { sorts: [{ field_id: F.name.id, direction: "asc" }] });
     const { api } = flatSetup("editor", { "POST /api/tables/tbl1/records/move": { records: [] } }, undefined, sorted);
-    await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
-    screen.getByRole("treeitem", { name: /^R1(,|$)/ }).focus();
+    await screen.findByRole("treeitem", { name: /^R1/ });
+    screen.getByRole("treeitem", { name: /^R1/ }).focus();
     await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
-    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /^R2(,|$)/ }) });
+    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /^R2/ }) });
     expect(screen.queryByRole("menuitem", { name: "Move to start" })).not.toBeInTheDocument();
     expect(api.callsTo("POST /api/tables/tbl1/records/move")).toHaveLength(0);
   });
@@ -275,15 +276,15 @@ describe("ListView selection, menu and order", () => {
     const { api } = setup("editor", byStatus, { records: rows, groups: heads }, {
       "PATCH /api/tables/tbl1/records": () => new Promise(() => undefined),
     });
-    await screen.findByRole("treeitem", { name: /^R2(,|$)/ });
-    screen.getByRole("treeitem", { name: /^R2(,|$)/ }).focus();
+    await screen.findByRole("treeitem", { name: /^R2/ });
+    screen.getByRole("treeitem", { name: /^R2/ }).focus();
     await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
     await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
     expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ id: "r2", values: { [F.status.id]: "s2" } }] });
-    expect(screen.getByRole("treeitem", { name: /^Todo, \d+ records?$/ })).toHaveTextContent("1");
-    expect(screen.getByRole("treeitem", { name: /^Doing, \d+ records?$/ })).toHaveTextContent("2");
+    expect(screen.getByRole("treeitem", { name: /^Todo ?\d+ ?records?$/ })).toHaveTextContent("1");
+    expect(screen.getByRole("treeitem", { name: /^Doing ?\d+ ?records?$/ })).toHaveTextContent("2");
     // The rows follow the headings in the tree, so the order of the tree items says who is in which group.
-    expect(screen.getAllByRole("treeitem").map((b) => b.getAttribute("aria-label"))).toEqual(["Todo, 1 record", "R1", "New record in Todo", "Doing, 2 records", "R2", "R3", "New record in Doing"]);
+    expect(screen.getAllByRole("treeitem").map(itemLabel)).toEqual(["Todo, 1 record", "R1", "New record in Todo", "Doing, 2 records", "R2", "R3", "New record in Doing"]);
   });
 });
 
@@ -295,7 +296,7 @@ describe("ListView record page", () => {
     const rows = [rec("r1", { [F.status.id]: "s1" }), rec("r2", { [F.status.id]: "s1" }), rec("r3", { [F.status.id]: "s2" }), rec("r4", { [F.status.id]: "s3" })];
     const heads = [header(0, F.status.id, "s1", "Todo", 0, 2, "s1"), header(0, F.status.id, "s2", "Doing", 2, 1, "s2"), header(0, F.status.id, "s3", "Done", 3, 1, "s3")];
     setup("editor", byStatus, { records: rows, groups: heads });
-    await user.click(await screen.findByRole("treeitem", { name: /^R2(,|$)/ }));
+    await user.click(await screen.findByRole("treeitem", { name: /^R2/ }));
     expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/r2");
     // r3 is in the folded group: next after r2 is r4.
     expect(JSON.parse(screen.getByTestId("trail").textContent!)).toMatchObject({ order: ["r1", "r2", "r4"] });
@@ -325,9 +326,9 @@ describe("ListView prefix", () => {
 
   it("shows a box on every row, ticked or not, and leaves the field out of the row's other values", async () => {
     setupPrefix({ list: { prefix_field_id: done.id, parent_field_id: null } });
-    await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
+    await screen.findByRole("treeitem", { name: /R1/ });
     expect(screen.getAllByRole("checkbox", { name: /^Done: R\d$/ }).map((b) => b.getAttribute("aria-checked"))).toEqual(["true", "false", "false"]);
-    expect(within(screen.getByRole("treeitem", { name: /^R1(,|$)/ })).queryByText("Done")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("treeitem", { name: /R1/ })).queryByText("Done")).not.toBeInTheDocument();
   });
 
   it("ticks a row off in place and saves it, without opening the record", async () => {
@@ -352,7 +353,7 @@ describe("ListView prefix", () => {
   it("is chosen in the view's settings from the checkbox, choice and one-person fields, and kept as a draft", async () => {
     const user = userEvent.setup();
     const { api } = setupPrefix({});
-    await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
+    await screen.findByRole("treeitem", { name: /^R1/ });
     expect(screen.queryByRole("checkbox", { name: /^Done:/ })).not.toBeInTheDocument();
     await openViewOptions(user);
     const select = await screen.findByRole("combobox", { name: "Prefix" });
@@ -371,8 +372,8 @@ describe("ListView sub-items", () => {
 
   it("nests records under the record they link to and keeps the link field out of the row", async () => {
     setup("editor", nestedView, { records: tree, groups: [] });
-    await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
-    expect(screen.getAllByRole("treeitem", { name: /^R\d(,|$)/ }).map((i) => [i.getAttribute("aria-label"), i.getAttribute("aria-level")])).toEqual([
+    await screen.findByRole("treeitem", { name: /^R1/ });
+    expect(screen.getAllByRole("treeitem", { name: /^R\d/ }).map((i) => [itemLabel(i), i.getAttribute("aria-level")])).toEqual([
       ["R1", "1"],
       ["R2", "2"],
       ["R3", "3"],
@@ -385,31 +386,31 @@ describe("ListView sub-items", () => {
     // r3 is a sub-item of r1 but is listed after r2: it is drawn right under r1.
     const listed = [rec("r1", {}), rec("r2", {}), rec("r3", parentOf("r1"))];
     setup("editor", nestedView, { records: listed, groups: [] });
-    await user.click(await screen.findByRole("treeitem", { name: /^R1(,|$)/ }));
+    await user.click(await screen.findByRole("treeitem", { name: /^R1/ }));
     expect(JSON.parse(screen.getByTestId("trail").textContent!)).toMatchObject({ order: ["r1", "r3", "r2"] });
   });
 
   it("folds a parent and remembers it", async () => {
     const user = userEvent.setup();
     setup("editor", nestedView, { records: tree, groups: [] });
-    const parent = await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
+    const parent = await screen.findByRole("treeitem", { name: /^R1/ });
     parent.focus();
     await user.keyboard("{ArrowLeft}");
-    expect(screen.queryByRole("treeitem", { name: /^R2(,|$)/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("treeitem", { name: /^R3(,|$)/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("treeitem", { name: /^R2/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("treeitem", { name: /^R3/ })).not.toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("ob-list-folded:viw1")!)).toEqual(["r1"]);
   });
 
   it("indents a row under the one above with Tab, saving the link, and outdents it with Shift+Tab", async () => {
     const user = userEvent.setup();
     const { api } = setup("editor", nestedView, { records: tree, groups: [] }, { "PATCH /api/tables/tbl1/records": () => new Promise(() => undefined) });
-    const last = await screen.findByRole("treeitem", { name: /^R4(,|$)/ });
+    const last = await screen.findByRole("treeitem", { name: /^R4/ });
     last.focus();
     await user.keyboard("{Tab}");
     await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
     expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ id: "r4", values: { [F.deps.id]: ["r1"] } }] });
     // Shown under R1 at once.
-    await waitFor(() => expect(screen.getByRole("treeitem", { name: /^R4(,|$)/ })).toHaveAttribute("aria-level", "2"));
+    await waitFor(() => expect(screen.getByRole("treeitem", { name: /^R4/ })).toHaveAttribute("aria-level", "2"));
     await user.keyboard("{Shift>}{Tab}{/Shift}");
     await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(2));
     expect(api.callsTo("PATCH /api/tables/tbl1/records")[1]!.body).toMatchObject({ records: [{ id: "r4", values: { [F.deps.id]: null } }] });
@@ -419,15 +420,15 @@ describe("ListView sub-items", () => {
     const user = userEvent.setup();
     const created = rec("r9", parentOf("r2"));
     const { api } = setup("editor", nestedView, { records: tree, groups: [] }, { "PATCH /api/tables/tbl1/records": { records: [] }, "POST /api/tables/tbl1/records": { records: [created] }, "GET /api/tables/tbl1/records/r9": created });
-    await screen.findByRole("treeitem", { name: /^R3(,|$)/ });
-    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /^R3(,|$)/ }) });
+    await screen.findByRole("treeitem", { name: /^R3/ });
+    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /^R3/ }) });
     let menu = await screen.findByRole("menu", { name: "Record menu" });
     expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Open record", "Select", "Duplicate record", "Move to start", "Add sub-item", "Outdent", "Delete record"]);
     await user.click(within(menu).getByRole("menuitem", { name: "Outdent" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
     expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ id: "r3", values: { [F.deps.id]: ["r1"] } }] });
 
-    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /^R2(,|$)/ }) });
+    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /^R2/ }) });
     menu = await screen.findByRole("menu", { name: "Record menu" });
     await user.click(within(menu).getByRole("menuitem", { name: "Add sub-item" }));
     await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
@@ -438,8 +439,8 @@ describe("ListView sub-items", () => {
     const user = userEvent.setup();
     const flat = viewWithConfig("viw1", "list", {});
     const { api } = setup("editor", flat, { records: tree, groups: [] });
-    await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
-    expect(screen.getByRole("treeitem", { name: /^R2(,|$)/ })).toHaveAttribute("aria-level", "1");
+    await screen.findByRole("treeitem", { name: /^R1/ });
+    expect(screen.getByRole("treeitem", { name: /^R2/ })).toHaveAttribute("aria-level", "1");
     await openViewOptions(user);
     const select = await screen.findByRole("combobox", { name: "Sub-items" });
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["No sub-items", "Depends on"]);
@@ -458,9 +459,9 @@ describe("ListView groups past the record cap", () => {
   it("loads the rows of a group that runs past the cap when it is opened, and says nothing is hidden", async () => {
     const log: { offset?: number | null; limit?: number | null }[] = [];
     setup("editor", byStatus, { records: all, groups: heads }, { "POST /api/views/viw1/query": queryHandler({ records: all, groups: heads }, log as never) });
-    await screen.findByRole("treeitem", { name: /^Doing, 40 records$/ });
+    await screen.findByRole("treeitem", { name: /^Doing ?40 ?records$/ });
     // All 40 rows are drawn, the first 10 from the loaded records and the rest fetched from where they end.
-    await waitFor(() => expect(screen.getAllByRole("treeitem", { name: /^M(49[89]\d|50[0-2]\d)(,|$)/ })).toHaveLength(40));
+    await waitFor(() => expect(screen.getAllByRole("treeitem", { name: /^M(49[89]\d|50[0-2]\d)/ })).toHaveLength(40));
     expect(log.some((q) => q.offset === 5_000 && q.limit === 30)).toBe(true);
     expect(screen.queryByRole("treeitem", { name: "Loading records" })).not.toBeInTheDocument();
     expect(screen.queryByText(/Showing the first/)).not.toBeInTheDocument();
@@ -472,10 +473,10 @@ describe("ListView groups past the record cap", () => {
     const log: { offset?: number | null; limit?: number | null }[] = [];
     const user = userEvent.setup();
     setup("editor", byStatus, { records: more, groups: wholly }, { "POST /api/views/viw1/query": queryHandler({ records: more, groups: wholly }, log as never) });
-    await waitFor(() => expect(screen.getAllByRole("treeitem", { name: /^N5\d{3}(,|$)/ })).toHaveLength(200));
-    expect(screen.getAllByRole("treeitem", { name: /^N5\d{3}(,|$)/ })[0]).toHaveAccessibleName("N5000");
+    await waitFor(() => expect(screen.getAllByRole("treeitem", { name: /^N5\d{3}/ })).toHaveLength(200));
+    expect(screen.getAllByRole("treeitem", { name: /^N5\d{3}/ })[0]).toHaveAccessibleName(/^N5000/);
     await user.click(screen.getByRole("treeitem", { name: "Show 30 more records" }));
-    await waitFor(() => expect(screen.getAllByRole("treeitem", { name: /^N5\d{3}(,|$)/ })).toHaveLength(230));
+    await waitFor(() => expect(screen.getAllByRole("treeitem", { name: /^N5\d{3}/ })).toHaveLength(230));
     expect(screen.getByRole("treeitem", { name: "New record in Doing" })).toBeInTheDocument();
   }, 20_000);
 });

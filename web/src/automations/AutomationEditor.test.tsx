@@ -252,7 +252,7 @@ describe("actions round-trip into the update payload", () => {
     const { api } = await setup(makeAutomation({ actions: [{ type: "create_record", table_id: "tbl1", values: { fld1: "x" } }] }));
     const c = card(1);
     await userEvent.selectOptions(within(c).getByLabelText("Add a property"), "fld3");
-    await userEvent.click(within(c).getByRole("button", { name: "Status" }));
+    await userEvent.click(within(c).getByRole("button", { name: /^Status:/ }));
     await userEvent.click(within(await screen.findByRole("listbox", { name: "Status" })).getByRole("option", { name: "Done" }).querySelector("button")!);
     expect((await save(api)).actions).toEqual([{ type: "create_record", table_id: "tbl1", values: { fld1: "x", fld3: "chs3" } }]);
   });

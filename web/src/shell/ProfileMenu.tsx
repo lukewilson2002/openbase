@@ -41,8 +41,8 @@ function ProfileSheetRow() {
   if (!user) return null;
   return (
     <>
-      <button type="button" aria-label="Account menu" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)} className={rowClass}>
-        <Avatar name={user.name} email={user.email} size="sm" own />
+      <button type="button" aria-label={`Account menu, ${user.name}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)} className={rowClass}>
+        <Avatar name={user.name} email={user.email} size="sm" own decorative />
         <span className="min-w-0 flex-1 truncate text-ui font-medium">{user.name}</span>
         <Icon icon={ChevronsUpDown} className="text-muted" />
       </button>
@@ -61,13 +61,9 @@ function ProfileDropdown() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        {/* "Account menu" stays the accessible name: tests and scripts find the menu by it. */}
-        <button
-          type="button"
-          aria-label="Account menu"
-          className={rowClass}
-        >
-          <Avatar name={user.name} email={user.email} size="sm" own />
+        {/* "Account menu" starts the accessible name, and the drawn name is in it (WCAG 2.5.3): tests and scripts find the menu by it. */}
+        <button type="button" aria-label={`Account menu, ${user.name}`} className={rowClass}>
+          <Avatar name={user.name} email={user.email} size="sm" own decorative />
           <span className="min-w-0 flex-1 truncate text-ui font-medium">{user.name}</span>
           <Icon icon={ChevronsUpDown} className="text-muted" />
         </button>
