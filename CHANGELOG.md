@@ -258,6 +258,15 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Security
 
+- **Undo, text-to-user conversion and activity lookups keep to what the caller may see.** `POST
+  /api/tables/{id}/records/restore` (Undo) now applies the trash's rule: an Editor can bring back only the
+  records they deleted themselves; a Creator can bring back any. (Behaviour change.) Changing a property to
+  the User type keeps the users of a User, Created by or Last modified by property and clears the cells of
+  any other type, since text that names a user id was never checked against the folder's collaborators and
+  the Airtable-compatible API would show that account's name and email. (Behaviour change.) The `person`
+  argument of the MCP tool `list_activity` is resolved only among people who can open a folder the token
+  reaches, so a limited token no longer learns who else shares the owner's other workspaces.
+
 - **PDF previews, automation templates, trashed bases and CSV cells are bounded.** A PDF is
   rendered by a child process with its memory capped, so a file that states a huge image cannot end the
   server (it gets no preview). An automation action stops at 4 MB of copied values instead of copying a

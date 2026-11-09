@@ -433,6 +433,9 @@ ceremony state (not the credentials) is kept in memory, which suits the single-n
 | Automation templates | the values copied out of a webhook body or earlier step plus rendered text: 4 MB per action (each is measured before it is copied); one rendered string 1 MB; a dot-only value in a URL and a comma or semicolon in a recipient value are refused |
 | Automations of a trashed base or workspace | webhook tokens answer 404, schedules do not fire, queued and retried runs fail until it is restored |
 | CSV export | a cell gets a leading `'` when it starts with `=`, `+`, `-`, `@`, tab or CR, and one after each inner `;` followed by such a character (spreadsheets with `;` as list separator) |
+| Undo (`POST /api/tables/{id}/records/restore`) | the trash's rule: below Creator, only records the caller deleted themselves |
+| Converting a property to User | only User, Created by and Last modified by values carry over; text is cleared, so a stored id is always one a write checked against the folder's collaborators |
+| `list_activity` `person` | resolved among people who can open a folder the token reaches; the not-found error lists only those |
 | Group headers in a public share response | 1,000, key/label cut to 200 characters, raw value never sent, user-field keys replaced by placeholders |
 
 ### What a share link exposes

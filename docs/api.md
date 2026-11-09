@@ -154,6 +154,7 @@ some projects who creates or duplicates a project gets it added to their list.
   between them converts its values to show the same words: rich text becomes the plain
   text it shows (a mention reads `@Name`, a link its text, lines and list items kept), and
   plain text becomes Markdown with the characters that would be formatting escaped.
+  Changing a field to `user` keeps the people of a `user`, `created_by` or `last_modified_by` field and clears any other type's values.
   Turning `multiline` off joins each value's lines with spaces. Before v0.8 these types
   were `single_line_text` and `long_text` (with a `rich` option); both names are still
   accepted on input, and `long_text` always means `rich_text` now.
