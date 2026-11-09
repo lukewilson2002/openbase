@@ -63,6 +63,11 @@ pub fn convert(
         ) => {
             return renormalize(&id_list(stored, !o.multiple));
         }
+        // Text would be read back as ids that were never checked against the
+        // base's collaborators, and a v1 read resolves any stored id to a
+        // name and email (F46, F54, F65). Only a field that already holds
+        // users carries them over.
+        (_, FieldKind::User(_)) => return None,
         (FieldKind::Attachment(_), FieldKind::Attachment(_)) => return renormalize(stored),
         (_, FieldKind::Attachment(_)) => return None,
         (

@@ -217,6 +217,11 @@ async fn restore(
         .db
         .write(move |tx| {
             let ctx = editor_ctx(tx, &actor, &table_id)?;
+            // The trash's own rule, so Undo cannot bring back what an Editor
+            // could not restore from the trash (F12).
+            for id in &body.ids {
+                crate::store::trash::authorize(tx, &actor, "record", id)?;
+            }
             let outcome = write::restore_records(tx, &ctx, &table_id, &body.ids)?;
             let ids = outcome.target().restored.to_vec();
             let records = record_store::load_dtos(tx, &table_id, &ids, ctx.timezone)?;

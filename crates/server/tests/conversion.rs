@@ -278,6 +278,29 @@ async fn a_link_keeps_its_ids_when_only_its_options_change() {
 }
 
 #[tokio::test]
+async fn text_naming_a_user_id_does_not_become_a_user_cell() {
+    let f = Fixture::new().await;
+    let t = f.table_id.clone();
+    let text = f
+        .add_field(&t, json!({ "name": "Who", "type": "text", "options": {} }))
+        .await;
+    let tid = sid(&text["id"]).to_string();
+    // An account that shares no workspace with the base (F46, F54, F65).
+    let stranger = f.app.user("stranger@example.com", "Stranger");
+    let sid_ = stranger.user_id.clone().unwrap();
+    let rec = f.create(&t, json!({ &tid: sid_ })).await;
+    let rid = sid(&rec["id"]).to_string();
+    convert(
+        &f,
+        &text,
+        json!({ "type": "user", "options": { "multiple": true } }),
+    )
+    .await
+    .assert_status(200);
+    assert!(f.stored(&rid, &tid).is_null(), "{}", f.stored(&rid, &tid));
+}
+
+#[tokio::test]
 async fn users_and_attachments_convert_to_text() {
     let f = Fixture::new().await;
     let t = f.table_id.clone();

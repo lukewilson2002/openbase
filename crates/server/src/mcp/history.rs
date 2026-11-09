@@ -347,16 +347,22 @@ async fn list_activity(ctx: &McpCtx, a: ActivityArgs) -> ToolResult {
         .db
         .read(move |c| {
             let places = activity::accessible_places(c, &actor, None, None, None)?;
+            // Only people who can open a project this token reaches: a name
+            // or an address must not tell a limited token who else shares the
+            // owner's other workspaces (F21, F22, F33).
             let people: Vec<(String, String, String)> = if want_person {
-                let mut stmt = c.prepare(
-                    "SELECT DISTINCT u.id, u.name, u.email FROM users u
-                     JOIN workspace_members m ON m.user_id = u.id
-                     WHERE m.workspace_id IN
-                       (SELECT workspace_id FROM workspace_members WHERE user_id = ?1)
-                     ORDER BY u.name, u.id",
-                )?;
-                stmt.query_map([&actor.user_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
-                    .collect::<Result<_, _>>()?
+                let mut seen = BTreeSet::new();
+                let mut people = Vec::new();
+                for base_id in distinct(&places, |p| &p.base_id).iter().map(|p| &p.base_id) {
+                    let base = crate::store::bases::live_base(c, base_id)?;
+                    for who in crate::store::bases::collaborators(c, &base)? {
+                        if seen.insert(who.id.clone()) {
+                            people.push((who.id, who.name, who.email));
+                        }
+                    }
+                }
+                people.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+                people
             } else {
                 Vec::new()
             };

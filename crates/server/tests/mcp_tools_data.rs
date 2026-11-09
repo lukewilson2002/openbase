@@ -1135,6 +1135,41 @@ async fn list_activity_follows_changes_and_comments_across_projects_by_name() {
 }
 
 #[tokio::test]
+async fn list_activity_resolves_people_only_among_those_of_the_projects_a_token_reaches() {
+    let r = Rig::new().await;
+    let a = &r.agent;
+    let b = r.base.as_str();
+    let other = a
+        .call(
+            "create_project",
+            json!({"workspace_id": r.ws, "name": "Elsewhere"}),
+        )
+        .await["base"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // Someone who can open only the project the token cannot reach (F21, F22, F33).
+    let carol = r
+        .app()
+        .user("carol-elsewhere@example.com", "Carol Elsewhere");
+    r.app().grant_base_role(&carol, &other, "editor");
+    let carol_id = carol.user_id.clone().unwrap();
+
+    let limited = r.agent_with(json!({"write": false, "base_ids": [b]})).await;
+    for who in ["Carol", "carol-elsewhere@example.com", carol_id.as_str()] {
+        let e = limited.fails("list_activity", json!({"person": who})).await;
+        assert!(e.contains("not found"), "{who}: {e}");
+        assert!(
+            !e.contains("Carol Elsewhere") && !e.replace(who, "").contains(&carol_id),
+            "{who} leaked: {e}"
+        );
+    }
+    // The unlimited token still finds them.
+    a.call("list_activity", json!({"person": "Carol Elsewhere"}))
+        .await;
+}
+
+#[tokio::test]
 async fn history_pages_and_notifications_can_be_marked_read() {
     let r = Rig::new().await;
     let a = &r.agent;

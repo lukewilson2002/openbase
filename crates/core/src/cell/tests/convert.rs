@@ -210,6 +210,8 @@ fn meaningful_pairs() {
             json!(["usr1", "usr2"]),
             Some(json!("Ada Lovelace, Grace Hopper")),
         ),
+        (Text, User, json!("usr1"), None),
+        (MultipleSelect, User, json!(["usr1"]), None),
         (CreatedBy, User, json!("usr1"), Some(json!(["usr1"]))),
         (LastModifiedBy, User, json!("usr2"), Some(json!(["usr2"]))),
         (CreatedBy, Text, json!("usr1"), Some(json!("Ada Lovelace"))),

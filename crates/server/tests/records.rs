@@ -1394,6 +1394,24 @@ async fn role_matrix_for_record_writes() {
 }
 
 #[tokio::test]
+async fn undo_restores_for_an_editor_only_the_records_they_deleted_themselves() {
+    let f = Fixture::new().await;
+    let editor = f.member("undo-editor@example.com", Role::Editor);
+    let creator = f.member("undo-creator@example.com", Role::Creator);
+    let url = format!("{}/restore", records_url(&f.table_id));
+    let theirs = sid(&f.create(&f.table_id, json!({})).await["id"]).to_string();
+    f.delete_records(&f.table_id, &[&theirs])
+        .await
+        .assert_status(204);
+    // The trash hides it from an Editor, so Undo must not bring it back either.
+    let r = f.app.post(&editor, &url, json!({ "ids": [theirs] })).await;
+    assert_eq!(r.status.as_u16(), 403);
+    assert!(f.columns(&theirs).4.is_some(), "still in the trash");
+    let r = f.app.post(&creator, &url, json!({ "ids": [theirs] })).await;
+    assert_eq!(r.status.as_u16(), 200);
+}
+
+#[tokio::test]
 async fn strangers_anonymous_callers_and_base_guests() {
     let f = Fixture::new().await;
     let rec = f.create(&f.table_id, json!({})).await;
