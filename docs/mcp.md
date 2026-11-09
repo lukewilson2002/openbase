@@ -20,7 +20,7 @@ yourself if you would rather describe the work to an agent.
   API tokens can never be read or changed through a token, whatever its scope. The
   tools cannot create, list or delete tokens either. Even an administrator's token cannot
   create a password-reset link, switch off someone's 2FA, remove someone's passkeys, give a
-  new user a password or set the SMTP password.
+  new user a password, grant the administrator role, point outgoing mail at another server or set the SMTP password.
 
 **The app's words and the tools' names.** The web app says Workspace, Folder, Collection, Record,
 Property, View and Layout (Board for kanban). The tools keep the names agents already use: a folder is
@@ -646,22 +646,32 @@ inviting a new person: a new account has no data.
 **Email settings.** The three email tools let an agent set up or check outgoing email
 without the web app, with one deliberate gap: **the SMTP password cannot be set or removed
 by a token** (the tool has no such argument, and `api_request` is refused with 403),
-because it is a credential; a person types it under **Admin → Email**. For the same reason,
-while an SMTP password is in use (stored, or from `OPENBASE_SMTP_PASSWORD`) a token cannot
-change the host, port, security mode or username: that would make the server send the
-password to a server of the agent's choosing. It can still change the sender address, and
-switch email off by clearing the host. Fields fixed by an `OPENBASE_SMTP_*` environment
+because it is a credential; a person types it under **Admin → Email**. For the same reason
+a token cannot change the host, port, security mode or username, whether or not a password
+is stored: password-reset and invitation mail travels through that server, so a token that
+could choose it could read the reset link of any account (and, with a password stored, would
+receive that too). **This is a change:** earlier versions let a token set these while no
+password was in use; the request now answers 403, and a person sets the connection under
+**Admin → Email** while signed in. A token can still change the sender address, and switch
+email off by clearing the host. Fields fixed by an `OPENBASE_SMTP_*` environment
 variable are read-only for everyone. A typical sequence is `admin_get_email_settings`,
-`admin_update_email_settings {host, port, security, username}`, a person enters the
+`admin_update_email_settings {from}`; a person enters the host, port, security, username and
 password in the app, then `admin_send_test_email`.
+
+**Granting the administrator role is session-only.** `admin_create_user` and `admin_update_user`
+refuse `is_admin: true` with 403 (revoking the role stays open), because an administrator
+session unlocks every credential action and a token could claim a new account through
+"Forgot password" or an invite. **This is a change:** earlier versions allowed it. An
+administrator grants the role under **Admin → Users** while signed in; creating ordinary users
+is unchanged.
 
 | Tool | What it does |
 |---|---|
 | `admin_list_users` | All users with role, status, 2FA flag and passkey count |
-| `admin_create_user` | New account (name, email, optional administrator role) **without a usable password**: the tool cannot set one or return a reset link (see below) |
-| `admin_update_user` | Rename, deactivate or reactivate, grant or revoke the administrator role (no way to switch off someone's 2FA) |
+| `admin_create_user` | New account (name, email) **without a usable password**; the administrator role cannot be granted by a token: the tool cannot set one or return a reset link (see below) |
+| `admin_update_user` | Rename, deactivate or reactivate, revoke the administrator role (granting it is session-only; no way to switch off someone's 2FA) |
 | `admin_get_email_settings` | The SMTP settings: on or off, host, port, security, username, sender, whether a password is stored (never the password), where each setting comes from, and the read-only email budgets |
-| `admin_update_email_settings` | Change host, port, security, username or sender (effective at once). Never the password; and while a password is in use not the host, port, security or username either |
+| `admin_update_email_settings` | Change the sender, or clear the host to switch email off (effective at once). Never the password, and never the host, port, security or username (reset mail goes through them): a person sets those in the web app |
 | `admin_send_test_email` | Send a test email (to the administrator, or `to`); a failure comes back as an error with the real SMTP error text |
 | `admin_audit_log` | The audit log, newest first, paged |
 | `admin_stats` | Counts, sizes, last backup, version |

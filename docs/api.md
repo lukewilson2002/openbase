@@ -181,13 +181,18 @@ over the account or mint a longer-lived replacement. `GET /api/tokens/whoami` re
 credential, so an instance administrator's `manage` token cannot create a password-reset
 link for any user (that would be an account takeover), cannot switch off a user's
 two-factor authentication, cannot remove a user's passkeys, and cannot set the SMTP password. `POST /api/admin/users` with a
-token creates the account (name, email, optional administrator role) but without a usable
+token creates the account (name, email) but without a usable
 password: it refuses `password` and returns no `reset_link`; a signed-in administrator
 creates the reset link in the app, or the person uses "Forgot password" when email is on.
+Granting the administrator role is session-only as well: `is_admin: true` in `POST /api/admin/users` or
+`PATCH /api/admin/users/{id}` answers 403 for a token (setting it to `false` is allowed), because a token could
+otherwise make an account it can reach (through an invite or "Forgot password") an administrator whose session
+outlives the token. This is a change from earlier versions.
 Email settings (`GET|PATCH /api/admin/email`, `POST /api/admin/email/test`) are open to the
 administrator's `manage` token, except that it can neither set nor remove the SMTP password,
-and cannot change the host, port, security mode or username while a password is in use
-(that would send the password to a server of its choosing); it can switch email off.
+and cannot change the host, port, security mode or username, whether or not a password is stored (password-reset
+and invitation mail goes through that server, so choosing it would hand over every account; earlier versions
+allowed it while no password was in use); it can change the sender and switch email off.
 
 An AI agent can use all of this through the built-in MCP server; see [mcp.md](mcp.md).
 

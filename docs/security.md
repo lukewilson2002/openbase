@@ -329,11 +329,13 @@ ChatGPT's own servers) that holds valid tokens. Revoke from **Connected apps**.
   be an account takeover), cannot switch off a user's 2FA (`disable_2fa`), cannot remove a user's
   passkeys (`DELETE /api/admin/users/{id}/passkeys`), cannot give a
   new user a password or receive their reset link (`POST /api/admin/users` creates the
-  account without a usable password; a person sends the invitation from the web app), and
-  cannot set or remove the SMTP password. It also cannot re-point a stored SMTP password:
-  while a password is in use, changing the SMTP host, port, security mode or username is
-  session-only, because that would make the server send the password to a server of the
-  token's choosing. A leaked token, even a `manage` one, can therefore neither take over
+  account without a usable password; a person sends the invitation from the web app),
+  cannot grant the administrator role (`is_admin: true` on create or update: an administrator
+  session reaches every session-only action, and a token could claim the account through
+  "Forgot password" or an invite), and cannot set or remove the SMTP password. It also cannot
+  re-point outgoing mail: changing the SMTP host, port, security mode or username is
+  session-only whether or not a password is stored, because the public reset flow sends
+  reset and invitation links through that server and a token that chose it could read them. A leaked token, even a `manage` one, can therefore neither take over
   an account nor mint a replacement that outlives its own revocation. Changing a password
   deletes all of the owner's tokens. Treat a `manage` token like a signed-in
   session of the same user: give it only to tools you fully trust (an AI agent,
@@ -496,8 +498,7 @@ Authentication and email:
   one that retries later has its connection revoked; either way the cost is one new approval.
 - Rate limits for OAuth are per client address (IPv6: per /64) and in memory like the others.
 
-- The email settings let an administrator (or an administrator's `manage` token, which
-  may change host and port while no SMTP password is in use) make the server open a
+- The email settings let a signed-in administrator (a token may only change the sender or switch email off) make the server open a
   connection to any host and port, and the test email shows whether it answered. That is a
   small port-probing ability from the server's network position, comparable to what an
   administrator already has with `OPENBASE_ALLOW_PRIVATE_WEBHOOKS`; it is audited

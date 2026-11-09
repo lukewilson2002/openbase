@@ -258,6 +258,15 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Security
 
+- **An API token can no longer make an administrator or re-point outgoing mail.** (Behaviour change, REST and
+  MCP.) `is_admin: true` in `POST /api/admin/users` and `PATCH /api/admin/users/{id}` (and so in
+  `admin_create_user` and `admin_update_user`) answers 403 for an API token or OAuth grant, and the MCP tools
+  say so; an administrator grants the role in the web app. Revoking the role and creating ordinary users stay
+  open to tokens. `PATCH /api/admin/email` refuses a token that changes the SMTP host, port, security mode or
+  username whether or not a password is stored (it used to refuse only while one was), because password-reset
+  and invitation mail travels through that server; a token can still change the sender and switch email off.
+  A leaked `manage` token could otherwise have become a durable administrator session or read any account's
+  reset link.
 - **Query bodies from strangers are bounded.** `POST /api/public/shares/{token}/query` takes a body of
   at most 64 KiB (413 beyond) and filters are read in one pass that stops at 8 levels or 5,000 items,
   where a nested filter in a 4 MB body could make the server hold gigabytes of copies before the token
