@@ -32,7 +32,7 @@ import { useDraft, type Draft } from "./useDraft";
 import { useTargetForm } from "./useTargetForm";
 import { useUploads } from "./useUploads";
 
-// Tiptap is a chunk of its own, fetched when the Inbox opens (like the expanded record's rich text).
+// Tiptap is a chunk of its own, fetched when the Inbox opens (like the record page's rich text).
 const RichTextEditor = lazy(() => import("@/components/richtext/RichTextEditor").then((m) => ({ default: m.RichTextEditor })));
 
 /** A record that was just filed, for the "Open record" link. */

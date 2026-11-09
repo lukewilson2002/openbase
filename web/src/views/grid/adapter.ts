@@ -186,6 +186,6 @@ export interface GridAdapterProps {
   /** Files were dropped onto a cell (attachments). */
   onDropFiles(point: GridPoint, files: File[]): void;
 
-  /** Render the editor for a cell (DOM; shared with the expanded record). */
+  /** Render the editor for a cell (DOM; shared with the record page). */
   renderEditor(props: EditorHostProps): ReactNode;
 }

@@ -1,5 +1,5 @@
 /**
- * Read-only DOM rendering of a cell value (expanded record, revision history, previews).
+ * Read-only DOM rendering of a cell value (record page, revision history, previews).
  * The canvas renderer in views/grid/glide draws the same things for the grid.
  */
 import { ExternalLink, Star, Heart } from "lucide-react";

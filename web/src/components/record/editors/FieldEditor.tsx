@@ -1,4 +1,4 @@
-/** Picks the editor for a field. Used by the grid's overlay (`variant="cell"`) and the expanded record (`variant="form"`). */
+/** Picks the editor for a field. Used by the grid's overlay (`variant="cell"`) and the record page (`variant="form"`). */
 import { Suspense, lazy, useState } from "react";
 import type { Field } from "@/api/types";
 import { Spinner } from "@/components/ui/spinner";
@@ -106,7 +106,7 @@ function FullScreenLoading() {
 }
 
 /**
- * Rich text in the expanded record: the WYSIWYG editor, saving while typing (once typing
+ * Rich text in the record page: the WYSIWYG editor, saving while typing (once typing
  * pauses) and when focus leaves it, so the record's save status follows along.
  */
 function RichFormEditor({ field, value, autoFocus, onChange, onCommit }: Pick<FieldEditorProps, "field" | "value" | "autoFocus" | "onChange" | "onCommit">) {

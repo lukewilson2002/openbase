@@ -9,7 +9,7 @@ export function recordPath(baseId: string, tableId: string, recordId: string, vi
 }
 
 /**
- * Where an old `?record=` or `?linked=` link goes. The expanded record and the linked-record panel (decision 5)
+ * Where an old `?record=` or `?linked=` link goes. The record modal and the linked-record panel stack (decision 5)
  * are gone, but emails, notifications and history carry their links. `linked` holds the steps opened on top of
  * the record (`tblB.recB,tblC.recC`); the last one is what the person was looking at, so it wins.
  */

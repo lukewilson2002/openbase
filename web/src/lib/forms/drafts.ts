@@ -1,7 +1,7 @@
 /**
  * The internal "fill in form" mode (and the builder's preview) lets people type into the same
- * editors the expanded record uses. Those editors report either parsed JSON (`json`) or the text
- * the person typed (`text`, parsed here exactly like the expanded record does with `parseText`).
+ * editors the record page uses. Those editors report either parsed JSON (`json`) or the text
+ * the person typed (`text`, parsed here exactly like the record page does with `parseText`).
  * This turns the drafts of all fields into the values of one new record, and finds the problems:
  * text a field cannot hold, and required fields left empty.
  */

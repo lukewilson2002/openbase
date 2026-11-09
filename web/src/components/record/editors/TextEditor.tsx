@@ -1,7 +1,7 @@
 /**
  * Text-like editors: text, rich text, numbers, currency, percent, duration,
  * email, URL, phone, barcode, and the text half of date editing. The editor reports the typed
- * text; the host parses it with `parseText` (so grid and expanded record validate identically).
+ * text; the host parses it with `parseText` (so grid and record page validate identically).
  */
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Maximize2 } from "lucide-react";
@@ -54,7 +54,7 @@ export function TextEditor({ field, value, initialText, variant, autoFocus, trai
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const errorId = useId();
   const doneRef = useRef(false);
-  // Multiline text in the expanded record saves while typing (once typing pauses) and on blur, so the
+  // Multiline text in the record page saves while typing (once typing pauses) and on blur, so the
   // record's save status follows it. Everything else commits on blur or Enter.
   const autosaves = isLong && variant === "form";
   const autosave = useAutosave(seed, (t, exit) => onCommit({ text: t, ...(exit && { exit }) }));

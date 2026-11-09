@@ -47,7 +47,7 @@ const EMPTY_SELECTION: GridSelection = { columns: CompactSelection.empty(), rows
 
 const KEYBINDINGS = {
   activateCell: " |Enter|shift+Enter|F2",
-  // Shift+Space opens the expanded record (handled by the grid view), not Glide's row select.
+  // Shift+Space opens the record page (handled by the grid view), not Glide's row select.
   selectRow: false,
   downFill: "primary+_68",
   rightFill: "primary+_82",

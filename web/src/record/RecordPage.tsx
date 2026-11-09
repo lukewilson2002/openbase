@@ -1,7 +1,7 @@
 /**
  * A record as a page (REC-1): the bar (or the phone's header) on top, the record's properties in a 760 px
  * column, and Comments or History in a 360 px panel on the right (a full-screen sheet on a phone). It
- * replaces the expanded-record modal. Properties save by themselves, and the bar says whether that is going on.
+ * replaces the old modal. Properties save by themselves, and the bar says whether that is going on.
  *
  * The page is driven by props, so it does not know how it was reached: `RecordRoute` reads the address and
  * the opening view and says what comes before and after, and where Escape leads.

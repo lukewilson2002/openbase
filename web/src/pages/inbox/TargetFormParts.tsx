@@ -198,7 +198,7 @@ function FieldRow({ field, form }: { field: Field; form: TargetForm }) {
 const TYPED_SHAPES: ReadonlySet<DisplayShape> = new Set<DisplayShape>(["text", "multiline", "number", "email", "url", "phone"]);
 
 /**
- * One field's editor, reporting into the form. Like the expanded record, a picker is rebuilt when its
+ * One field's editor, reporting into the form. Like the record page, a picker is rebuilt when its
  * value changes under it; a text box is not (its own state follows the typing, and a rebuild would
  * take the caret away).
  */

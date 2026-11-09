@@ -1,6 +1,6 @@
 /**
  * Field values of a create_record / update_record action. Each row is one field of the target
- * table, either a typed value (the same editor the expanded record uses, `FieldEditor` with
+ * table, either a typed value (the same editor the record page uses, `FieldEditor` with
  * `variant="form"`) or a text template (`{{trigger.record.fields.Name}}`, plain text the server
  * converts like Airtable's typecast). Text-like fields and links are always templates.
  */

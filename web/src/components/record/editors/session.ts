@@ -1,5 +1,5 @@
 /**
- * What the expanded record tells a pop-over editor about the edit it is part of. A field there is read
+ * What the record page tells a pop-over editor about the edit it is part of. A field there is read
  * until it is clicked, and the click starts an edit: the editor opens its pop-over straight away
  * (`openOnMount`) and says when the pop-over has closed (`popupClosed`), which ends the edit, since the
  * pop-over and the editor's own button are the only places the person can be. Everywhere else (the

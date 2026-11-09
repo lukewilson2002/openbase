@@ -3,7 +3,7 @@ import { clickGrid, expect, newClientContext, openOptionsScreen, openRecordId, o
 
 /**
  * Grid journeys against a live server: edit cells (text, number, select), undo/redo, filter, sort,
- * search, hide fields, add a field, expanded record with comments, add/delete records.
+ * search, hide fields, add a field, record page with comments, add/delete records.
  * Runs only with OPENBASE_E2E=1 (see playwright.config.ts: the stack is built and started for you):
  *
  *   OPENBASE_E2E=1 npm run e2e -- --project=grid --no-deps

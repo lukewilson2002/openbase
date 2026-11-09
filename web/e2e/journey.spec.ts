@@ -5,7 +5,7 @@ import { clickGrid, expect, gridFocused, newRecordButton, openOptionsScreen, ope
  * The journey of a new instance, driven through the real UI in a real browser against the real
  * server: set up the first administrator, create a workspace and a base, rename the table, add
  * fields (number, single select, date, formula) through the property dialog, add records and edit cells
- * in the grid, filter and sort from the toolbar, open the expanded record and comment, then log out
+ * in the grid, filter and sort from the toolbar, open the record page and comment, then log out
  * and back in. Everything that matters is verified against the API, never against canvas pixels
  * (the grid is drawn on a canvas, so cells are operated by position, like grid.spec.ts does).
  */

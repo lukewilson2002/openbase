@@ -1,5 +1,5 @@
 /**
- * One field's value in the expanded record: shown rendered (the grid's read renderer, `CellValue`)
+ * One field's value in the record page: shown rendered (the grid's read renderer, `CellValue`)
  * until it is clicked, then replaced by the field's form editor, focused and ready.
  *
  * - Where the field is editable the value area tints on hover and a click on it starts the edit; for the keyboard

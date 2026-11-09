@@ -1,4 +1,4 @@
-/** Shared context for cell editors (grid overlay and expanded record). */
+/** Shared context for cell editors (grid overlay and record page). */
 import { createContext, useContext } from "react";
 import type { BaseSchema, Collaborator } from "@/api/types";
 import type { FormatCtx } from "@/lib/cells/format";

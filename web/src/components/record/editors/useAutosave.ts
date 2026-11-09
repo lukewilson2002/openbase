@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef } from "react";
 
-/** How long typing in a rich or multiline text field pauses before the expanded record saves it. */
+/** How long typing in a rich or multiline text field pauses before the record page saves it. */
 export const AUTOSAVE_MS = 700;
 
 /**
- * Debounced saving for multiline text in the expanded record: `change(text)` after every edit saves the
+ * Debounced saving for multiline text in the record page: `change(text)` after every edit saves the
  * latest text once typing pauses, `flush()` saves it now (blur), and whatever is still waiting is
  * saved when the editor goes away (the record closes, another record opens) and when the page itself
  * goes (a tab closed, a reload, an address typed in the bar), which is told to `commit` as `exit` so it can
