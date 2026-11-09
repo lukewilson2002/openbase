@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, beforeEach } from "vitest";
+import { forgetUndoHistories } from "@/lib/undo/registry";
 import { resetDraftStore } from "@/views/drafts/store";
 
 // jsdom lacks these browser APIs that Radix UI relies on.
@@ -47,4 +48,6 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  // Undo histories outlive a screen; a test starts with none.
+  forgetUndoHistories();
 });

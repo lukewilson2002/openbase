@@ -10,7 +10,7 @@ import { makeRecord } from "@/test/fields";
 import type { ViewRecordsData } from "./cache";
 import { TABLE_FIELDS } from "./viewTestUtils";
 import { isNewRecord } from "@/record/newRecords";
-import { useUndoScope } from "@/lib/undo/registry";
+import { forgetUndoHistories } from "@/lib/undo/registry";
 import { useRecordWrites } from "./useRecordWrites";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -48,14 +48,14 @@ describe("useRecordWrites", () => {
     await act(async () => void (await first.result.current.update("r1", { f_status: "s3" })));
     expect(first.result.current.history.canUndo).toBe(true);
     first.unmount();
-    // The page that replaced the screen holds the folder's histories; the screen comes back to the same one.
-    const page = renderHook(() => useUndoScope("app1"));
+    // Back from the page: the screen is built again, on the same history.
     const again = harness(true, {}, "viwShared");
     expect(again.result.current.history.canUndo).toBe(true);
     again.unmount();
-    page.unmount();
-    // Leaving the folder for good lets them go.
-    await act(async () => void (await new Promise((r) => setTimeout(r, 5))));
+    // Staying in the folder keeps it; leaving the folder for good lets it go.
+    forgetUndoHistories("app1");
+    expect(harness(true, {}, "viwShared").result.current.history.canUndo).toBe(true);
+    forgetUndoHistories("app2");
     expect(harness(true, {}, "viwShared").result.current.history.canUndo).toBe(false);
   });
 

@@ -2,47 +2,38 @@
  * Where undo histories live while a folder is being worked in. A record opens as a page (a route of its own), so
  * the collection screen that did the work unmounts behind it; a history kept inside the screen would be gone by
  * the time Escape brings the person back, and Ctrl/Cmd+Z would have nothing to revert. A history is kept here
- * instead, by folder, and lives as long as some screen of that folder (a collection or a record page) is showing.
- * Leaving the folder for good lets it go, so an edit from last week is never what Ctrl+Z reverts.
+ * instead, by folder, for as long as the person stays in that folder's screens (its collections and record pages).
+ * Going anywhere else lets it go, so an edit from last week is never what Ctrl+Z reverts. The router tells
+ * where the person is (`useForgetUndoOutsideFolder`), not the screens' mounting: a record page can be a lazily
+ * loaded chunk away from the screen it replaces.
  */
 import { useEffect } from "react";
+import { useLocation } from "react-router";
 import { UndoStack } from "./stack";
 
-interface Scope {
-  stacks: Map<string, UndoStack<never>>;
-  holders: number;
-}
-
-const scopes = new Map<string, Scope>();
-
-function scopeOf(scopeId: string): Scope {
-  let scope = scopes.get(scopeId);
-  if (!scope) scopes.set(scopeId, (scope = { stacks: new Map(), holders: 0 }));
-  return scope;
-}
+const scopes = new Map<string, Map<string, UndoStack<never>>>();
 
 /** The history called `name` in a folder: the same one for every screen that asks, until the folder is left. */
-export function undoStackIn<Op>(scopeId: string, name: string): UndoStack<Op> {
-  const scope = scopeOf(scopeId);
-  let stack = scope.stacks.get(name);
-  if (!stack) scope.stacks.set(name, (stack = new UndoStack<never>()));
+export function undoStackIn<Op>(baseId: string, name: string): UndoStack<Op> {
+  let stacks = scopes.get(baseId);
+  if (!stacks) scopes.set(baseId, (stacks = new Map()));
+  let stack = stacks.get(name);
+  if (!stack) stacks.set(name, (stack = new UndoStack<never>()));
   return stack as unknown as UndoStack<Op>;
 }
 
-/**
- * Keeps a folder's histories while the caller is mounted. Going from a collection to a record page unmounts one
- * holder and mounts the other in the same commit, so the release waits a tick and lets go only when nobody has
- * taken over.
- */
-export function useUndoScope(scopeId: string): void {
-  useEffect(() => {
-    const scope = scopeOf(scopeId);
-    scope.holders++;
-    return () => {
-      scope.holders--;
-      setTimeout(() => {
-        if (scope.holders === 0 && scopes.get(scopeId) === scope) scopes.delete(scopeId);
-      }, 0);
-    };
-  }, [scopeId]);
+/** Lets go of every folder's histories but `keep`'s. */
+export function forgetUndoHistories(keep?: string | null): void {
+  for (const id of [...scopes.keys()]) if (id !== keep) scopes.delete(id);
+}
+
+/** The folder an address is a screen of (`/base/:baseId/...`), if it is one. */
+export function folderOf(pathname: string): string | null {
+  return /^\/base\/([^/]+)/.exec(pathname)?.[1] ?? null;
+}
+
+/** Mount once inside the router: the histories of a folder go when the person leaves its screens. */
+export function useForgetUndoOutsideFolder(): void {
+  const { pathname } = useLocation();
+  useEffect(() => forgetUndoHistories(folderOf(pathname)), [pathname]);
 }

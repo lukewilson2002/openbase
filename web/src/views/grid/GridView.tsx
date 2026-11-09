@@ -49,7 +49,7 @@ import { queryRelevantKey, reorderVisible, resolveFieldOrder, ROW_HEIGHT_PX, set
 import { useDebounced } from "@/components/record/editors/useDebounced";
 import { browserTimeZone } from "@/lib/format";
 import { atLeast } from "@/lib/roles";
-import { undoStackIn, useUndoScope } from "@/lib/undo/registry";
+import { undoStackIn } from "@/lib/undo/registry";
 import { personColors } from "@/lib/colors";
 import { useTheme } from "@/theme/ThemeProvider";
 import { formatAggregate, aggregationShortLabel } from "@/lib/cells/aggregations";
@@ -223,7 +223,6 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   // ---- operations ------------------------------------------------------------------------------
   // Kept outside the screen: a record's page replaces it while open, and Ctrl/Cmd+Z should still reach what was done here before.
   const stack = useMemo(() => undoStackIn<UndoOp>(schema.id, `grid:${view.id}`), [schema.id, view.id]);
-  useUndoScope(schema.id);
   const gridRef = useRef<GridHandle>(null);
   const selectionRef = useRef<GridSelectionInfo>(EMPTY_SELECTION);
   // Records came or went (a delete, a copy, an undo of either): the rows a selection named hold other records now.

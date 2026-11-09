@@ -17,6 +17,7 @@ import { IntroGate, IntroProvider } from "@/onboarding/IntroContext";
 import { LoginPage } from "@/pages/LoginPage";
 import { TwoFactorLoginPage } from "@/pages/TwoFactorLoginPage";
 import { PageSpinner } from "@/components/ui/spinner";
+import { useForgetUndoOutsideFolder } from "@/lib/undo/registry";
 
 // Rarely visited pages load on demand to keep the first paint small.
 const AccountPage = lazy(() => import("@/pages/account/AccountPage").then((m) => ({ default: m.AccountPage })));
@@ -46,6 +47,7 @@ const PublicSharePage = lazy(() => import("@/public/view/PublicSharePage"));
 export function AppRoutes() {
   return (
     <IntroProvider>
+      <UndoScopeWatch />
       <Suspense fallback={<PageSpinner />}>
         <Routes>
           {/* Public links: no RequireAuth, no redirects. /s and /f are the paths the API reports. */}
@@ -122,6 +124,12 @@ export function AppRoutes() {
       </Suspense>
     </IntroProvider>
   );
+}
+
+/** Lets go of a folder's undo histories once the person is elsewhere (lib/undo/registry). */
+function UndoScopeWatch() {
+  useForgetUndoOutsideFolder();
+  return null;
 }
 
 function SignedInArea() {

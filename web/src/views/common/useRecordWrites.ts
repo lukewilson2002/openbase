@@ -18,7 +18,7 @@ import { useToast } from "@/components/ui/toast";
 import { jsonEqual } from "@/lib/cells/parse";
 import { toWire, writableValues } from "@/lib/cells/wire";
 import { hasPlacement, type Placement, type RecordOp, type ValueChange } from "@/lib/undo/recordOps";
-import { undoStackIn, useUndoScope } from "@/lib/undo/registry";
+import { undoStackIn } from "@/lib/undo/registry";
 import { isViewRecordsData, moveRecordInList, patchRecordValues, removeRecords, upsertRecords, type ViewRecordsData } from "./cache";
 import { forgetNewRecord, rememberNewRecord } from "@/record/newRecords";
 import { prefillFor } from "./prefill";
@@ -100,7 +100,6 @@ export function useRecordWrites({ baseId, viewId, tableId, fields, canEdit, quer
   const fieldById = useMemo(() => new Map(fields.map((f) => [f.id, f] as const)), [fields]);
   // Kept outside the screen: a record's page replaces the screen while it is open, and Ctrl/Cmd+Z should still reach what was done before.
   const stack = useMemo(() => undoStackIn<RecordOp>(baseId, `records:${viewId}`), [baseId, viewId]);
-  useUndoScope(baseId);
   const creating = useRef(false);
   const filter = queryConfig?.filter ?? null;
 
