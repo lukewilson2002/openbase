@@ -52,7 +52,7 @@ export function AccentSwatchItems() {
               className="group flex size-8 cursor-default items-center justify-center rounded-full outline-none pointer-coarse:size-10 data-[highlighted]:bg-hover"
             >
               <span
-                className="flex size-6 items-center justify-center rounded-full shadow-[inset_0_0_0_1px_rgb(0_0_0/0.12)] transition-transform group-data-[highlighted]:scale-110 group-data-[state=checked]:shadow-[0_0_0_2px_var(--surface),0_0_0_4px_var(--sw)] pointer-coarse:size-7"
+                className="flex size-6 items-center justify-center rounded-full shadow-[inset_0_0_0_1px_var(--mark-edge)] transition-transform group-data-[highlighted]:scale-110 group-data-[state=checked]:shadow-[0_0_0_2px_var(--surface),0_0_0_4px_var(--sw)] pointer-coarse:size-7"
                 style={{ background: primary, "--sw": primary } as CSSProperties}
               >
                 <M.ItemIndicator>

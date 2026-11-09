@@ -24,8 +24,19 @@ describe("account", () => {
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => expect(api.callsTo("PATCH /api/auth/me")).toHaveLength(1));
-    expect(api.callsTo("PATCH /api/auth/me")[0]?.body).toEqual({ name: "Ada L.", timezone: "Europe/London" });
+    expect(api.callsTo("PATCH /api/auth/me")[0]?.body).toEqual({ name: "Ada L.", timezone: "Europe/London", week_start: 0 });
     expect(await screen.findByText("Profile saved")).toBeInTheDocument();
+  });
+
+  it("saves the week start with the profile, for the filters that say this week", async () => {
+    const user = userEvent.setup();
+    const api = mockApi({ "GET /api/auth/me": { ...USER, week_start: 0 }, "PATCH /api/auth/me": (call) => ({ ...USER, ...(call.body as object) }) });
+    renderApp({ route: "/account" });
+    const week = await screen.findByLabelText("Week starts on");
+    expect(week).toHaveValue("0");
+    await user.selectOptions(week, "Monday");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/auth/me")[0]?.body).toMatchObject({ week_start: 1 }));
   });
 
   it("changes the password after local validation", async () => {
@@ -120,9 +131,9 @@ describe("account", () => {
 
     expect(await screen.findByText("Zapier")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /New token/ }));
-    const form = await screen.findByRole("dialog", { name: "New personal access token" });
+    const form = await screen.findByRole("dialog", { name: "New API token" });
     await user.type(within(form).getByLabelText("Name"), "Zapier");
-    await user.click(within(form).getByRole("checkbox", { name: /Allow writes/ }));
+    await user.click(within(form).getByRole("radio", { name: "Read and write" }));
     await user.selectOptions(within(form).getByLabelText("Expires"), "90");
     await user.click(within(form).getByRole("button", { name: "Create token" }));
 
@@ -137,45 +148,43 @@ describe("account", () => {
     await waitFor(() => expect(api.callsTo("DELETE /api/tokens/pat1")).toHaveLength(1));
   });
 
-  it("offers the manage permission only with write access, warns about it, and shows it in the list", async () => {
+  it("offers Read, Read and write, or Full access with a plain sentence each, and shows the level in the list", async () => {
     const user = userEvent.setup();
     const base = { write: true, base_ids: null, created_at: 1_700_000_000_000, last_used_at: null, expires_at: null };
     const agent = { id: "pat2", name: "Agent", manage: true, ...base };
     const plain = { id: "pat3", name: "Plain", manage: false, ...base };
+    const viewer = { id: "pat5", name: "Viewer", write: false, manage: false, base_ids: null, created_at: 1_700_000_000_000, last_used_at: null, expires_at: null };
     const api = mockApi({
       "GET /api/auth/me": USER,
-      "GET /api/tokens": [agent, plain],
+      "GET /api/tokens": [agent, plain, viewer],
       "POST /api/tokens": { token: "pat_X", info: agent },
     });
     renderApp({ route: "/account?tab=tokens" });
 
-    // Only the manage-capable token carries the badge.
-    expect(await screen.findByText("Agent")).toBeInTheDocument();
-    expect(screen.getAllByText("Can manage workspaces and members")).toHaveLength(1);
+    const rows = within(await screen.findByRole("list", { name: "API tokens" })).getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("Full access");
+    expect(rows[1]).toHaveTextContent("Read and write");
+    expect(rows[2]).toHaveTextContent("Read");
+    expect(rows[2]).not.toHaveTextContent("Read and write");
 
     await user.click(screen.getByRole("button", { name: /New token/ }));
-    const form = await screen.findByRole("dialog", { name: "New personal access token" });
-    const manage = within(form).getByRole("checkbox", { name: "Allow managing workspaces, members and settings" });
-    // Managing is writing: unavailable while the token is read only.
-    expect(manage).toBeDisabled();
+    const form = await screen.findByRole("dialog", { name: "New API token" });
+    const levels = within(form).getByRole("radiogroup", { name: "Access" });
+    expect(within(levels).getAllByRole("radio").map((r) => r.getAttribute("aria-labelledby") && document.getElementById(r.getAttribute("aria-labelledby")!)!.textContent)).toEqual(["Read", "Read and write", "Full access"]);
+    // Each level says in one sentence what it allows, and Read is the default.
+    expect(within(levels).getByRole("radio", { name: "Read" })).toBeChecked();
+    expect(within(levels).getByRole("radio", { name: "Read" })).toHaveAccessibleDescription("Can see your folders, collections and records, and cannot change anything.");
+    expect(within(levels).getByRole("radio", { name: "Full access" })).toHaveAccessibleDescription(/create and delete workspaces and folders, manage members/);
     expect(within(form).getByText(/can never be changed with a token/)).toBeInTheDocument();
 
     await user.type(within(form).getByLabelText("Name"), "Agent");
-    await user.click(within(form).getByRole("checkbox", { name: /Allow writes/ }));
-    expect(manage).toBeEnabled();
-    await user.click(manage);
-    expect(manage).toBeChecked();
-    // Turning writes off again clears and disables it.
-    await user.click(within(form).getByRole("checkbox", { name: /Allow writes/ }));
-    expect(manage).toBeDisabled();
-    expect(manage).not.toBeChecked();
-    await user.click(within(form).getByRole("checkbox", { name: /Allow writes/ }));
-    await user.click(manage);
+    await user.click(within(levels).getByRole("radio", { name: "Full access" }));
     await user.click(within(form).getByRole("button", { name: "Create token" }));
 
     await screen.findByRole("dialog", { name: "Copy your new token" });
     expect(api.callsTo("POST /api/tokens")[0]?.body).toEqual({ name: "Agent", write: true, manage: true, base_ids: null, expires_in_days: null });
   });
+
   it("limits a token to selected bases", async () => {
     const user = userEvent.setup();
     const info = { id: "pat4", name: "Scoped", write: true, manage: false, base_ids: ["app2"], created_at: 1_700_000_000_000, last_used_at: null, expires_at: null };
@@ -200,16 +209,18 @@ describe("account", () => {
     await user.click(await screen.findByRole("button", { name: /New token/ }));
     // The shell (a phone's tabs) asks for the workspaces on its own; the form must not add a request.
     const shellRequests = api.callsTo("GET /api/workspaces").length;
-    const form = await screen.findByRole("dialog", { name: "New personal access token" });
+    const form = await screen.findByRole("dialog", { name: "New API token" });
     await user.type(within(form).getByLabelText("Name"), "Scoped");
     // Without the list of bases being asked for, nothing is fetched.
     expect(api.callsTo("GET /api/workspaces")).toHaveLength(shellRequests);
-    await user.selectOptions(within(form).getByLabelText("Projects"), "some");
-    const group = await within(form).findByRole("group", { name: "Allowed projects" });
+    await user.selectOptions(within(form).getByLabelText("Folders"), "some");
+    const group = await within(form).findByRole("group", { name: "Allowed folders" });
     expect(within(form).getByRole("button", { name: "Create token" })).toBeDisabled();
     await user.click(await within(group).findByRole("checkbox", { name: "Acme / Ops" }));
     expect(within(group).getByRole("checkbox", { name: "Acme / CRM" })).not.toBeChecked();
-    expect(within(group).getByText(/cannot manage workspaces/)).toBeInTheDocument();
+    expect(within(group).getByText(/cannot have Full access/)).toBeInTheDocument();
+    // Managing reaches beyond single folders, so it is not on offer here.
+    expect(within(form).getByRole("radio", { name: "Full access" })).toBeDisabled();
     await user.click(within(form).getByRole("button", { name: "Create token" }));
 
     await screen.findByRole("dialog", { name: "Copy your new token" });

@@ -1,20 +1,21 @@
 import { useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Globe, Monitor, ShieldAlert, ShieldCheck, TriangleAlert } from "lucide-react";
+import { Globe, Monitor, ShieldCheck, TriangleAlert } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { ConsentRequest } from "@/api/types";
 import { useMe } from "@/auth/useAuth";
+import { AccessChoice } from "@/components/AccessChoice";
+import { FolderLimit } from "@/components/FolderLimit";
 import { Notice } from "@/components/layouts";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Select } from "@/components/ui/input";
 import { PageSpinner, Spinner } from "@/components/ui/spinner";
-import { ACCESS_HINT, ACCESS_LABEL, ACCESS_ORDER, followRedirect, isAccess, type OAuthAccess } from "@/lib/oauthAccess";
+import { ACCESS_LABEL, ACCESS_ORDER, NEEDS_ALL_FOLDERS, followRedirect, isAccess, type OAuthAccess } from "@/lib/oauthAccess";
 
 /**
  * Where an app asks to be connected (opened by the server's `GET /oauth/authorize`, at
@@ -44,12 +45,11 @@ function Expired({ detail }: { detail?: string }) {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center px-4 py-10">
       <EmptyState
-        icon={<ShieldAlert />}
         title="This request has expired"
         description={
           <>
             Go back to the app you were connecting and start again. Nothing was shared.
-            {detail && <span className="mt-1 block text-xs">{detail}</span>}
+            {detail && <span className="mt-1 block text-meta">{detail}</span>}
           </>
         }
         action={
@@ -69,7 +69,6 @@ function Consent({ request }: { request: ConsentRequest }) {
   const [limitBases, setLimitBases] = useState(false);
   const [baseIds, setBaseIds] = useState<string[]>([]);
   const [left, setLeft] = useState<{ url: string; approved: boolean } | null>(null);
-  const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list, enabled: limitBases });
 
   const decide = useMutation({
     mutationFn: (approve: boolean) =>
@@ -94,8 +93,8 @@ function Consent({ request }: { request: ConsentRequest }) {
       <Shell>
         <div className="flex flex-col items-center gap-3 py-4 text-center" role="status">
           <Spinner className="size-6" label={left.approved ? "Returning to the app" : "Going back"} />
-          <p className="text-[0.9375rem] font-medium">{left.approved ? `Connected. Returning to ${request.redirect_host}...` : `Refused. Returning to ${request.redirect_host}...`}</p>
-          <p className="text-[0.8125rem] text-muted">
+          <p className="text-ui font-medium">{left.approved ? `Connected. Returning to ${request.redirect_host}...` : `Refused. Returning to ${request.redirect_host}...`}</p>
+          <p className="text-label text-muted">
             If nothing happens, you can close this tab and go back to the app.{" "}
             <a href={left.url} rel="noreferrer">
               Continue manually
@@ -108,10 +107,10 @@ function Consent({ request }: { request: ConsentRequest }) {
 
   return (
     <Shell>
-      <h1 className="text-xl leading-snug">
+      <h1 className="text-h2">
         Allow <bdi className="break-words font-semibold">{request.client_name}</bdi> to use your OpenBase?
       </h1>
-      <p className="mt-1 text-[0.8125rem] text-muted">
+      <p className="mt-1 text-label text-muted">
         {me ? (
           <>
             You are signed in as <span className="font-medium text-fg">{me.email}</span>. The app acts as you, within the access you choose below.
@@ -125,75 +124,34 @@ function Consent({ request }: { request: ConsentRequest }) {
       <Warnings request={request} />
 
       <fieldset className="mt-5">
-        <legend className="mb-2 text-[0.8125rem] font-medium">What can it do?</legend>
-        <div role="radiogroup" aria-label="Access" className="flex flex-col gap-2">
-          {allowed.map((level) => (
-            <label
-              key={level}
-              className="flex cursor-pointer items-start gap-3 rounded-md border border-line-strong p-3 has-[:checked]:border-primary has-[:checked]:bg-subtle"
-            >
-              <input
-                type="radio"
-                name="access"
-                value={level}
-                checked={access === level}
-                disabled={level === "manage" && limitBases}
-                onChange={() => setAccess(level)}
-                className="mt-1"
-              />
-              <span className="flex flex-col gap-0.5">
-                <span className="text-[0.875rem] font-medium">{ACCESS_LABEL[level]}</span>
-                <span className="text-xs text-muted">{ACCESS_HINT[level]}</span>
-              </span>
-            </label>
-          ))}
-        </div>
+        <legend className="mb-2 text-label font-semibold">What can it do?</legend>
+        <AccessChoice
+          value={access}
+          onChange={setAccess}
+          levels={allowed}
+          // The server refuses Full control for an app limited to some folders, so the choice says why it is out.
+          disabled={limitBases ? { [NEEDS_ALL_FOLDERS]: "Not available for an app limited to some folders." } : undefined}
+        />
         {beyondRequest && (
-          <p className="mt-2 text-xs text-muted" role="status">
-            This app asked for {asked ? ACCESS_LABEL[asked].toLowerCase() : "nothing we know"}, not {ACCESS_LABEL[access].toLowerCase()}. It gets this much only because you chose it.
+          <p className="mt-2 text-label text-muted" role="status">
+            This app asked for less. Give it {access === "manage" ? "full control" : ACCESS_LABEL[access].toLowerCase()} anyway?
           </p>
         )}
       </fieldset>
 
-      <fieldset className="mt-5">
-        <legend className="mb-2 text-[0.8125rem] font-medium">Which projects?</legend>
-        <Select
-          aria-label="Projects"
-          value={limitBases ? "some" : "all"}
-          onChange={(e) => {
-            setLimitBases(e.target.value === "some");
-            if (e.target.value !== "some") setBaseIds([]);
-            // The server refuses Full control for an app limited to some projects, so step down rather than fail on Approve.
-            else if (access === "manage") setAccess("write");
+      <div className="mt-5 flex flex-col gap-2">
+        <FolderLimit
+          limited={limitBases}
+          onLimitedChange={(limited) => {
+            setLimitBases(limited);
+            // Step down rather than fail on Approve.
+            if (limited && access === "manage") setAccess("write");
           }}
-        >
-          <option value="all">All projects I can access</option>
-          <option value="some">Only the projects I select</option>
-        </Select>
-        {limitBases && (
-          <div className="mt-2 flex flex-col gap-1.5" role="group" aria-label="Allowed projects">
-            {workspaces.isPending ? (
-              <Spinner />
-            ) : workspaces.isError ? (
-              <Notice tone="error">{errorMessage(workspaces.error)}</Notice>
-            ) : workspaces.data.every((w) => w.bases.length === 0) ? (
-              <p className="text-xs text-muted">You have no projects yet.</p>
-            ) : (
-              workspaces.data.flatMap((w) =>
-                w.bases.map((b) => (
-                  <Checkbox
-                    key={b.id}
-                    checked={baseIds.includes(b.id)}
-                    onCheckedChange={(on) => setBaseIds((cur) => (on ? [...cur, b.id] : cur.filter((x) => x !== b.id)))}
-                    label={`${w.name} / ${b.name}`}
-                  />
-                )),
-              )
-            )}
-            <p className="text-xs text-muted">An app limited to some projects cannot have Full control, which reaches beyond single projects.</p>
-          </div>
-        )}
-      </fieldset>
+          baseIds={baseIds}
+          onBaseIdsChange={setBaseIds}
+          note="An app limited to some folders cannot have Full control, which reaches beyond single folders."
+        />
+      </div>
 
       {decide.isError && (
         <div className="mt-4">
@@ -209,18 +167,18 @@ function Consent({ request }: { request: ConsentRequest }) {
           Approve
         </Button>
       </div>
-      <p className="mt-3 text-xs text-muted">You can disconnect the app at any time under Account, AI assistants, Connected apps.</p>
+      <p className="mt-3 text-meta text-muted">You can disconnect the app, or change its access, at any time under Account, AI assistants.</p>
     </Shell>
   );
 }
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center px-4 py-10">
-      <Link to="/" className="mb-6" aria-label="OpenBase home">
+    <main className="flex min-h-dvh flex-col items-center justify-center bg-bg px-4 py-10">
+      <Link to="/" className="mb-6 rounded-md" aria-label="OpenBase home">
         <Logo className="h-10" />
       </Link>
-      <div className="w-full max-w-lg rounded-lg border border-line bg-surface p-6 shadow-pop">{children}</div>
+      <Card className="w-full max-w-lg p-6 max-md:p-5">{children}</Card>
     </main>
   );
 }
@@ -230,14 +188,14 @@ function Destination({ request }: { request: ConsentRequest }) {
   const Icon = request.loopback ? Monitor : request.trusted_host ? ShieldCheck : Globe;
   return (
     <div className="mt-4 rounded-md border border-line bg-subtle p-3">
-      <p className="text-xs text-muted">{request.loopback ? "This app runs on your own computer" : "After you decide, you are sent to"}</p>
-      <p className="mt-0.5 flex items-center gap-2 text-[1rem] font-semibold">
+      <p className="text-meta text-muted">{request.loopback ? "This app runs on your own computer" : "After you decide, you are sent to"}</p>
+      <p className="mt-0.5 flex items-center gap-2 text-h3 font-semibold">
         <Icon aria-hidden className="size-5 shrink-0 text-muted" />
         <span data-testid="redirect-host" className="break-all">
           {request.redirect_host}
         </span>
       </p>
-      {request.client_source === "cimd" && <p className="mt-1 break-all text-xs text-muted">App identity: {request.client_id}</p>}
+      {request.client_source === "cimd" && <p className="mt-1 break-all text-meta text-muted">App identity: {request.client_id}</p>}
     </div>
   );
 }
@@ -275,7 +233,7 @@ function Warnings({ request }: { request: ConsentRequest }) {
   return (
     <div className="mt-3 flex flex-col gap-2">
       {items.map((i) => (
-        <div key={i.key} role="alert" className="flex gap-2 rounded-md border border-line-strong bg-warning-soft px-3 py-2 text-[0.8125rem]">
+        <div key={i.key} role="alert" className="flex gap-2 rounded-md border border-line-strong bg-warning-soft px-3 py-2 text-label">
           <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
           <p>{i.text}</p>
         </div>

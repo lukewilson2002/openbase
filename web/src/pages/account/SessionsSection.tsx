@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Laptop } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import { errorMessage } from "@/api/client";
-import { Notice, Section } from "@/components/layouts";
+import { Notice, Section, SettingsRow } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatusChip } from "@/components/ui/status-chip";
 import { useToast } from "@/components/ui/toast";
 import { formatDateTime } from "@/lib/format";
 
@@ -31,42 +31,45 @@ export function SessionsSection() {
     <Section
       title="Active sessions"
       description="Browsers and devices currently signed in to your account."
+      flush
+      actions={
+        others.length > 0 ? (
+          <Button variant="danger" loading={revokeOthers.isPending} onClick={() => revokeOthers.mutate()}>
+            Sign out all other sessions
+          </Button>
+        ) : undefined
+      }
     >
       {sessions.isPending ? (
-        <Spinner />
+        <div aria-hidden className="p-4">
+          <Skeleton className="h-10" />
+        </div>
       ) : sessions.isError ? (
-        <Notice tone="error">{errorMessage(sessions.error)}</Notice>
+        <div className="p-4">
+          <Notice tone="error">{errorMessage(sessions.error)}</Notice>
+        </div>
       ) : (
-        <>
-          <ul className="divide-y divide-line rounded-md border border-line">
-            {sessions.data.map((s) => (
-              <li key={s.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
-                <Laptop aria-hidden className="size-5 shrink-0 text-muted" />
-                <div className="min-w-0 flex-1 basis-56">
-                  <p className="truncate text-[0.8125rem] font-medium">
-                    {s.user_agent || "Unknown device"}
-                    {s.current && <span className="ml-2 rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success">This session</span>}
-                  </p>
-                  <p className="text-xs text-muted">
-                    {s.ip ? `${s.ip} - ` : ""}signed in {formatDateTime(s.created_at)}, last active {formatDateTime(s.last_seen_at)}
-                  </p>
-                </div>
-                {!s.current && (
-                  <Button size="sm" onClick={() => revoke.mutate(s.id)} disabled={revoke.isPending}>
+        <ul className="divide-y divide-line" aria-label="Active sessions">
+          {sessions.data.map((s) => (
+            <SettingsRow
+              key={s.id}
+              title={
+                <span className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="truncate">{s.user_agent || "Unknown device"}</span>
+                  {s.current && <StatusChip hue="green">This session</StatusChip>}
+                </span>
+              }
+              description={`${s.ip ? `${s.ip} - ` : ""}signed in ${formatDateTime(s.created_at)}, last active ${formatDateTime(s.last_seen_at)}`}
+              action={
+                s.current ? undefined : (
+                  <Button onClick={() => revoke.mutate(s.id)} disabled={revoke.isPending}>
                     Sign out
                   </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-          {others.length > 0 && (
-            <div className="mt-4">
-              <Button variant="danger" loading={revokeOthers.isPending} onClick={() => revokeOthers.mutate()}>
-                Sign out all other sessions
-              </Button>
-            </div>
-          )}
-        </>
+                )
+              }
+            />
+          ))}
+        </ul>
       )}
     </Section>
   );

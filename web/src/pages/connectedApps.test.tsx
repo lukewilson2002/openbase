@@ -65,18 +65,52 @@ describe("account: connected apps", () => {
     expect(items).toHaveLength(3);
 
     expect(items[0]).toHaveTextContent("Claude");
-    expect(items[0]).toHaveTextContent("Read & edit");
+    expect(items[0]).toHaveTextContent("Read and write");
     expect(items[0]).toHaveTextContent("Connects from claude.ai");
-    expect(items[0]).toHaveTextContent("2 projects: CRM, Notes");
+    expect(items[0]).toHaveTextContent("2 folders: CRM, Notes");
     expect(items[0]).toHaveTextContent(/last used/);
 
     expect(items[1]).toHaveTextContent("Claude Code");
     expect(items[1]).toHaveTextContent("Full control");
     expect(items[1]).toHaveTextContent("Connects from 127.0.0.1:53124");
-    expect(items[1]).toHaveTextContent("all projects");
+    expect(items[1]).toHaveTextContent("all folders");
     expect(items[1]).toHaveTextContent("never used");
 
-    expect(items[2]).toHaveTextContent("Read only");
+    expect(items[2]).toHaveTextContent("Read");
+  });
+
+  it("changes an app's access from its row, applying to its live tokens, and cannot give a limited app Full control", async () => {
+    const user = userEvent.setup();
+    let grants = GRANTS;
+    const api = mockApi({
+      "GET /api/auth/me": USER,
+      "GET /api/setup": SETUP,
+      "GET /api/tokens": [],
+      "GET /api/oauth/grants": () => grants,
+      "PATCH /api/oauth/grants/grt3": (call) => {
+        const access = (call.body as { access: string }).access;
+        grants = grants.map((g) => (g.id === "grt3" ? { ...g, write: access !== "read", manage: access === "manage" } : g));
+        return grants.find((g) => g.id === "grt3")!;
+      },
+    });
+    renderApp({ route: "/account?tab=assistants" });
+
+    // An app limited to some folders is offered Read and Read and write only.
+    await user.click(await screen.findByRole("button", { name: "Change access for Claude" }));
+    const limited = await screen.findByRole("dialog", { name: "Change access for Claude" });
+    expect(within(limited).getByRole("radio", { name: "Read and write" })).toBeChecked();
+    expect(within(limited).getByRole("radio", { name: "Full control" })).toBeDisabled();
+    await user.click(within(limited).getByRole("button", { name: "Cancel" }));
+
+    await user.click(screen.getByRole("button", { name: "Change access for Read Helper" }));
+    const dialog = await screen.findByRole("dialog", { name: "Change access for Read Helper" });
+    expect(within(dialog).getByRole("radio", { name: "Read" })).toBeChecked();
+    expect(within(dialog).getByRole("button", { name: "Save access" })).toBeDisabled();
+    await user.click(within(dialog).getByRole("radio", { name: "Full control" }));
+    await user.click(within(dialog).getByRole("button", { name: "Save access" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/oauth/grants/grt3")[0]?.body).toEqual({ access: "manage" }));
+    expect(api.callsTo("PATCH /api/oauth/grants/grt3")[0]?.headers.get("X-OpenBase-CSRF")).toBe("1");
+    await waitFor(() => expect(within(screen.getByRole("list", { name: "Connected apps" })).getAllByRole("listitem")[2]).toHaveTextContent("Full control"));
   });
 
   it("shows an empty state when nothing is connected", async () => {

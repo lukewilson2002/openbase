@@ -1,18 +1,19 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { ApiError, errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { PasskeyInfo } from "@/api/types";
 import { useSetupStatus } from "@/auth/useAuth";
-import { Notice, Section } from "@/components/layouts";
+import { Notice, Section, SettingsRow } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
 import { IconButton } from "@/components/ui/icon-button";
 import { Field, Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { StatusChip } from "@/components/ui/status-chip";
 import { useToast } from "@/components/ui/toast";
 import { formatDateTime } from "@/lib/format";
 import { atPublicAddress, classifyWebAuthnError, createPasskey, defaultPasskeyName, passkeysSupported } from "@/lib/webauthn";
@@ -55,38 +56,40 @@ export function PasskeysSection() {
       ) : (
         <>
           {passkeys.data.length === 0 ? (
-            <p className="text-[0.8125rem] text-muted">No passkeys yet. You sign in with your password.</p>
+            <p className="text-label text-muted">No passkeys yet. You sign in with your password.</p>
           ) : (
-            <ul aria-label="Your passkeys" className="divide-y divide-line rounded-md border border-line">
+            <ul aria-label="Your passkeys" className="-mx-4 divide-y divide-line border-y border-line">
               {passkeys.data.map((p) => (
-                <li key={p.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
-                  <KeyRound aria-hidden className="size-5 shrink-0 text-muted" />
-                  <div className="min-w-0 flex-1 basis-56">
-                    <p className="truncate text-[0.8125rem] font-medium">
-                      {p.name}
+                <SettingsRow
+                  key={p.id}
+                  title={
+                    <span className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="truncate">{p.name}</span>
                       {p.backup_eligible && (
-                        <span className="ml-2 rounded-full bg-subtle px-2 py-0.5 text-xs font-medium text-muted" title="The authenticator can back this passkey up to your password manager or cloud account.">
+                        <StatusChip hue="gray" title="The authenticator can back this passkey up to your password manager or cloud account.">
                           Synced
-                        </span>
+                        </StatusChip>
                       )}
-                    </p>
-                    <p className="text-xs text-muted">
-                      Added {formatDateTime(p.created_at)}, {p.last_used_at ? `last used ${formatDateTime(p.last_used_at)}` : "never used"}
-                    </p>
-                  </div>
-                  <IconButton label={`Rename ${p.name}`} size="sm" onClick={() => setRenaming(p)}>
-                    <Pencil aria-hidden className="size-4" />
-                  </IconButton>
-                  <IconButton label={`Remove ${p.name}`} size="sm" onClick={() => setRemoving(p)}>
-                    <Trash2 aria-hidden className="size-4" />
-                  </IconButton>
-                </li>
+                    </span>
+                  }
+                  description={`Added ${formatDateTime(p.created_at)}, ${p.last_used_at ? `last used ${formatDateTime(p.last_used_at)}` : "never used"}`}
+                  action={
+                    <span className="flex gap-1">
+                      <IconButton label={`Rename ${p.name}`} onClick={() => setRenaming(p)}>
+                        <Pencil aria-hidden className="size-4" />
+                      </IconButton>
+                      <IconButton label={`Remove ${p.name}`} onClick={() => setRemoving(p)}>
+                        <Trash2 aria-hidden className="size-4" />
+                      </IconButton>
+                    </span>
+                  }
+                />
               ))}
             </ul>
           )}
           <div className="mt-4">
             <Button variant="primary" disabled={!!blocked} onClick={() => setAdding(true)}>
-              <Plus aria-hidden className="size-4" /> Add a passkey
+              Add a passkey
             </Button>
           </div>
         </>

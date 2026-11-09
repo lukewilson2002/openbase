@@ -44,17 +44,17 @@ describe("OAuth consent page", () => {
     expect(await screen.findByRole("heading", { name: /Allow Fancy App to use your OpenBase\?/ })).toBeInTheDocument();
     expect(screen.getByTestId("redirect-host")).toHaveTextContent("app.example.com");
     expect(screen.getByText("ada@example.com")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Read only/)).toBeChecked();
-    expect(screen.getByLabelText(/Read & edit/)).not.toBeChecked();
-    expect(screen.getByLabelText(/Full control/)).not.toBeChecked();
-    expect(screen.getByLabelText("Projects")).toHaveValue("all");
+    expect(screen.getByRole("radio", { name: "Read" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Read and write" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "Full control" })).not.toBeChecked();
+    expect(screen.getByLabelText("Folders")).toHaveValue("all");
   });
 
   it("approves with the chosen access and follows the redirect the server returns", async () => {
     const user = userEvent.setup();
     const api = consent();
     renderApp({ route: ROUTE });
-    await user.click(await screen.findByLabelText(/Read & edit/));
+    await user.click(await screen.findByRole("radio", { name: "Read and write" }));
     await user.click(screen.getByRole("button", { name: "Approve" }));
     await waitFor(() => expect(follow).toHaveBeenCalledTimes(1));
     expect(follow).toHaveBeenCalledWith("https://app.example.com/cb?code=abc&state=s&iss=https%3A%2F%2Fbase.example");
@@ -78,13 +78,13 @@ describe("OAuth consent page", () => {
     const user = userEvent.setup();
     const api = consent({ requested_access: "write", max_access: "manage", default_access: "write" });
     renderApp({ route: ROUTE });
-    expect(await screen.findByLabelText(/Read & edit/)).toBeChecked();
-    expect(screen.getByLabelText(/Read only/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Full control/)).toBeInTheDocument();
+    expect(await screen.findByRole("radio", { name: "Read and write" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Read" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Full control" })).toBeInTheDocument();
     expect(screen.queryByText(/only because you chose it/i)).not.toBeInTheDocument();
     // Choosing more than it asked for is allowed, says so, and is sent as the explicit choice.
-    await user.click(screen.getByLabelText(/Full control/));
-    expect(screen.getByText(/asked for read & edit, not full control/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Full control" }));
+    expect(screen.getByText("This app asked for less. Give it full control anyway?")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Approve" }));
     await waitFor(() => expect(api.callsTo("POST /api/oauth/requests/oar1/decision")).toHaveLength(1));
     expect(api.callsTo("POST /api/oauth/requests/oar1/decision")[0]?.body).toMatchObject({ access: "manage" });
@@ -93,11 +93,11 @@ describe("OAuth consent page", () => {
   it("preselects Full control when the app asked for it, with what it adds spelled out", async () => {
     consent({ requested_access: "manage", default_access: "manage" });
     renderApp({ route: ROUTE });
-    expect(await screen.findByLabelText(/Full control/)).toBeChecked();
-    expect(screen.getByText(/manage workspaces, members, invites and settings/)).toBeInTheDocument();
+    expect(await screen.findByRole("radio", { name: "Full control" })).toBeChecked();
+    expect(screen.getByText(/create and delete workspaces and folders, manage members, invites and settings/)).toBeInTheDocument();
   });
 
-  it("limits the app to the selected bases and cannot approve with none selected", async () => {
+  it("limits the app to the selected folders and cannot approve with none selected", async () => {
     const user = userEvent.setup();
     const api = consent(
       {},
@@ -111,10 +111,10 @@ describe("OAuth consent page", () => {
       },
     );
     renderApp({ route: ROUTE });
-    await user.selectOptions(await screen.findByLabelText("Projects"), "some");
+    await user.selectOptions(await screen.findByLabelText("Folders"), "some");
     const approve = screen.getByRole("button", { name: "Approve" });
     expect(approve).toBeDisabled();
-    const group = await screen.findByRole("group", { name: "Allowed projects" });
+    const group = await screen.findByRole("group", { name: "Allowed folders" });
     await user.click(await within(group).findByLabelText("Acme / CRM"));
     expect(approve).toBeEnabled();
     await user.click(approve);
@@ -122,20 +122,20 @@ describe("OAuth consent page", () => {
     expect(api.callsTo("POST /api/oauth/requests/oar1/decision")[0]?.body).toEqual({ decision: "approve", access: "read", base_ids: ["app1"] });
   });
 
-  it("steps Full control down to read and write when the app is limited to some projects, and does not offer it there", async () => {
+  it("steps Full control down to read and write when the app is limited to some folders, and does not offer it there", async () => {
     const user = userEvent.setup();
     consent(
       { requested_access: "manage", default_access: "manage" },
       { "GET /api/workspaces": [makeWorkspace("owner", [])] },
     );
     renderApp({ route: ROUTE });
-    expect(await screen.findByLabelText(/Full control/)).toBeChecked();
-    await user.selectOptions(screen.getByLabelText("Projects"), "some");
-    expect(screen.getByLabelText(/Full control/)).toBeDisabled();
-    expect(screen.getByLabelText(/Read & edit/)).toBeChecked();
+    expect(await screen.findByRole("radio", { name: "Full control" })).toBeChecked();
+    await user.selectOptions(screen.getByLabelText("Folders"), "some");
+    expect(screen.getByRole("radio", { name: "Full control" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "Read and write" })).toBeChecked();
     expect(screen.getByText(/cannot have Full control/)).toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("Projects"), "all");
-    expect(screen.getByLabelText(/Full control/)).toBeEnabled();
+    await user.selectOptions(screen.getByLabelText("Folders"), "all");
+    expect(screen.getByRole("radio", { name: "Full control" })).toBeEnabled();
   });
 
   describe("warnings", () => {

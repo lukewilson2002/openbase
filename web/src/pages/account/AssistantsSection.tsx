@@ -59,7 +59,7 @@ export function AssistantsSection() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
-        <p className="text-[0.9375rem]">Let an AI assistant work in OpenBase for you.</p>
+        <p className="text-ui">Let an AI assistant work in OpenBase for you.</p>
         {setup.isError ? (
           <Notice tone="error">{errorMessage(setup.error)}</Notice>
         ) : url === null || publicUrl === undefined ? (
@@ -68,7 +68,7 @@ export function AssistantsSection() {
           <>
             <CopyField label="MCP address" copyLabel="Copy MCP address" value={url} />
             {needsPublicHttps(publicUrl) && (
-              <p className="flex items-start gap-1.5 text-xs text-muted">
+              <p className="flex items-start gap-1.5 text-meta text-muted">
                 <TriangleAlert aria-hidden className="mt-px size-3.5 shrink-0" />
                 <span>Claude and ChatGPT connect from the internet, so they need OpenBase at a public https address. Claude Code works locally.</span>
               </p>
@@ -90,7 +90,7 @@ export function AssistantsSection() {
               <OtherSteps url={url} />
             </AssistantItem>
           </Accordion.Root>
-          <p className="-mt-3 text-xs">
+          <p className="-mt-3 text-meta">
             <ExternalDocLink href={DOCS_ACCESS}>How access works</ExternalDocLink>
           </p>
         </>
@@ -107,7 +107,7 @@ function AssistantItem({ value, name, mark, children }: { value: string; name: s
       <Accordion.Header className="flex">
         <Accordion.Trigger
           className={cn(
-            "flex w-full items-center gap-3 px-4 py-3 text-left text-[0.9375rem] font-semibold transition-colors hover:bg-hover",
+            "flex w-full items-center gap-3 px-4 py-3 text-left text-ui font-semibold transition-colors hover:bg-hover",
             "focus-visible:-outline-offset-2 group-first/item:rounded-t-lg group-last/item:rounded-b-lg [&[data-state=open]]:rounded-b-none",
           )}
         >
@@ -122,11 +122,11 @@ function AssistantItem({ value, name, mark, children }: { value: string; name: s
 }
 
 function SubHeading({ children }: { children: ReactNode }) {
-  return <h4 className="text-[0.8125rem] font-semibold">{children}</h4>;
+  return <h4 className="text-label font-semibold">{children}</h4>;
 }
 
 function Steps({ children }: { children: ReactNode }) {
-  return <ol className="flex list-decimal flex-col gap-2.5 pl-5 text-[0.8125rem] marker:text-muted">{children}</ol>;
+  return <ol className="flex list-decimal flex-col gap-2.5 pl-5 text-label marker:text-muted">{children}</ol>;
 }
 
 function ExternalDocLink({ href, children }: { href: string; children: ReactNode }) {
@@ -142,7 +142,7 @@ function ExternalDocLink({ href, children }: { href: string; children: ReactNode
 function TokenDisclosure({ children }: { children: ReactNode }) {
   return (
     <Collapsible.Root className="group/token">
-      <Collapsible.Trigger className="inline-flex items-center gap-1 rounded text-xs font-medium text-muted hover:text-fg">
+      <Collapsible.Trigger className="inline-flex items-center gap-1 rounded text-meta font-medium text-muted hover:text-fg">
         <ChevronDown aria-hidden className="size-3.5 -rotate-90 transition-transform group-data-[state=open]/token:rotate-0" />
         Use a token instead
       </Collapsible.Trigger>
@@ -153,7 +153,7 @@ function TokenDisclosure({ children }: { children: ReactNode }) {
 
 function CreateTokenLine() {
   return (
-    <p className="text-xs text-muted">
+    <p className="text-meta text-muted">
       Replace YOUR_TOKEN with one from{" "}
       <Link to="/account?tab=tokens" className="text-primary-text underline underline-offset-2 hover:no-underline">
         API tokens
@@ -192,8 +192,8 @@ function ClaudeSteps({ url }: { url: string }) {
       <div className="flex flex-col gap-2.5">
         <SubHeading>Claude Code</SubHeading>
         <CopyBlock label="Claude Code command" copyLabel="Copy command" value={claudeCodeCommand(url)} />
-        <p className="text-[0.8125rem]">
-          Run <code className="rounded bg-subtle px-1 py-0.5 font-mono text-xs">/mcp</code> inside Claude Code to sign in.
+        <p className="text-label">
+          Run <code className="rounded bg-subtle px-1 py-0.5 font-mono text-meta">/mcp</code> inside Claude Code to sign in.
         </p>
         <TokenDisclosure>
           <CopyBlock label="Claude Code command with a token" copyLabel="Copy token command" value={claudeCodeTokenCommand(url)} />
@@ -222,7 +222,7 @@ function ChatGPTSteps({ url }: { url: string }) {
         <li>Sign in to OpenBase and approve access.</li>
         <li>In a chat, enable OpenBase in the tools.</li>
       </Steps>
-      <p className="text-xs text-muted">Needs a Plus, Pro, Business, Enterprise or Edu plan.</p>
+      <p className="text-meta text-muted">Needs a Plus, Pro, Business, Enterprise or Edu plan.</p>
     </div>
   );
 }
@@ -230,13 +230,13 @@ function ChatGPTSteps({ url }: { url: string }) {
 function OtherSteps({ url }: { url: string }) {
   return (
     <div className="flex flex-col gap-2.5">
-      <p className="text-[0.8125rem]">Any MCP client that supports remote HTTP servers. Add this URL and sign in with OAuth when asked.</p>
+      <p className="text-label">Any MCP client that supports remote HTTP servers. Add this URL and sign in with OAuth when asked.</p>
       <CopyField label="Server URL" copyLabel="Copy server URL" value={url} />
       <TokenDisclosure>
         <CopyBlock label="MCP client configuration" copyLabel="Copy configuration" value={genericConfig(url)} />
         <CreateTokenLine />
       </TokenDisclosure>
-      <p className="text-xs text-muted">
+      <p className="text-meta text-muted">
         <ExternalDocLink href={DOCS_CLIENTS}>Notes for specific clients</ExternalDocLink>
       </p>
     </div>

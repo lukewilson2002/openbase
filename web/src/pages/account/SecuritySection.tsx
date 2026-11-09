@@ -91,7 +91,7 @@ function TwoFactor({ user }: { user: User }) {
       <div className="flex flex-wrap items-center gap-3">
         {user.totp_enabled ? (
           <>
-            <span className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-success">
+            <span className="inline-flex items-center gap-1.5 text-label font-medium text-success">
               <ShieldCheck aria-hidden className="size-4" /> Enabled
             </span>
             <Button onClick={() => setDisabling(true)}>
@@ -100,7 +100,7 @@ function TwoFactor({ user }: { user: User }) {
           </>
         ) : (
           <>
-            <span className="text-[0.8125rem] text-muted">Not enabled</span>
+            <span className="text-label text-muted">Not enabled</span>
             <Button variant="primary" loading={start.isPending} onClick={() => start.mutate()}>
               <ShieldCheck aria-hidden className="size-4" /> Enable two-factor
             </Button>
@@ -146,7 +146,7 @@ function EnableDialog({ setup, onClose, onEnabled }: { setup: TwoFactorSetup; on
           <QrCode value={setup.otpauth_url} label="QR code for your authenticator app" />
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="text-[0.8125rem] font-medium">Or enter this key manually</span>
+          <span className="text-label font-medium">Or enter this key manually</span>
           <CopyField label="Secret key" value={setup.secret} />
         </div>
         {enable.isError && <Notice tone="error">{errorMessage(enable.error)}</Notice>}

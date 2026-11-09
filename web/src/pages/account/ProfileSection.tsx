@@ -17,15 +17,17 @@ export function ProfileSection({ user }: { user: User }) {
   const [name, setName] = useState(user.name);
   // "" = follow the browser's zone (the API treats an empty string as "clear").
   const [timezone, setTimezone] = useState(user.timezone ?? "");
+  // 0 = Sunday, 1 = Monday: where the calendar-week filters ("this week") start their weeks.
+  const [weekStart, setWeekStart] = useState(user.week_start === 1 ? 1 : 0);
 
   const save = useMutation({
-    mutationFn: () => api.auth.updateMe({ name: name.trim(), timezone }),
+    mutationFn: () => api.auth.updateMe({ name: name.trim(), timezone, week_start: weekStart }),
     onSuccess: (updated) => {
       qc.setQueryData(keys.me, updated);
       toast({ title: "Profile saved", variant: "success" });
     },
   });
-  const dirty = name.trim() !== user.name || timezone !== (user.timezone ?? "");
+  const dirty = name.trim() !== user.name || timezone !== (user.timezone ?? "") || weekStart !== (user.week_start === 1 ? 1 : 0);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -49,6 +51,14 @@ export function ProfileSection({ user }: { user: User }) {
                   {z}
                 </option>
               ))}
+            </Select>
+          )}
+        </Field>
+        <Field label="Week starts on" hint="Where “this week” and “next week” filters begin.">
+          {(ctl) => (
+            <Select {...ctl} value={String(weekStart)} onChange={(e) => setWeekStart(Number(e.target.value))}>
+              <option value="0">Sunday</option>
+              <option value="1">Monday</option>
             </Select>
           )}
         </Field>

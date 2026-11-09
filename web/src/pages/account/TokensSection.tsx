@@ -1,21 +1,22 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { CreatedToken, TokenInfo } from "@/api/types";
 import { errorMessage } from "@/api/client";
+import { AccessChoice } from "@/components/AccessChoice";
 import { CopyField } from "@/components/CopyField";
-import { Notice, Section } from "@/components/layouts";
+import { FolderLimit } from "@/components/FolderLimit";
+import { Notice, Section, SettingsRow } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
-import { IconButton } from "@/components/ui/icon-button";
 import { Field, Input, Select } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatusChip } from "@/components/ui/status-chip";
 import { formatDate } from "@/lib/format";
+import { NEEDS_ALL_FOLDERS, TOKEN_ACCESS_LABEL, accessOf, type OAuthAccess } from "@/lib/oauthAccess";
 
 export function TokensSection() {
   const qc = useQueryClient();
@@ -27,41 +28,49 @@ export function TokensSection() {
 
   return (
     <Section
-      title="Personal access tokens"
-      description="Use tokens to call the REST API from scripts and tools, or to connect an AI assistant (see AI assistants). A token acts as you, limited by the scope you choose."
-    >
-      <div className="mb-4">
+      title="API tokens"
+      description="Use tokens to call the REST API from scripts and tools, or to connect an AI assistant (see AI assistants). A token acts as you, limited by the access you choose."
+      flush
+      actions={
         <Button variant="primary" onClick={() => setCreating(true)}>
-          <Plus aria-hidden className="size-4" /> New token
+          New token
         </Button>
-      </div>
+      }
+    >
       {tokens.isPending ? (
-        <Spinner />
+        <div aria-hidden className="p-4">
+          <Skeleton className="h-10" />
+        </div>
       ) : tokens.isError ? (
-        <Notice tone="error">{errorMessage(tokens.error)}</Notice>
+        <div className="p-4">
+          <Notice tone="error">{errorMessage(tokens.error)}</Notice>
+        </div>
       ) : tokens.data.length === 0 ? (
-        <EmptyState icon={<KeyRound />} title="No tokens yet" description="Create a token to use the API." />
+        <EmptyState title="No tokens yet" description="Create a token to use the API." />
       ) : (
-        <ul className="divide-y divide-line rounded-md border border-line">
+        <ul className="divide-y divide-line" aria-label="API tokens">
           {tokens.data.map((t) => (
-            <li key={t.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
-              <KeyRound aria-hidden className="size-5 shrink-0 text-muted" />
-              <div className="min-w-0 flex-1 basis-56">
-                <p className="truncate text-[0.8125rem] font-medium">
-                  {t.name}
-                  <span className="ml-2 rounded-full bg-subtle px-2 py-0.5 text-xs font-normal text-muted">{t.write ? "Read and write" : "Read only"}</span>
-                  {t.manage && <span className="ml-1 rounded-full bg-subtle px-2 py-0.5 text-xs font-normal text-danger">Can manage workspaces and members</span>}
-                </p>
-                <p className="text-xs text-muted">
+            <SettingsRow
+              key={t.id}
+              title={
+                <span className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="truncate">{t.name}</span>
+                  <StatusChip hue={accessOf(t) === "manage" ? "orange" : "gray"}>{TOKEN_ACCESS_LABEL[accessOf(t)]}</StatusChip>
+                </span>
+              }
+              description={
+                <>
                   Created {formatDate(t.created_at)} - {t.last_used_at ? `last used ${formatDate(t.last_used_at)}` : "never used"}
                   {t.expires_at ? ` - expires ${formatDate(t.expires_at)}` : ""}
-                  {t.base_ids ? ` - ${t.base_ids.length} project${t.base_ids.length === 1 ? "" : "s"}` : " - all projects"}
-                </p>
-              </div>
-              <IconButton label={`Revoke ${t.name}`} size="sm" onClick={() => setRevoking(t)}>
-                <Trash2 aria-hidden className="size-4" />
-              </IconButton>
-            </li>
+                  {t.base_ids ? ` - ${t.base_ids.length} folder${t.base_ids.length === 1 ? "" : "s"}` : " - all folders"}
+                </>
+              }
+              action={
+                <Button aria-label={`Revoke ${t.name}`} onClick={() => setRevoking(t)}>
+                  Revoke
+                </Button>
+              }
+            />
           ))}
         </ul>
       )}
@@ -95,7 +104,7 @@ export function TokensSection() {
         open={!!revoking}
         onOpenChange={(o) => !o && setRevoking(null)}
         title={`Revoke ${revoking?.name ?? "token"}?`}
-        description="Anything using this token stops working immediately. This cannot be undone; make a new token to get access back."
+        description="Anything using this token stops working immediately. This can't be undone; make a new token to get access back."
         confirmLabel="Revoke token"
         destructive
         onConfirm={async () => {
@@ -110,19 +119,16 @@ export function TokensSection() {
 
 function CreateTokenDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (t: CreatedToken) => void }) {
   const [name, setName] = useState("");
-  const [write, setWrite] = useState(false);
-  const [manage, setManage] = useState(false);
+  const [access, setAccess] = useState<OAuthAccess>("read");
   const [expiry, setExpiry] = useState("");
   const [limitBases, setLimitBases] = useState(false);
   const [baseIds, setBaseIds] = useState<string[]>([]);
-  // Only needed (and only fetched) when the token is limited to some bases.
-  const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list, enabled: limitBases });
   const create = useMutation({
     mutationFn: () =>
       api.tokens.create({
         name: name.trim(),
-        write,
-        manage: write && manage,
+        write: access !== "read",
+        manage: access === "manage",
         base_ids: limitBases ? baseIds : null,
         expires_in_days: expiry ? Number(expiry) : null,
       }),
@@ -133,64 +139,34 @@ function CreateTokenDialog({ onClose, onCreated }: { onClose: () => void; onCrea
     create.mutate();
   };
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()} title="New personal access token" size="sm">
+    <Dialog open onOpenChange={(o) => !o && onClose()} title="New API token" size="sm">
       <form onSubmit={submit} className="flex flex-col gap-4">
         {create.isError && <Notice tone="error">{errorMessage(create.error)}</Notice>}
         <Field label="Name" hint="For example: Zapier, nightly export.">
           {(ctl) => <Input {...ctl} value={name} onChange={(e) => setName(e.target.value)} maxLength={100} required autoFocus />}
         </Field>
-        <Checkbox
-          checked={write}
-          onCheckedChange={(v) => {
-            setWrite(v);
-            if (!v) setManage(false);
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1 text-label font-medium">What can it do?</legend>
+          <AccessChoice
+            value={access}
+            onChange={setAccess}
+            labels={TOKEN_ACCESS_LABEL}
+            // The server refuses a token that manages and is limited to some folders.
+            disabled={limitBases ? { [NEEDS_ALL_FOLDERS]: "Not available for a token limited to some folders." } : undefined}
+          />
+          <p className="text-meta text-muted">Passwords, two-factor settings, sessions and tokens can never be changed with a token. Only give Full access to tools you fully trust, such as an AI agent that should work for you.</p>
+        </fieldset>
+        <FolderLimit
+          limited={limitBases}
+          onLimitedChange={(limited) => {
+            setLimitBases(limited);
+            // Step down rather than fail on Create.
+            if (limited && access === "manage") setAccess("write");
           }}
-          label="Allow writes (otherwise read only)"
+          baseIds={baseIds}
+          onBaseIdsChange={setBaseIds}
+          note="A token limited to some folders cannot have Full access, which reaches beyond single folders."
         />
-        <div className="flex flex-col gap-1">
-          <Checkbox checked={write && manage} onCheckedChange={setManage} disabled={!write} label="Allow managing workspaces, members and settings" />
-          <p className="pl-6 text-xs text-muted">
-            Lets whoever holds this token do what you can do in the app beyond your data: create, rename and delete workspaces, change who has access, send invites,
-            and use the admin pages if you are an administrator. Only turn this on for tools you fully trust, such as an AI agent that should work for you. Passwords, two-factor
-            settings, sessions and tokens can never be changed with a token.
-          </p>
-        </div>
-        <Field label="Projects">
-          {(ctl) => (
-            <Select
-              {...ctl}
-              value={limitBases ? "some" : "all"}
-              onChange={(e) => {
-                setLimitBases(e.target.value === "some");
-                if (e.target.value !== "some") setBaseIds([]);
-              }}
-            >
-              <option value="all">All projects I can access</option>
-              <option value="some">Only the projects I select</option>
-            </Select>
-          )}
-        </Field>
-        {limitBases && (
-          <div className="flex flex-col gap-1.5" role="group" aria-label="Allowed projects">
-            {workspaces.isPending ? (
-              <Spinner />
-            ) : workspaces.isError ? (
-              <Notice tone="error">{errorMessage(workspaces.error)}</Notice>
-            ) : (
-              workspaces.data.flatMap((w) =>
-                w.bases.map((b) => (
-                  <Checkbox
-                    key={b.id}
-                    checked={baseIds.includes(b.id)}
-                    onCheckedChange={(on) => setBaseIds((cur) => (on ? [...cur, b.id] : cur.filter((x) => x !== b.id)))}
-                    label={`${w.name} / ${b.name}`}
-                  />
-                )),
-              )
-            )}
-            <p className="text-xs text-muted">A token limited to projects cannot manage workspaces, members or the admin pages.</p>
-          </div>
-        )}
         <Field label="Expires">
           {(ctl) => (
             <Select {...ctl} value={expiry} onChange={(e) => setExpiry(e.target.value)}>

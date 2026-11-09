@@ -4,17 +4,23 @@ export type OAuthAccess = "read" | "write" | "manage";
 export const ACCESS_ORDER: OAuthAccess[] = ["read", "write", "manage"];
 
 export const ACCESS_LABEL: Record<OAuthAccess, string> = {
-  read: "Read only",
-  write: "Read & edit",
+  read: "Read",
+  write: "Read and write",
   manage: "Full control",
 };
 
+/** The same three levels as an API token names them (AGT-5). */
+export const TOKEN_ACCESS_LABEL: Record<OAuthAccess, string> = { ...ACCESS_LABEL, manage: "Full access" };
+
+/** What each level allows, in one plain sentence (AGT-2, AGT-5). */
 export const ACCESS_HINT: Record<OAuthAccess, string> = {
-  read: "See your projects, tables and records. Cannot change anything.",
-  write: "Also create, edit and delete records, collections, properties, views and automations in your projects.",
-  manage:
-    "Also manage workspaces, members, invites and settings, and use the admin pages if you are an administrator. Passwords, two-factor settings, sessions and tokens are never reachable.",
+  read: "Can see your folders, collections and records, and cannot change anything.",
+  write: "Can also create, change and delete records, collections, properties, views and automations.",
+  manage: "Can also create and delete workspaces and folders, manage members, invites and settings, and use the admin pages if you are an administrator.",
 };
+
+/** True for a level a limited-to-some-folders app or token cannot be given: managing reaches beyond single folders. */
+export const NEEDS_ALL_FOLDERS: OAuthAccess = "manage";
 
 export function isAccess(value: string | null | undefined): value is OAuthAccess {
   return value === "read" || value === "write" || value === "manage";

@@ -228,7 +228,7 @@ describe("account: AI assistants tab", () => {
 
       // The link goes to the Tokens tab.
       await user.click(screen.getByRole("link", { name: "API tokens" }));
-      expect(await screen.findByRole("heading", { name: "Personal access tokens" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "API tokens" })).toBeInTheDocument();
     });
 
     it("offers a generic client configuration for Others, collapsed until opened", async () => {
@@ -284,7 +284,7 @@ describe("account: AI assistants tab", () => {
     expect(api.callsTo("GET /api/oauth/grants")).toHaveLength(1);
 
     await user.click(screen.getByRole("tab", { name: "API tokens" }));
-    expect(await screen.findByRole("heading", { name: "Personal access tokens" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "API tokens" })).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Connected apps" })).not.toBeInTheDocument();
   });
 

@@ -4,4 +4,3 @@
 # This list only shrinks. Never add a file: use a token from web/src/styles/index.css instead.
 # scripts/check-tokens.mjs fails when a file listed here no longer has a violation (delete its
 # line) or no longer exists. It must be empty by Phase 7 of the UX overhaul.
-components/accountMenu.tsx
