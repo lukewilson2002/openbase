@@ -160,10 +160,27 @@ pub fn enabled_for_base(conn: &Connection, base_id: &str) -> AppResult<Vec<Autom
         .collect())
 }
 
+/// Restricts an `automations` query to rows whose base and workspace are not in the trash: the
+/// people who could turn an automation off cannot see it there, so it must not run meanwhile.
+const IN_LIVE_BASE: &str =
+    "EXISTS (SELECT 1 FROM bases b JOIN workspaces w ON w.id = b.workspace_id
+             WHERE b.id = automations.base_id AND b.deleted_at IS NULL AND w.deleted_at IS NULL)";
+
+/// Whether the base of an automation (and its workspace) is out of the trash.
+pub fn base_is_live(conn: &Connection, base_id: &str) -> AppResult<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM bases b JOIN workspaces w ON w.id = b.workspace_id
+                        WHERE b.id = ?1 AND b.deleted_at IS NULL AND w.deleted_at IS NULL)",
+        [base_id],
+        |r| r.get(0),
+    )?)
+}
+
+/// The automation a webhook token belongs to. A trashed base answers as an unknown token.
 pub fn by_webhook_hash(conn: &Connection, hash: &str) -> AppResult<Option<AutomationRow>> {
     Ok(query(
         conn,
-        &format!("SELECT {COLS} FROM automations WHERE webhook_token_hash = ?1"),
+        &format!("SELECT {COLS} FROM automations WHERE webhook_token_hash = ?1 AND {IN_LIVE_BASE}"),
         [hash],
     )?
     .pop())
@@ -227,6 +244,7 @@ pub fn due_schedules(conn: &Connection, now: i64) -> AppResult<Vec<AutomationRow
         &format!(
             "SELECT {COLS} FROM automations
              WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ?1
+               AND {IN_LIVE_BASE}
              ORDER BY next_run_at, id"
         ),
         [now],

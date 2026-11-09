@@ -276,6 +276,17 @@ async fn process_inner(exec: Arc<Executor>, opts: RunnerOpts, run: RunRow) {
     if !automation.enabled {
         return fail("the automation is turned off".into(), log).await;
     }
+    // Queued and retried runs may outlive the base: a trashed base runs nothing.
+    let base_id = automation.base_id.clone();
+    if !matches!(
+        exec.state
+            .db
+            .read(move |c| store::base_is_live(c, &base_id))
+            .await,
+        Ok(true)
+    ) {
+        return fail("the base is in the trash".into(), log).await;
+    }
     let trigger: TriggerData = match serde_json::from_value(run.trigger_data.clone()) {
         Ok(t) => t,
         Err(e) => return fail(format!("unreadable trigger data: {e}"), log).await,

@@ -203,6 +203,36 @@ async fn missed_occurrences_collapse_into_one_run() {
 }
 
 #[tokio::test]
+async fn schedules_and_queued_runs_of_a_trashed_base_do_not_run() {
+    let env = Env::new().await;
+    let a = env
+        .create(
+            "sched",
+            schedule_trigger("0 * * * *", "UTC"),
+            json!([env.notify_action("t")]),
+        )
+        .await;
+    let id = a["id"].as_str().unwrap();
+    let queued = env.queue_run(id, json!({ "type": "webhook", "body": null, "time_ms": 0 }));
+    let base = env.base().to_string();
+    schema_support::sql(&env.f.app, |tx| {
+        tx.execute("UPDATE bases SET deleted_at = 1 WHERE id = ?1", [&base])
+    });
+    let now = utc(2026, 5, 10, 12, 30, 0);
+    set_next_run(&env, id, Some(now - 1000));
+    assert_eq!(env.runner.enqueue_due_schedules(now).await.unwrap(), 0);
+    env.drain().await;
+    // The runs list is not readable while the base is in the trash.
+    schema_support::sql(&env.f.app, |tx| {
+        tx.execute("UPDATE bases SET deleted_at = NULL WHERE id = ?1", [&base])
+    });
+    let runs = env.runs(id).await;
+    assert_eq!(runs.len(), 1, "{runs:#?}");
+    assert_eq!(runs[0]["id"], queued);
+    assert_eq!(runs[0]["status"], "failed", "{runs:#?}");
+}
+
+#[tokio::test]
 async fn disabled_schedules_never_fire() {
     let env = Env::new().await;
     let a = env

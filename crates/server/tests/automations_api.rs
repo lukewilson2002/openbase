@@ -932,6 +932,57 @@ async fn updating_revalidates_and_a_broken_automation_cannot_be_turned_on() {
 // ------------------------------------------------------------- webhooks
 
 #[tokio::test]
+async fn a_webhook_of_a_trashed_base_or_workspace_answers_as_an_unknown_token() {
+    let env = Env::new().await;
+    let a = env
+        .create(
+            "hook",
+            json!({ "type": "webhook" }),
+            json!([env.notify_action("x")]),
+        )
+        .await;
+    let token = a["webhook_token"].as_str().unwrap().to_string();
+    let anon = env.f.app.anon();
+    let hook = format!("/api/hooks/{token}");
+    env.f
+        .app
+        .post(&anon, &hook, json!({}))
+        .await
+        .assert_status(202);
+
+    for table in ["bases", "workspaces"] {
+        let base = env.base().to_string();
+        let trash = |at: Option<i64>| {
+            schema_support::sql(&env.f.app, |tx| {
+                tx.execute(
+                    &format!(
+                        "UPDATE {table} SET deleted_at = ?1 WHERE id = {}",
+                        if table == "bases" {
+                            "?2"
+                        } else {
+                            "(SELECT workspace_id FROM bases WHERE id = ?2)"
+                        }
+                    ),
+                    rusqlite::params![at, base],
+                )
+            })
+        };
+        trash(Some(1));
+        env.f
+            .app
+            .post(&anon, &hook, json!({}))
+            .await
+            .assert_status(404);
+        trash(None);
+        env.f
+            .app
+            .post(&anon, &hook, json!({}))
+            .await
+            .assert_status(202);
+    }
+}
+
+#[tokio::test]
 async fn webhook_token_is_shown_once_and_can_be_rotated() {
     let env = Env::new().await;
     let a = env
