@@ -216,13 +216,15 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     const names = ["Alpha", "Bravo", "Charlie"];
     for (const [i, name] of names.entries()) {
       await newRecordButton(page).click();
-      await expect(page.getByText(`${i + 1} item${i === 0 ? "" : "s"}`)).toBeVisible();
-      // A record added and left blank is taken back when the next one is added, so name each one as it
-      // is added. Click its name cell: the grid selects it but does not hold the keyboard yet.
-      await selectCell(page, "name", i);
-      await typeToEdit(page, name);
+      // The header's New opens the new record as its page with the title focused (REC-8); a record that is named stays,
+      // and the bar's breadcrumb leads back to the grid.
+      const main = page.getByRole("main", { name: "Record" });
+      await expect(main.getByRole("textbox", { name: "Name" })).toBeFocused();
+      await page.keyboard.type(name);
       await page.keyboard.press("Enter");
-      await gridFocused(page);
+      await expect.poll(async () => (await records()).map((r) => r.values[table.primary_field_id])).toEqual(names.slice(0, i + 1));
+      await main.getByRole("navigation", { name: "Breadcrumb" }).locator(`a[href$="/${viewId}"]`).click();
+      await expect(page.getByText(`${i + 1} item${i === 0 ? "" : "s"}`)).toBeVisible();
     }
     expect(await records()).toHaveLength(3);
     await expect.poll(async () => (await records()).map((r) => r.values[table.primary_field_id])).toEqual(names);
