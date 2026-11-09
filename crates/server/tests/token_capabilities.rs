@@ -1262,24 +1262,84 @@ async fn admin_credential_actions_are_session_only() {
         res.body
     );
     assert_eq!(users(), n, "no user was created");
-    for admin_flag in [false, true] {
+    // the administrator role is session-only: a token that could grant it could claim the account
+    // through "Forgot password" or an invite and keep it after the token is revoked
+    let res = call(
+        &app,
+        &manage,
+        "POST",
+        "/api/admin/users",
+        Some(json!({"email": "newtrue@example.com", "name": "New", "is_admin": true})),
+    )
+    .await;
+    assert_eq!(res.status.as_u16(), 403, "{}", res.body);
+    assert!(
+        res.body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("grant the administrator role"),
+        "{}",
+        res.body
+    );
+    assert_eq!(users(), n, "no user was created");
+    let res = call(
+        &app,
+        &manage,
+        "POST",
+        "/api/admin/users",
+        Some(json!({"email": "newfalse@example.com", "name": "New", "is_admin": false})),
+    )
+    .await;
+    assert_eq!(res.status.as_u16(), 201, "{}", res.body);
+    assert!(
+        res.body["reset_link"].is_null(),
+        "no link for a token: {}",
+        res.body
+    );
+    assert_eq!(res.body["user"]["is_admin"], false);
+    let new_id = res.body["user"]["id"].as_str().unwrap().to_string();
+    // promoting an existing account is refused too, in a combined request as well; demoting is not
+    for body in [
+        json!({"is_admin": true}),
+        json!({"name": "Promoted", "is_admin": true}),
+    ] {
         let res = call(
             &app,
             &manage,
-            "POST",
-            "/api/admin/users",
-            Some(json!({"email": format!("new{admin_flag}@example.com"), "name": "New", "is_admin": admin_flag})),
+            "PATCH",
+            &format!("/api/admin/users/{new_id}"),
+            Some(body.clone()),
         )
         .await;
-        assert_eq!(res.status.as_u16(), 201, "{}", res.body);
-        assert!(
-            res.body["reset_link"].is_null(),
-            "no link for a token: {}",
-            res.body
-        );
-        assert_eq!(res.body["user"]["is_admin"], admin_flag);
+        assert_eq!(res.status.as_u16(), 403, "{body}: {}", res.body);
     }
-    assert_eq!(users(), n + 2);
+    assert_eq!(
+        app.query_i64(
+            "SELECT count(*) FROM users WHERE id = ?1 AND is_admin = 0 AND name = 'New'",
+            &[new_id.as_str()]
+        ),
+        1,
+        "still an ordinary user, not renamed"
+    );
+    let res = call(
+        &app,
+        &admin,
+        "PATCH",
+        &format!("/api/admin/users/{new_id}"),
+        Some(json!({"is_admin": true})),
+    )
+    .await;
+    assert_eq!(res.status.as_u16(), 200, "{}", res.body);
+    let res = call(
+        &app,
+        &manage,
+        "PATCH",
+        &format!("/api/admin/users/{new_id}"),
+        Some(json!({"is_admin": false})),
+    )
+    .await;
+    assert_eq!(res.status.as_u16(), 200, "{}", res.body);
+    assert_eq!(users(), n + 1);
     // ... the account exists but nobody can sign in to it, and no reset token exists for it
     let (login, _) = app
         .login("newfalse@example.com", "a long enough password")

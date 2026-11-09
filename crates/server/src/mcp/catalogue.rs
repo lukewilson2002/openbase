@@ -1426,7 +1426,7 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "instance admin",
         Admin,
         "Create a user. Signed in: with a password, or get a reset link to hand over. With an API token the account is created without a usable password: `password` is refused (403) and no reset link is returned, because whoever holds one can take the account over; an administrator sends the invitation from the web app.",
-        "{email, name, password? (session only), is_admin}",
+        "{email, name, password? (session only), is_admin (true is session only)}",
         "201 AdminCreatedUser {user, reset_link? (session only)}",
     ),
     e(
@@ -1436,7 +1436,7 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "instance admin",
         Admin,
         "Rename, (de)activate or (de)promote a user. `disable_2fa` is session-only: with an API token it is refused (403).",
-        "{name?, is_active?, is_admin?, disable_2fa? (session only)}",
+        "{name?, is_active?, is_admin? (true is session only), disable_2fa? (session only)}",
         "AdminUser",
     ),
     e(
@@ -1475,7 +1475,7 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "admin",
         "instance admin",
         Admin,
-        "Change the SMTP settings; effective at once. A field left out keeps its value; null or \"\" clears host/username. Settings fixed by an OPENBASE_SMTP_* environment variable cannot be changed. With an API token: `password` (set, remove) is refused (403, session-only), and so is changing host, port, security or username while a password is in use (it would redirect the password).",
+        "Change the SMTP settings; effective at once. A field left out keeps its value; null or \"\" clears host/username. Settings fixed by an OPENBASE_SMTP_* environment variable cannot be changed. With an API token: `password` (set, remove) is refused (403, session-only), and so is changing host, port, security or username (reset and invitation mail, and any stored password, would go to the new server); only `from` and clearing the host are open to tokens.",
         "{host?, port?, security? (starttls|tls|none), username?, from?, password? (session only: string sets, null removes, \"\" keeps)}",
         "EmailSettings",
     ),

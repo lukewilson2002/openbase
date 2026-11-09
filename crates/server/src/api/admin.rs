@@ -6,7 +6,8 @@
 //! `POST .../reset-link` (a password-reset link for any user is an account takeover),
 //! `DELETE .../users/{id}/passkeys`, `disable_2fa` in `PATCH .../users/{id}`, and a `password` or the reset link in
 //! `POST /api/admin/users` (a token may create the account but never learns or sets how to
-//! sign in to it).
+//! sign in to it). Granting the administrator role (`is_admin: true` on create or update) is
+//! session-only too, as is pointing outgoing mail at another server (`api::admin_email`).
 
 use std::path::{Path as FsPath, PathBuf};
 
@@ -72,6 +73,13 @@ async fn create_user(
     if req.password.is_some() {
         actor.require_session_for("set a user's password")?;
     }
+    // The administrator role opens every session-only action (reset links, backups, 2FA), so a
+    // token that could hand it out could mint a credential-bearing account that outlives the
+    // token: the account is claimed with the public password-reset flow at an address the token
+    // chose. Ordinary accounts stay creatable by tokens.
+    if req.is_admin {
+        actor.require_session_for("grant the administrator role")?;
+    }
     let email = users::normalize_email(&req.email)?;
     let name = users::validate_name(&req.name)?;
     let hash = match req.password {
@@ -123,6 +131,11 @@ async fn update_user(
     admin_guard(&state, &actor, &client, "PATCH /api/admin/users/{id}").await?;
     if req.disable_2fa {
         actor.require_session_for("switch off a user's two-factor authentication")?;
+    }
+    // See create_user: promoting an account a token can already sign in to (an invite signup, a
+    // reset flow) is the same escalation. Demoting stays open to tokens.
+    if req.is_admin == Some(true) {
+        actor.require_session_for("grant the administrator role")?;
     }
     let user = state
         .db

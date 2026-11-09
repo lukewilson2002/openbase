@@ -46,14 +46,29 @@ async fn an_agent_reads_and_changes_the_email_settings_but_not_the_password() {
     assert_eq!(off["email"]["sources"]["host"], "unset");
     assert_eq!(off["email"]["budgets"]["per_hour"], 500);
 
-    // change
+    // the connection target is a person's to set (reset mail goes through it): a token is refused
+    // even while no password is stored, and nothing is installed
+    let e = a
+        .fails(
+            "admin_update_email_settings",
+            json!({"host": "evil.example.com", "port": 25, "security": "none"}),
+        )
+        .await;
+    assert!(e.contains("different server"), "{e}");
+    assert!(!r.app().state.email.enabled());
+    r.app()
+        .patch(
+            &r.admin,
+            "/api/admin/email",
+            json!({"host": "smtp.example.com", "port": 465, "security": "tls", "username": "mailer"}),
+        )
+        .await
+        .assert_status(200);
+    // the sender is open to the agent
     let saved = a
         .call(
             "admin_update_email_settings",
-            json!({
-                "host": "smtp.example.com", "port": 465, "security": "tls",
-                "username": "mailer", "from": "OpenBase <base@example.com>"
-            }),
+            json!({"from": "OpenBase <base@example.com>"}),
         )
         .await;
     assert_eq!(saved["email"]["enabled"], true);
@@ -170,11 +185,14 @@ async fn a_test_email_is_delivered_or_fails_with_the_real_error() {
     let e = a.fails("admin_send_test_email", json!({})).await;
     assert!(e.contains("no SMTP host"), "{e}");
 
-    a.call(
-        "admin_update_email_settings",
-        json!({"host": "smtp.example.com"}),
-    )
-    .await;
+    r.app()
+        .patch(
+            &r.admin,
+            "/api/admin/email",
+            json!({"host": "smtp.example.com"}),
+        )
+        .await
+        .assert_status(200);
     let ok = a.call("admin_send_test_email", json!({})).await;
     assert_eq!(ok["sent"], true);
     assert_eq!(ok["to"], "admin@example.com");
@@ -195,11 +213,14 @@ async fn a_test_email_is_delivered_or_fails_with_the_real_error() {
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         l.local_addr().unwrap().port()
     };
-    a.call(
-        "admin_update_email_settings",
-        json!({"host": "127.0.0.1", "port": port, "security": "none"}),
-    )
-    .await;
+    r.app()
+        .patch(
+            &r.admin,
+            "/api/admin/email",
+            json!({"host": "127.0.0.1", "port": port, "security": "none"}),
+        )
+        .await
+        .assert_status(200);
     r.app()
         .state
         .email

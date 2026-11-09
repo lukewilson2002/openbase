@@ -32,7 +32,7 @@ pub fn definitions() -> Vec<ToolDef> {
                 json!({
                     "email": string("Email address (the sign-in name)."),
                     "name": string("Display name."),
-                    "is_admin": boolean("Make them an instance administrator (default false)."),
+                    "is_admin": boolean("Leave out or false. true is refused: granting the administrator role is session-only, so an administrator does it in the web app (Admin > Users)."),
                 }),
                 &["email", "name"],
             ),
@@ -42,13 +42,13 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "admin_update_user",
             "Update a user",
-            "Rename a user, deactivate or reactivate them (a deactivated user cannot sign in and their sessions and tokens stop working), or grant or revoke the administrator role. It cannot switch off someone's two-factor authentication (a credential: administrators do that in the web app). Instance administrators only; you cannot demote or deactivate the last administrator.",
+            "Rename a user, deactivate or reactivate them (a deactivated user cannot sign in and their sessions and tokens stop working), or revoke the administrator role. It cannot grant the administrator role (an administrator does that in the web app, Admin > Users: it unlocks every credential action) or switch off someone's two-factor authentication (a credential: administrators do that in the web app). Instance administrators only; you cannot demote or deactivate the last administrator.",
             object(
                 json!({
                     "user_id": string("User id (from admin_list_users)."),
                     "name": string("New display name."),
                     "is_active": boolean("false deactivates the account, true reactivates it."),
-                    "is_admin": boolean("Grant or revoke the administrator role."),
+                    "is_admin": boolean("false revokes the administrator role. true is refused: granting it is session-only (web app, Admin > Users)."),
                 }),
                 &["user_id"],
             ),
@@ -66,7 +66,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "admin_update_email_settings",
             "Change the email settings",
-            "Change the SMTP settings; the change applies at once. Leave a field out to keep it; null clears host (switches email off) or username. Fields fixed by an environment variable cannot be changed. The SMTP password can NOT be set or removed here (credentials are entered by a person in the web app, Admin > Email), and while a password is in use the host, port, security and username cannot be changed here either, because that would send the password to another server. Run admin_send_test_email afterwards. Instance administrators only.",
+            "Change the SMTP settings; the change applies at once. Leave a field out to keep it; null clears host (switches email off) or username. Fields fixed by an environment variable cannot be changed. The SMTP password can NOT be set or removed here (credentials are entered by a person in the web app, Admin > Email), and the host, port, security and username cannot be pointed at another server here either (password-reset and invitation mail travels through it); only clearing the host (email off) and the sender address are open to tokens, and an administrator sets up the connection in the web app (Admin > Email). Run admin_send_test_email afterwards. Instance administrators only.",
             object(
                 json!({
                     "host": json!({"type": ["string", "null"], "description": "SMTP server host name, e.g. smtp.example.com. null switches email off."}),

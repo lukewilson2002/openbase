@@ -562,12 +562,30 @@ async fn an_admin_manage_token_reads_and_edits_but_never_touches_the_password() 
         )
         .await;
 
-    // no password yet: a token may set up the connection
+    // the connection target is session-only even while no password is stored: password-reset
+    // mail goes through it, so a token that chose it could read any account's reset link
+    for body in [
+        json!({"host": "smtp.example.com", "port": 587, "username": "u"}),
+        json!({"host": "smtp.example.com"}),
+    ] {
+        let res = app.patch(&token, "/api/admin/email", body.clone()).await;
+        assert_eq!(res.status.as_u16(), 403, "{body}: {}", res.body);
+        assert!(!app.state.email.enabled(), "{body}: nothing was installed");
+    }
+    // the sender address is open to it
+    app.patch(
+        &token,
+        "/api/admin/email",
+        json!({"from": "G <g@example.com>"}),
+    )
+    .await
+    .assert_status(200);
+    // a person sets the connection
     let res = app
         .patch(
-            &token,
+            &admin,
             "/api/admin/email",
-            json!({"host": "smtp.example.com", "port": 587, "username": "u", "from": "G <g@example.com>"}),
+            json!({"host": "smtp.example.com", "port": 587, "username": "u"}),
         )
         .await;
     res.assert_status(200);

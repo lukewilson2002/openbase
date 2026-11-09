@@ -630,15 +630,37 @@ async fn admin_tools_manage_users_without_touching_credentials() {
     let (status, _) = person_agent.rpc("tools/list", json!({})).await;
     assert_eq!(status, 200);
 
-    // Promote, rename, demote; the last administrator cannot be demoted.
-    let up = a
-        .call(
+    // A token cannot promote (a session-only credential action), but can rename and demote.
+    let e = a
+        .fails(
             "admin_update_user",
             json!({"user_id": new_id, "is_admin": true, "name": "Boss"}),
         )
         .await;
-    assert_eq!(up["user"]["is_admin"], true);
+    assert!(e.contains("grant the administrator role"), "{e}");
+    let e = a
+        .fails(
+            "admin_create_user",
+            json!({"email": "root2@example.com", "name": "Root", "is_admin": true}),
+        )
+        .await;
+    assert!(e.contains("grant the administrator role"), "{e}");
+    let up = a
+        .call(
+            "admin_update_user",
+            json!({"user_id": new_id, "name": "Boss"}),
+        )
+        .await;
+    assert_eq!(up["user"]["is_admin"], false);
     assert_eq!(up["user"]["name"], "Boss");
+    r.app()
+        .patch(
+            &r.admin,
+            &format!("/api/admin/users/{new_id}"),
+            json!({"is_admin": true}),
+        )
+        .await
+        .assert_status(200);
     a.call(
         "admin_update_user",
         json!({"user_id": new_id, "is_admin": false}),

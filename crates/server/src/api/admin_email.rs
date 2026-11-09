@@ -307,11 +307,16 @@ async fn update(
             let next = apply_request(&req, password, &env, &stored)?;
             let old = email.resolved();
             let new = email.preview(&next)?;
-            if by_token && old.password_set && new.smtp.is_some() && target_changed(&old, &new) {
+            // Whatever the transport carries is what a token must not redirect: the SMTP password
+            // when one is stored, and always the password-reset and invitation links, which the
+            // public reset flow sends through it. Clearing the host (email off) and the sender
+            // address stay open to tokens.
+            if by_token && new.smtp.is_some() && target_changed(&old, &new) {
                 return Err(AppError::forbidden(
-                    "an SMTP password is in use, and changing the host, port, security mode or \
-                     username would send it to a different server; API tokens can never do that. \
-                     Change these in the web app (Admin > Email) while signed in",
+                    "changing the SMTP host, port, security mode or username would send \
+                     password-reset and invitation mail (and an SMTP password, if one is stored) \
+                     to a different server; API tokens can never do that. Change these in the web \
+                     app (Admin > Email) while signed in",
                 ));
             }
             let mut changes = changed_fields(&stored, &next);
