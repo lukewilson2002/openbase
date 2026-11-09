@@ -29,9 +29,10 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   `/inbox` links come here). Home's data is one request and it updates live through a new stream for the whole
   workspace, `GET /api/workspaces/{id}/events` (one connection instead of one per folder; no presence).
 - **Faster first screen.** Home, a record page, notifications and the two workspace lists load when you go to
-  them, so opening a collection loads 16% less JavaScript than 0.8.0 (759 KiB against 907 KiB), and a
-  collection of 50,000 records shows its first rows in 733 ms against 767 ms (median of 5 runs on one
-  laptop; `scripts/perf-compare.sh` measures it).
+  them, so opening a collection loads 16% less JavaScript than `main` did before this release (759 KiB against
+  907 KiB; `main` is 42 commits past 0.8.0), and a collection of 50,000 records shows its first rows in 733 ms
+  against 767 ms (median of 5 runs on one laptop; `scripts/perf-compare.sh` measures it, and `MAIN_REF=v0.8.0`
+  measures against the release itself).
 - **Sign-in pages, the intro and error screens in the Notebook look.** Login, first-run setup, sign-up, invite and
   password reset share one 400 px card under the OpenBase lockup, with 44 px inputs, a full-width primary button and the
   passkey as a secondary button; invite pages show the workspace by its color mark. The first workspace is made from a
