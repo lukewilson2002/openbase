@@ -140,7 +140,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
 
   await test.step("creates a workspace, which starts with its top-level project", async () => {
     await page.getByRole("textbox", { name: "Workspace name" }).fill("Journey workspace");
-    await page.getByRole("radio", { name: "Teal" }).click();
+    await page.getByRole("radio", { name: "Teal", exact: true }).click();
     await page.getByRole("button", { name: "Create workspace" }).click();
     // A new workspace opens on its Home, and starts with an empty top-level project named after it.
     await expect(page).toHaveURL(/\/workspace\/wsp[^/]+$/);
