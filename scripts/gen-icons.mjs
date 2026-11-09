@@ -1,9 +1,11 @@
 // Generates crates/server/data/lucide-icons.txt, the list of Lucide icon names the server
 // accepts from AI agents (MCP) and searches for `list_icons`. Run through scripts/gen-icons.sh.
 //
-// Source of truth is the installed `lucide-react` package in web/node_modules (the same one the
-// web picker draws from), so the server list and the picker cannot drift apart: each canonical
-// icon module exports `__iconData: { name, aliases? }`.
+// Source of truth is the installed `lucide-react` package in web/node_modules (the one the web
+// client draws its button icons from): each canonical icon module exports `__iconData: { name,
+// aliases? }`. The web client no longer draws an icon for a workspace, folder or collection (colour
+// marks places) and has no picker; the stored `icon` fields stay in the API, so agents can still set
+// them from this list.
 //
 // Output, one icon per line, sorted: the canonical kebab-case name, then its aliases (old names
 // that still draw) separated by spaces.

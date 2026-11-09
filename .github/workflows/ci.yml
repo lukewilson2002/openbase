@@ -8,7 +8,7 @@
 # Jobs:
 #   checks  scripts/check.sh: rustfmt, clippy -D warnings, the web production build, cargo test,
 #           the generated-file checks (TypeScript bindings, Lucide icon list, brand files),
-#           the design-token check (no raw colour or px font size in web/src), tsc, Vitest, and the live contract tests (TypeScript client against the real server).
+#           the design-token check (no raw colour or px font size in web/src), the removed-code check (scripts/check-removed.sh), tsc, Vitest, and the live contract tests (TypeScript client against the real server).
 #           It is the same script developers run locally, so CI cannot drift from it.
 #   e2e     the Playwright end-to-end tests against the real server in Google Chrome. A failed test is
 #           retried once; one that only passes on the retry is "flaky": it is listed in the job summary

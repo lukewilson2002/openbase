@@ -123,7 +123,7 @@ function NavDialogs({ dialog, onClose }: { dialog: NavDialog | null; onClose: ()
         title="New workspace"
         submitLabel="Create workspace"
         withColor
-        onSubmit={(name, _icon, color) => createWorkspace.mutateAsync({ name, color })}
+        onSubmit={(name, color) => createWorkspace.mutateAsync({ name, color })}
       />
       {dialog?.kind === "workspace" && <WorkspaceDialogs ws={dialog.ws} open={dialog.dialog} onClose={onClose} />}
       {dialog?.kind === "invite" && <ShareDialog open onOpenChange={onOpenChange} scope="workspace" workspace={dialog.ws} />}
@@ -135,7 +135,7 @@ function NavDialogs({ dialog, onClose }: { dialog: NavDialog | null; onClose: ()
         label="Folder name"
         submitLabel="Create folder"
         withColor
-        onSubmit={async (name, _icon, color) => {
+        onSubmit={async (name, color) => {
           if (dialog?.kind !== "create-folder") return;
           const base = await createBase.mutateAsync({ workspaceId: dialog.workspaceId, name, color });
           await navigate(`/base/${base.id}`);

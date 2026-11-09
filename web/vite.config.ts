@@ -35,9 +35,7 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     sourcemap: false,
-    // react-dom alone is ~180 kB minified; the warning threshold is not useful here. The lazily loaded
-    // Lucide icon set (components/icons/fullSet.ts, ~810 kB, ~190 kB gzipped) is the one deliberate giant:
-    // it is fetched only when an icon picker opens or an icon outside the bundled popular 20 is drawn.
+    // react-dom alone is ~180 kB minified; the warning threshold is not useful here.
     chunkSizeWarningLimit: 900,
     // Keep Vite from inlining assets as data: URIs or injecting inline scripts.
     assetsInlineLimit: 0,

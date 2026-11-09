@@ -80,7 +80,7 @@ export function Sheet({ open, onOpenChange, title, description, children, footer
   }
 
   // Sized and placed from the visual viewport: iOS Safari keeps the layout viewport at full height under
-  // the keyboard, so a sheet fixed to `bottom: 0` would sit behind it (see also IconPicker).
+  // the keyboard, so a sheet fixed to `bottom: 0` would sit behind it.
   const maxHeight = Math.max(0, visible.height - TOP_GAP);
   const keyboard = typeof window === "undefined" ? 0 : Math.max(0, Math.round(window.innerHeight - (visible.top + visible.height)));
 

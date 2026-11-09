@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Full local check: formatting, lints, Rust tests, generated TypeScript bindings, the design-token
-# check, the web checks, and the live contract tests (TypeScript API client against the real server).
+# check, the removed-code check, the web checks, and the live contract tests (TypeScript API client against the real server).
 # Run before every commit.
 #
 # OPENBASE_E2E=1 scripts/check.sh additionally runs the Playwright end-to-end tests in the
@@ -55,11 +55,14 @@ fi
 step "web: npm audit --audit-level=high (the whole tree, dev dependencies included)"
 (cd web && npm audit --audit-level=high)
 
-step "Design tokens: no raw colour or px font size outside the exempt lists (scripts/check-tokens.sh)"
+step "Design tokens: no raw colour or px font size outside the exempt files (scripts/check-tokens.sh)"
 scripts/check-tokens.sh
 
 step "web: production build (the server embeds web/dist, so build before cargo test)"
 (cd web && npm run build)
+
+step "Removed code has not come back, and the release build has no /__dev/design route (scripts/check-removed.sh)"
+scripts/check-removed.sh --dist web/dist
 
 step "cargo test"
 cargo test --workspace

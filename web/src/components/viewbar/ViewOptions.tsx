@@ -9,8 +9,7 @@
  *   4. A footer: the layout's switches (`toggles`), Add property for creators and Download CSV.
  *
  * Everything here writes the person's draft (COL-5) through `update`, except a form's own settings, which the form
- * builder saves as they are made. The old toolbar (ViewBar, with its More overflow) is gone; the filter bar is
- * ViewFilterBar, and this button sits at the right end of it.
+ * builder saves as they are made. This button sits at the right end of the filter bar (ViewFilterBar).
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ChevronRight, Download, Plus, SlidersHorizontal } from "lucide-react";

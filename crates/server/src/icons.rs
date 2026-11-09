@@ -1,12 +1,12 @@
 //! The Lucide icon names OpenBase knows: `data/lucide-icons.txt`, generated from the
-//! `lucide-react` package by `scripts/gen-icons.sh` (the same package the web picker draws from).
+//! `lucide-react` package by `scripts/gen-icons.sh` (the package the web client draws its button icons from).
 //!
 //! The REST API validates only the *format* of an icon name (lowercase letters, digits and `-`,
 //! at most 64 characters), so an icon added by a newer client keeps working. MCP tools, whose
 //! callers are language models that guess names, check a name against this list and answer an
 //! unknown one with suggestions, so a typo does not silently store an icon that draws nothing.
 //! A name that is an alias of a canonical icon ("home" for "house") is accepted and stored under
-//! the canonical name, which is what the web picker shows as selected.
+//! the canonical name.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -97,7 +97,7 @@ impl IconSet {
 
     /// Icons matching `query`, best first: every word has to match a name or an alias ("cart
     /// shop" finds "shopping-cart", "home" finds "house"). An empty query lists everything in
-    /// alphabetical order. The ranking is the web picker's (`web/src/components/icons/search.ts`).
+    /// alphabetical order. Names rank before aliases.
     pub fn search(&self, query: &str, limit: usize) -> Vec<&'static str> {
         let words: Vec<String> = query
             .to_lowercase()
@@ -245,27 +245,6 @@ fn edit_distance(a: &str, b: &str) -> usize {
 mod tests {
     use super::*;
 
-    /// The 20 icons the web picker offers first, read from its source so that the two lists
-    /// cannot drift apart.
-    fn popular_in_web_picker() -> Vec<String> {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../web/src/components/icons/popular.ts");
-        let src = std::fs::read_to_string(&path).expect("web/src/components/icons/popular.ts");
-        let start = src
-            .find("POPULAR_ICONS")
-            .and_then(|i| src[i..].find("= [").map(|j| i + j))
-            .expect("POPULAR_ICONS list");
-        let list = &src[start..src[start..].find("];").map(|e| start + e).unwrap()];
-        let mut names = Vec::new();
-        let mut rest = list;
-        while let Some(i) = rest.find("{ name: \"") {
-            rest = &rest[i + "{ name: \"".len()..];
-            let end = rest.find('"').unwrap();
-            names.push(rest[..end].to_string());
-        }
-        names
-    }
-
     #[test]
     fn the_data_file_parses_into_a_big_sorted_set() {
         let set = icons();
@@ -285,21 +264,6 @@ mod tests {
     }
 
     #[test]
-    fn every_popular_web_picker_icon_is_known() {
-        let popular = popular_in_web_picker();
-        assert_eq!(popular.len(), 20, "{popular:?}");
-        for name in &popular {
-            assert!(
-                icons().contains(name),
-                "{name} is missing from the icon list"
-            );
-            let r = icons().resolve(name).unwrap();
-            assert_eq!(r.name, name.as_str());
-            assert!(!r.changed, "{name} is canonical");
-        }
-    }
-
-    #[test]
     fn resolves_canonical_alias_and_loosely_written_names() {
         let set = icons();
         assert_eq!(set.resolve("briefcase").unwrap().name, "briefcase");
@@ -315,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn search_ranks_like_the_picker() {
+    fn search_ranks_names_before_aliases() {
         let set = icons();
         assert_eq!(set.search("shopping cart", 5)[0], "shopping-cart");
         assert_eq!(set.search("home", 5)[0], "house");
