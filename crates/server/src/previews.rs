@@ -2,7 +2,9 @@
 //! (`GET /api/attachments/{id}/thumb`), so what a file holds can be seen at a glance.
 //!
 //! - Raster images: the image itself, scaled down.
-//! - PDFs: the first page, rasterized in pure Rust (hayro).
+//! - PDFs: the first page, rasterized in pure Rust (hayro), in a child process whose memory is
+//!   capped ([`PDF_WORKER_MEMORY_KIB`]): the renderer sizes buffers from numbers the file
+//!   states, and a refused allocation would end the whole server.
 //! - Videos: the first frame, taken by `ffmpeg` when the server can find it (the Docker
 //!   image ships it; `OPENBASE_FFMPEG` names another binary). Without it a video keeps its
 //!   file-type tile.
@@ -30,6 +32,9 @@ const MAX_DECODE_ALLOC: u64 = 256 * 1024 * 1024;
 pub const THUMB_SIZE: u32 = 400;
 /// PDFs above this size get no preview: the renderer reads the whole file into memory.
 const MAX_PDF_BYTES: u64 = 64 * 1024 * 1024;
+/// Address space the PDF worker may use. A file that asks for more (an image of a million by a
+/// million pixels, a stream that inflates a thousandfold) fails inside the worker alone.
+const PDF_WORKER_MEMORY_KIB: u64 = 1024 * 1024;
 /// How long one preview may take before it is given up.
 pub const PREVIEW_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -86,15 +91,16 @@ pub async fn make(kind: Kind, src: PathBuf, dest: PathBuf) -> Info {
     let work = async {
         match kind {
             Kind::Image => blocking(move || image_thumbnail(&src, &dest)).await,
-            Kind::Pdf => blocking(move || pdf_preview(&src, &dest)).await,
+            Kind::Pdf => pdf_preview_isolated(&src, &dest).await,
             Kind::Video(demuxer) => video_preview(demuxer, &src, &dest).await,
         }
     };
     match tokio::time::timeout(PREVIEW_TIMEOUT, work).await {
         Ok(info) => info,
         Err(_) => {
-            // A blocking render cannot be stopped; it finishes in the background, but the
-            // permit is released so other uploads get their previews meanwhile.
+            // A PDF worker and an ffmpeg are killed when dropped; an image decode cannot be
+            // stopped and finishes in the background, but the permit is released so other
+            // uploads get their previews meanwhile.
             tracing::warn!(?kind, "preview took too long; skipped");
             Info::default()
         }
@@ -152,7 +158,91 @@ pub fn image_thumbnail(src: &Path, dest: &Path) -> Info {
     info
 }
 
-/// The first page of a PDF, on white, scaled so its longest side is [`THUMB_SIZE`].
+static WORKER_EXE: OnceLock<PathBuf> = OnceLock::new();
+
+/// Name the executable that answers the `preview-pdf` command, for hosts whose own
+/// executable is not `openbase` (the integration tests, which run inside a test harness).
+pub fn set_worker_exe(path: PathBuf) {
+    let _ = WORKER_EXE.set(path);
+}
+
+/// The first page of a PDF, as [`pdf_preview`] makes it, but rendered by a child process with
+/// capped memory and killed after [`PREVIEW_TIMEOUT`]. The renderer takes image sizes and
+/// stream lengths from the file; in this process a hostile value would abort the server.
+pub async fn pdf_preview_isolated(src: &Path, dest: &Path) -> Info {
+    let exe = match WORKER_EXE
+        .get()
+        .cloned()
+        .map(Ok)
+        .unwrap_or_else(std::env::current_exe)
+    {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::warn!(error = %e, "could not find the PDF worker");
+            return Info::default();
+        }
+    };
+    #[cfg(unix)]
+    let mut cmd = {
+        // `ulimit` rather than setrlimit: no unsafe code, and it applies to the child only. Where
+        // the limit cannot be set (macOS refuses RLIMIT_AS; development only) the worker still
+        // gets its own process, but Linux, where the server runs, fails closed.
+        #[cfg(target_os = "linux")]
+        let limit = format!("ulimit -v {PDF_WORKER_MEMORY_KIB} || exit 125");
+        #[cfg(not(target_os = "linux"))]
+        let limit = format!("ulimit -v {PDF_WORKER_MEMORY_KIB} 2>/dev/null");
+        let mut c = tokio::process::Command::new("sh");
+        c.arg("-c")
+            .arg(format!("{limit}; exec \"$0\" \"$@\""))
+            .arg(&exe);
+        c
+    };
+    #[cfg(not(unix))]
+    let mut cmd = tokio::process::Command::new(&exe);
+    cmd.arg("preview-pdf")
+        .arg(src)
+        .arg(dest)
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+    let out = match tokio::time::timeout(PREVIEW_TIMEOUT, cmd.output()).await {
+        Ok(Ok(out)) => out,
+        Ok(Err(e)) => {
+            tracing::warn!(error = %e, "could not run the PDF worker");
+            return Info::default();
+        }
+        Err(_) => {
+            tracing::warn!("PDF preview took too long; skipped");
+            let _ = std::fs::remove_file(dest);
+            return Info::default();
+        }
+    };
+    if !out.status.success() {
+        tracing::debug!(status = ?out.status, "the PDF worker could not render the file");
+        let _ = std::fs::remove_file(dest);
+        return Info::default();
+    }
+    let reply: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_default();
+    let dim = |k: &str| reply[k].as_u64().and_then(|n| u32::try_from(n).ok());
+    Info {
+        width: dim("width"),
+        height: dim("height"),
+        thumb: reply["thumb"].as_bool() == Some(true) && dest.is_file(),
+    }
+}
+
+/// The `preview-pdf` command: render in this process and print the [`Info`] as JSON. Only
+/// ever run as the capped child of [`pdf_preview_isolated`].
+pub fn pdf_worker_main(src: &Path, dest: &Path) {
+    let info = pdf_preview(src, dest);
+    println!(
+        "{}",
+        serde_json::json!({ "width": info.width, "height": info.height, "thumb": info.thumb })
+    );
+}
+
+/// The first page of a PDF, on white, scaled so its longest side is [`THUMB_SIZE`]. Runs in
+/// the calling process: server code goes through [`pdf_preview_isolated`].
 pub fn pdf_preview(src: &Path, dest: &Path) -> Info {
     let mut info = Info::default();
     match std::fs::metadata(src) {

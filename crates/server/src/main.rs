@@ -58,6 +58,13 @@ enum Command {
         #[arg(long)]
         out: Option<std::path::PathBuf>,
     },
+    /// Render the first page of a PDF as a PNG and print its size as JSON. Run by the server as
+    /// a memory-capped child process, so a hostile file cannot take the server down.
+    #[command(name = "preview-pdf", hide = true)]
+    PreviewPdf {
+        src: std::path::PathBuf,
+        dest: std::path::PathBuf,
+    },
     /// Check that the server on OPENBASE_BIND answers /api/health (exit 0) or
     /// not (exit 1). Used by the Docker HEALTHCHECK.
     Healthcheck,
@@ -188,6 +195,10 @@ fn main() -> anyhow::Result<()> {
             }
         }
     }
+    if let Some(Command::PreviewPdf { src, dest }) = &cli.command {
+        openbase::previews::pdf_worker_main(src, dest);
+        return Ok(());
+    }
     init_tracing(&cli.config.log_format);
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -269,7 +280,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
             Ok(())
         }
         // Handled in main() before the runtime starts.
-        Command::Healthcheck => Ok(()),
+        Command::Healthcheck | Command::PreviewPdf { .. } => Ok(()),
         Command::Restore { archive, force } => {
             openbase::backup::restore(&config, &archive, force)?;
             println!(

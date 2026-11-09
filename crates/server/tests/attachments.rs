@@ -328,6 +328,11 @@ fn pdf() -> Vec<u8> {
         ]
         .concat(),
     ];
+    assemble_pdf(&objects)
+}
+
+/// A PDF made of `objects` (numbered from 1), with its cross-reference table.
+fn assemble_pdf(objects: &[Vec<u8>]) -> Vec<u8> {
     let mut out = b"%PDF-1.4\n".to_vec();
     let mut offsets = Vec::new();
     for (i, body) in objects.iter().enumerate() {
@@ -383,6 +388,57 @@ async fn pdf_upload_previews_its_first_page_but_still_downloads_as_a_file() {
         .await;
     assert_eq!(header_str(&dl, "content-type"), "application/octet-stream");
     assert!(header_str(&dl, "content-disposition").starts_with("attachment;"));
+}
+
+#[cfg(target_os = "linux")]
+/// A one-page PDF that draws an image the file says is `w` by `h` pixels at 4 bits per
+/// component, with a one-byte stream: the renderer sizes its buffer from the dictionary.
+fn pdf_with_huge_image(w: u32, h: u32) -> Vec<u8> {
+    let content = b"q 100 0 0 100 10 10 cm /Im0 Do Q";
+    assemble_pdf(&[
+        b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R \
+          /Resources << /XObject << /Im0 5 0 R >> >> >>"
+            .to_vec(),
+        [
+            format!("<< /Length {} >>\nstream\n", content.len()).as_bytes(),
+            content,
+            b"\nendstream",
+        ]
+        .concat(),
+        format!(
+            "<< /Type /XObject /Subtype /Image /Width {w} /Height {h} /BitsPerComponent 4 \
+             /ColorSpace /DeviceRGB /Length 1 >>\nstream\nx\nendstream"
+        )
+        .into_bytes(),
+    ])
+}
+
+// Run only where the memory cap is enforced: without it the renderer really would try to
+// allocate the terabytes, in the test process.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn a_pdf_that_asks_for_terabytes_of_pixels_fails_its_preview_not_the_server() {
+    let app = TestApp::new();
+    let fx = Fixture::new(&app);
+    let res = upload(
+        &app,
+        &fx.owner,
+        &fx.base,
+        "bomb.pdf",
+        &pdf_with_huge_image(1_000_000, 1_000_000),
+    )
+    .await;
+    res.assert_status(200);
+    // The upload is kept; only its preview is missing, and the server still answers.
+    let id = res.body["id"].as_str().unwrap();
+    app.get(&fx.owner, &format!("/api/attachments/{id}/thumb"))
+        .await
+        .assert_status(404);
+    upload(&app, &fx.owner, &fx.base, "pricing.pdf", &pdf())
+        .await
+        .assert_status(200);
 }
 
 #[tokio::test]

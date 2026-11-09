@@ -83,6 +83,9 @@ impl TestApp {
         tweak: impl FnOnce(&mut AppState),
     ) -> TestApp {
         let dir = tempfile::tempdir().unwrap();
+        // PDF previews run in a child process of the server's own executable, which here is the
+        // test harness.
+        openbase::previews::set_worker_exe(env!("CARGO_BIN_EXE_openbase").into());
         let mut config = Config::for_tests(dir.path());
         f(&mut config);
         // Every configured SMTP host "delivers" to the capturing mailer, whether it comes from
