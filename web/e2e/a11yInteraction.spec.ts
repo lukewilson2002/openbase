@@ -1,6 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, newClientContext, test } from "./fixtures";
 import { seedLedger, type LedgerSeed } from "./ledgerSeed";
+import { settle } from "./ledgerShots";
 
 /**
  * Accessibility beyond axe (A11Y-1 to A11Y-6), on the ledger's seeded workspace: keyboard-only walks through capture,
@@ -190,6 +191,8 @@ test.describe("A11Y-1 keyboard", () => {
     await expect(dialog).toBeVisible();
     // The dialog has taken the focus: Escape is then heard by it, and not by the control behind.
     await expect(dialog.getByRole("textbox", { name: "Name" })).toBeFocused();
+    // A beat for the dialog to finish mounting: its Escape listener is attached by an effect that runs after the field has the focus.
+    await settle(page);
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expect(save).toBeFocused();
