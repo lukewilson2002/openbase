@@ -5,8 +5,8 @@
  * which browser back, Escape and the phone's back link all return to, however the page was opened), and puts
  * them back when it mounts with that entry.
  *
- * A scroller opts in with `data-scroll-restore="<name>"` (the grid's own, which belongs to the library, is
- * found by its class). The rows a long list scrolls over arrive after the screen is drawn, so the restoring
+ * A scroller opts in with `data-scroll-restore="<name>"` (the grid's own and the calendar's, which belong to
+ * libraries, are found by their classes; the calendar's are named by their order). The rows a long list scrolls over arrive after the screen is drawn, so the restoring
  * tries on every frame until the scroller can reach the place or a few seconds go by, and stops at once if the
  * person scrolls or touches the screen themselves.
  */
@@ -22,6 +22,8 @@ const ROOT = "data-scroll-root";
 const NAMED = "data-scroll-restore";
 /** Glide Data Grid's own scroller: the library draws it, so it cannot carry the attribute. */
 const GRID = ".dvn-scroller";
+/** FullCalendar's scrollers (the week and day grids, the list): several, so they are named by their order. */
+const CALENDAR = ".fc-scroller";
 /** Screens remembered at most; an entry is a handful of numbers. */
 const KEEP = 40;
 const GIVE_UP_MS = 4000;
@@ -33,7 +35,8 @@ let restoring = false;
 function scrollersOf(root: ParentNode): [string, HTMLElement][] {
   const found: [string, HTMLElement][] = [];
   if (root instanceof HTMLElement && root.hasAttribute(NAMED)) found.push([root.getAttribute(NAMED)!, root]);
-  for (const el of root.querySelectorAll<HTMLElement>(`[${NAMED}], ${GRID}`)) found.push([el.getAttribute(NAMED) ?? "grid", el]);
+  let calendar = 0;
+  for (const el of root.querySelectorAll<HTMLElement>(`[${NAMED}], ${GRID}, ${CALENDAR}`)) found.push([el.getAttribute(NAMED) ?? (el.matches(CALENDAR) ? `calendar:${calendar++}` : "grid"), el]);
   return found;
 }
 

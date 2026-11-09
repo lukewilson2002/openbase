@@ -1,3 +1,4 @@
+import { createElement } from "react";
 import { act, render, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { describe, expect, it } from "vitest";
@@ -57,6 +58,46 @@ describe("the collection screen's scroll across a record page", () => {
     act(() => void go("/list"));
     await act(frame);
     expect(view.getByTestId("list").scrollTop).toBe(0);
+  });
+});
+
+describe("every layout's scroller is put back (PH-4)", () => {
+  // The scrollers the six layouts draw: the grid's and the calendar's belong to libraries and are found by class.
+  const SCROLLERS: [string, string, Record<string, string>][] = [
+    ["grid", "div", { class: "dvn-scroller" }],
+    ["list", "div", { "data-scroll-restore": "list" }],
+    ["board", "div", { "data-scroll-restore": "board" }],
+    ["gallery", "div", { "data-scroll-restore": "frame" }],
+    ["calendar", "div", { class: "fc-scroller" }],
+    ["timeline", "div", { "data-scroll-restore": "timeline" }],
+  ];
+  it.each(SCROLLERS)("%s", async (layout, tag, attrs) => {
+    const view = render(
+      <MemoryRouter initialEntries={[{ pathname: "/view", key: `view-${layout}` }]}>
+        <Nav />
+        <Routes>
+          <Route
+            path="/view"
+            element={
+              <RestoredScroll>
+                {createElement(tag, { ...attrs, className: attrs.class, "data-testid": "scroller" })}
+              </RestoredScroll>
+            }
+          />
+          <Route path="/record" element={<p>record</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const el = view.getByTestId("scroller");
+    el.scrollTop = 640;
+    el.scrollLeft = 120;
+    act(() => void el.dispatchEvent(new Event("scroll")));
+    await act(frame);
+    await act(frame);
+    act(() => void go("/record"));
+    act(() => void go(-1));
+    await waitFor(() => expect(view.getByTestId("scroller").scrollTop).toBe(640));
+    expect(view.getByTestId("scroller").scrollLeft).toBe(120);
   });
 });
 
