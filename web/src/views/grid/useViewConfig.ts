@@ -17,6 +17,7 @@ import { keys } from "@/api/keys";
 import type { BaseSchema, Table, TransientConfig, View, ViewConfig, ViewType } from "@/api/types";
 import { useToast } from "@/components/ui/toast";
 import { sanitizeConfig } from "@/components/viewbar/config";
+import { withLayoutDefaults } from "../common/layoutDefaults";
 import { DRAFT_KEYS, IMMEDIATE_KEYS } from "../drafts/classify";
 import { applyDraft, applyTransient, changedOnServer, fingerprint, nextDraft, sameSetting, toTransient, type ViewDraft } from "../drafts/draft";
 import { canConfigureView, draftActions, draftLayout, type DraftActions } from "../drafts/permissions";
@@ -208,7 +209,7 @@ export function useViewConfig(schema: BaseSchema, table: Table, view: View, role
     [current, commit, saveNow, userId],
   );
 
-  const setLayout = useCallback((type: ViewType) => commit(current(), type), [commit, current]);
+  const setLayout = useCallback((type: ViewType) => commit(withLayoutDefaults(current(), type, table.fields), type), [commit, current, table.fields]);
 
   const reset = useCallback(() => writeDraft(userId, viewRef.current.id, null), [userId]);
 

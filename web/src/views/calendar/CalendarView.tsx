@@ -44,7 +44,7 @@ import { useViewSetup } from "../common/useViewSetup";
 import { FieldSelect } from "../common/FieldSelect";
 import { ViewSetupState } from "../common/ViewSetupState";
 import { ViewFrame } from "../common/ViewFrame";
-import { floorDay, isDateLike, isWritableDate, wallNow, wallYmd } from "../common/wallTime";
+import { floorDay, isDateLike, isWritableDate, likelyDateField, wallNow, wallYmd } from "../common/wallTime";
 import type { ViewProps } from "../types";
 import "./calendar.css";
 import { removeIconFont } from "./iconFont";
@@ -67,11 +67,6 @@ function attachCalendarDrag(list: HTMLUListElement): () => void {
 
 function setCalendar(c: ViewConfig, patch: Partial<ViewConfig["calendar"]>): ViewConfig {
   return { ...c, calendar: { ...c.calendar, ...patch } };
-}
-
-/** The date field a new calendar most likely wants: one people fill in, else any date. */
-export function likelyDateField(fields: readonly Field[]): Field | undefined {
-  return fields.find(isWritableDate) ?? fields[0];
 }
 
 const PLUGINS = [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin];

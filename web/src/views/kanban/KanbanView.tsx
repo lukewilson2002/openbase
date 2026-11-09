@@ -26,7 +26,7 @@ import { ViewFrame } from "../common/ViewFrame";
 import { newRecordLabel } from "@/lib/recordNoun";
 import type { ViewProps } from "../types";
 import { KanbanBoard } from "./KanbanBoard";
-import { applyShownOrder, buildAllStacks, clearStack as clearStackFor, isStackField, moveStackKey, stackKind, stackValue, type DropPlan } from "./stacks";
+import { applyShownOrder, buildAllStacks, clearStack as clearStackFor, isStackField, likelyStackField, moveStackKey, stackKind, stackValue, type DropPlan } from "./stacks";
 
 /** Choices for "Properties on a card"; "All" is a number no table reaches. */
 const CARD_LIMITS = [3, 4, 5, 6, 8, 10, 12, 20] as const;
@@ -38,11 +38,6 @@ export default function KanbanView(props: ViewProps) {
 
 function setKanban(c: ViewConfig, patch: Partial<ViewConfig["kanban"]>): ViewConfig {
   return { ...c, kanban: { ...c.kanban, ...patch } };
-}
-
-/** The field a new kanban most likely wants: a single select, else a person, else a checkbox. */
-export function likelyStackField(fields: readonly Field[]): Field | undefined {
-  return fields.find((f) => stackKind(f) === "select") ?? fields.find((f) => stackKind(f) === "user") ?? fields.find((f) => stackKind(f) === "checkbox");
 }
 
 function KanbanInner(props: ViewProps) {

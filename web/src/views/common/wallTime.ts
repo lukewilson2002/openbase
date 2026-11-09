@@ -31,6 +31,11 @@ export function isWritableDate(field: Field | undefined): boolean {
   return field?.type === "date";
 }
 
+/** The date field a new calendar most likely wants: one people fill in, else any date. */
+export function likelyDateField(fields: readonly Field[]): Field | undefined {
+  return fields.find(isWritableDate) ?? fields[0];
+}
+
 export function readWall(value: unknown, opts: DateOptions, viewerZone: string): WallValue | null {
   const d = readStoredDate(value);
   if (!d) return null;

@@ -23,6 +23,11 @@ export function stackKind(field: Field | undefined): StackKind | null {
 
 export const isStackField = (field: Field): boolean => stackKind(field) !== null;
 
+/** The field a new kanban most likely wants: a single select, else a person, else a checkbox. */
+export function likelyStackField(fields: readonly Field[]): Field | undefined {
+  return fields.find((f) => stackKind(f) === "select") ?? fields.find((f) => stackKind(f) === "user") ?? fields.find((f) => stackKind(f) === "checkbox");
+}
+
 export interface Stack {
   key: string;
   label: string;
