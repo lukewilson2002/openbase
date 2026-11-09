@@ -73,6 +73,26 @@ async function typeDown(page: Page, col: Col, startRow: number, values: string[]
   }
 }
 
+/**
+ * The sign-in card (APP-1): the OpenBase lockup above a 400 px card (the page's width less its gutters on a phone),
+ * 44 px inputs, a primary button as wide as the card, and no sideways scroll at either size.
+ */
+async function expectSignInCard(page: Page, primary: string) {
+  const original = page.viewportSize();
+  for (const [width, height, card] of [[1280, 800, 400], [390, 844, 358]] as const) {
+    await page.setViewportSize({ width, height });
+    await expect(page.getByRole("img", { name: "OpenBase" })).toBeVisible();
+    const box = await page.getByRole("heading", { level: 1 }).evaluate((h) => h.closest("[class*='max-w-']")!.getBoundingClientRect().toJSON() as { width: number });
+    expect(box.width).toBeCloseTo(card, 0);
+    const input = await page.getByLabel("Email").boundingBox();
+    expect(input!.height).toBeGreaterThanOrEqual(44);
+    const button = await page.getByRole("button", { name: primary }).boundingBox();
+    expect(button!.width).toBeGreaterThan(box.width - 60);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+  if (original) await page.setViewportSize(original);
+}
+
 test("a new instance, from first-run setup to a logged-in grid with data", async ({ page, diagnostics }) => {
   test.setTimeout(120_000);
   // The wrong password typed on purpose below makes Chrome log the 401 of the login request.
@@ -96,6 +116,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await page.goto("/");
     await expect(page).toHaveURL(/\/setup$/);
     await expect(page.getByRole("heading", { name: "Welcome to your OpenBase" })).toBeVisible();
+    await expectSignInCard(page, "Create my account");
     // A too-short password is caught before any request is made.
     await page.getByLabel("Your name").fill("Journey Admin");
     await page.getByLabel("Email").fill(EMAIL);
@@ -104,9 +125,14 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await expect(page.getByRole("alert").or(page.locator("[role=alert], .text-danger")).first()).toBeVisible();
     await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
     await page.getByRole("button", { name: "Create my account" }).click();
-    // A new account meets the intro first; skipping it is remembered by the server.
-    await expect(page.getByRole("dialog", { name: "A project holds your tables" })).toBeVisible();
-    await page.getByRole("button", { name: "Skip the intro" }).click();
+    // A new account meets the five-step intro first (APP-3); finishing it is remembered by the server.
+    const intro = page.getByRole("dialog", { name: "Home catches your ideas" });
+    await expect(intro).toBeVisible();
+    for (const title of ["Collections hold your records", "Views show your collection your way", "Workspaces and folders keep things apart", "Connect an assistant, if you like"]) {
+      await page.getByRole("button", { name: "Next" }).click();
+      await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    }
+    await page.getByRole("button", { name: "I'll do it myself" }).click();
     await expect(page.getByRole("heading", { name: "Create your first workspace" })).toBeVisible();
     expect(await api<{ needs_setup: boolean }>(page, "/api/setup")).toMatchObject({ needs_setup: false });
     await expect.poll(async () => api<{ intro_seen: boolean }>(page, "/api/auth/me")).toMatchObject({ email: EMAIL, is_admin: true, intro_seen: true });
@@ -114,12 +140,15 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
 
   await test.step("creates a workspace, which starts with its top-level project", async () => {
     await page.getByRole("textbox", { name: "Workspace name" }).fill("Journey workspace");
+    await page.getByRole("radio", { name: "Teal" }).click();
     await page.getByRole("button", { name: "Create workspace" }).click();
     // A new workspace opens on its Home, and starts with an empty top-level project named after it.
     await expect(page).toHaveURL(/\/workspace\/wsp[^/]+$/);
     await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
     const workspaceId = /\/workspace\/(wsp[^/]+)/.exec(page.url())![1]!;
-    const listed = await api<{ id: string; root_base_id: string | null }[]>(page, "/api/workspaces");
+    const listed = await api<{ id: string; color: string; root_base_id: string | null }[]>(page, "/api/workspaces");
+    // The color picked on the first-run screen is the workspace's, and the top-level project exists (APP-2).
+    expect(listed.find((w) => w.id === workspaceId)!.color).toBe("teal");
     const topLevelId = listed.find((w) => w.id === workspaceId)!.root_base_id!;
     // The later steps and specs name the project, so give it the name they use (the sidebar and the header show it).
     const renamed = await page.request.patch(`/api/bases/${topLevelId}`, { data: { name: "Journey base" }, headers: CSRF });
@@ -326,6 +355,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await page.getByRole("button", { name: "Account menu" }).click();
     await page.getByRole("menuitem", { name: "Sign out" }).click();
     await expect(page.getByRole("heading", { name: "Log in" })).toBeVisible();
+    await expectSignInCard(page, "Log in");
     // The session is gone for real, not just hidden.
     expect((await page.request.get("/api/auth/me")).status()).toBe(401);
     await page.goto(`/base/${baseId}`);

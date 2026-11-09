@@ -13,6 +13,14 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Added
 
+- **Sign-in pages, the intro and error screens in the Notebook look.** Login, first-run setup, sign-up, invite and
+  password reset share one 400 px card under the OpenBase lockup, with 44 px inputs, a full-width primary button and the
+  passkey as a secondary button; invite pages show the workspace by its color mark. The first workspace is made from a
+  name and a color. The five-step intro now explains Home and capture, collections and record pages, views and drafts,
+  workspaces and folders, and the optional assistant, with pictures drawn from the app's own components. Delete
+  confirmations name the thing and say whether it can be restored ("moves to the trash for 30 days", with the server's
+  `OPENBASE_TRASH_DAYS`, now also reported as `trash_days` by `GET /api/setup`). Not-found and error screens say what
+  happened and what to do, and lead to Home.
 - **A record is a page.** Opening a record, from any layout, a search result, a notification or a
   linked record, goes to its own address (`/base/<folder>/<collection>/<view>/r/<record>`) instead of
   a window over the collection. A bar on top holds the breadcrumb (folder, collection, record),
