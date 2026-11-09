@@ -2,7 +2,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Editor } from "@tiptap/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { BaseSchema } from "@/api/types";
 import { field, makeRecord, makeTable } from "@/test/fields";
 import { apiError, makeSchema, makeView } from "@/test/utils";
@@ -57,6 +57,30 @@ describe("the page on the record page", () => {
     expect(Date.now() - lastKey).toBeGreaterThanOrEqual(PAGE_AUTOSAVE_MS - 50);
     expect(api.callsTo(PATCH_RECORDS)[0]!.body).toEqual({ typecast: true, records: [{ id: "rec1", values: { fld_page: "# Plan\n\n- one\n- two more and more" } }] });
     expect(await screen.findByText("Saved")).toBeInTheDocument();
+  });
+
+  it("saves what is waiting when the tab is closed, in a request that outlives the page", async () => {
+    const { api } = renderRecordPage({ table, record });
+    const { type } = await editorOf();
+    type(" more");
+    // Closing the tab runs neither a blur nor an unmount: the page goes at once, well inside the pause.
+    act(() => void window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false })));
+    await waitFor(() => expect(api.callsTo(PATCH_RECORDS)).toHaveLength(1));
+    expect(api.callsTo(PATCH_RECORDS)[0]!.body).toEqual({ typecast: true, records: [{ id: "rec1", values: { fld_page: "# Plan\n\n- one\n- two more" } }] });
+    const request = vi.mocked(fetch).mock.calls.find(([url, init]) => String(url).endsWith("/tables/tbl1/records") && init?.method === "PATCH");
+    expect(request![1]).toMatchObject({ keepalive: true });
+    // Once is enough: the unmount that follows has nothing left to save.
+    await new Promise((r) => setTimeout(r, PAGE_AUTOSAVE_MS + 200));
+    expect(api.callsTo(PATCH_RECORDS)).toHaveLength(1);
+  });
+
+  it("leaves a page that is only going into the back-forward cache to its pause", async () => {
+    const { api } = renderRecordPage({ table, record });
+    const { type } = await editorOf();
+    type(" more");
+    act(() => void window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })));
+    expect(api.callsTo(PATCH_RECORDS)).toHaveLength(0);
+    await waitFor(() => expect(api.callsTo(PATCH_RECORDS)).toHaveLength(1), { timeout: 3000 });
   });
 
   it("says Saving… while the save is on its way", async () => {

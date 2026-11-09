@@ -187,6 +187,11 @@ export function useRecordSave({ table, recordId, record, timeZone, collaborators
       });
       return undefined;
     }
+    if (edit.exit) {
+      // The page is going: nothing is left to show a result on, so the write goes out as it is.
+      recordsApi.updateOnExit(table.id, { typecast: true, records: [{ id: recordId, values: { [field.id]: toWire(field, after) as never } }] });
+      return { value: after };
+    }
     lastSaved.current.set(textKey, after);
     unsent.current.send(textKey);
     save.mutate({ recordId, field, value: after });

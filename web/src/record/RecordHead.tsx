@@ -107,6 +107,12 @@ function TitleInput({ field, record, format, save, autoFocus, onEnter, onEscapeW
     if (!save.onSave(field, { text: typed }) && typed.trim() === seed.trim()) setTyped(null);
   };
 
+  // Leaving the page by the browser's Back (or a swipe) removes the box without a blur, so what is still being
+  // typed is committed as the box goes: for a record just added this is what keeps it from being taken back as empty.
+  const pending = useRef({ commit });
+  pending.current = { commit };
+  useEffect(() => () => pending.current.commit(), []);
+
   return (
     <>
       <h1 aria-label={label} className={cn("break-words", TITLE)}>

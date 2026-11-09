@@ -35,6 +35,9 @@ import type {
 
 const enc = encodeURIComponent;
 
+/** Browsers refuse a request that outlives its page when its body is over 64 KiB; a longer text is sent the ordinary way and may not get through. */
+const fitsKeepalive = (body: unknown) => JSON.stringify(body).length < 60_000;
+
 const countListeners = new Set<() => void>();
 
 /**
@@ -85,6 +88,10 @@ export const recordsApi = {
   get: (tableId: string, recordId: string) => http.get<TableRecord>(`/api/tables/${enc(tableId)}/records/${enc(recordId)}`),
   create: (tableId: string, body: CreateRecords) => countsChanged(http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records`, body)),
   update: (tableId: string, body: UpdateRecords) => http.patch<RecordsResponse>(`/api/tables/${enc(tableId)}/records`, body),
+  /** `update` for a page that is closing: the request outlives the tab and its answer is never read. */
+  updateOnExit: (tableId: string, body: UpdateRecords) => {
+    void http.patch(`/api/tables/${enc(tableId)}/records`, body, { keepalive: fitsKeepalive(body), skipAuthRedirect: true }).catch(() => {});
+  },
   /** DELETE with a JSON body of ids (soft delete: restorable from the trash); answers 204. */
   remove: (tableId: string, ids: string[]) => countsChanged(request<void>(`/api/tables/${enc(tableId)}/records`, { method: "DELETE", body: { ids } })),
   /**
@@ -104,6 +111,10 @@ export const recordsApi = {
    * without one gets "Page" as part of this save, which `created` reports.
    */
   setPage: (tableId: string, recordId: string, text: string | null) => http.put<PageSaved>(`/api/tables/${enc(tableId)}/records/${enc(recordId)}/page`, { text }),
+  /** `setPage` for a page that is closing. */
+  setPageOnExit: (tableId: string, recordId: string, text: string) => {
+    void http.put(`/api/tables/${enc(tableId)}/records/${enc(recordId)}/page`, { text }, { keepalive: fitsKeepalive({ text }), skipAuthRedirect: true }).catch(() => {});
+  },
   restore: (tableId: string, ids: string[]) => countsChanged(http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/restore`, { ids })),
   /** Copy records, each right after its original (computed fields are left to recalculate); answers the copies in order. At most 100 ids. */
   duplicate: (tableId: string, ids: string[]) => countsChanged(http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/duplicate`, { ids })),

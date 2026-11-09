@@ -23,8 +23,8 @@ export interface PageSave {
   state: SaveState;
   /** The message of the save that was refused, with or without a property. */
   error: string | undefined;
-  /** Saves the page text. */
-  commit(text: string): void;
+  /** Saves the page text; `exit` when the page is closing (the request outlives it). */
+  commit(text: string, exit?: boolean): void;
 }
 
 export function usePageSave({ baseId, table, recordId, save }: { baseId: string; table: Table; recordId: string; save: RecordSave }): PageSave {
@@ -67,11 +67,12 @@ export function usePageSave({ baseId, table, recordId, save }: { baseId: string;
     field,
     state,
     error,
-    commit: (text) => {
+    commit: (text, exit) => {
       if (field) {
-        save.onSave(field, { text });
+        save.onSave(field, { text, ...(exit && { exit }) });
         return;
       }
+      if (exit) return recordsApi.setPageOnExit(table.id, recordId, text);
       save.unsent.current.send(pageTextKey(recordId, undefined));
       create.mutate({ recordId, text });
     },

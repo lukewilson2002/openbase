@@ -39,6 +39,8 @@ export function useEditorEnv(): EditorEnv {
 export interface EditValue {
   json?: unknown;
   text?: string;
+  /** The page is closing (a tab, a window): the host saves it in a request that outlives the page, without waiting for the answer. */
+  exit?: boolean;
 }
 
 export type Move = readonly [-1 | 0 | 1, -1 | 0 | 1];

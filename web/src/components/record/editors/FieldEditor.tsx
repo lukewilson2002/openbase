@@ -114,7 +114,7 @@ function RichFormEditor({ field, value, autoFocus, onChange, onCommit }: Pick<Fi
   const { collaborators } = useEditorEnv();
   const seed = typeof value === "string" ? value : "";
   const [draft, setDraft] = useState(seed);
-  const autosave = useAutosave(seed, (text) => onCommit({ text }));
+  const autosave = useAutosave(seed, (text, exit) => onCommit({ text, ...(exit && { exit }) }));
   return (
     <Suspense
       fallback={

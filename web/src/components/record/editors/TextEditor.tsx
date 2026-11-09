@@ -57,7 +57,7 @@ export function TextEditor({ field, value, initialText, variant, autoFocus, trai
   // Multiline text in the expanded record saves while typing (once typing pauses) and on blur, so the
   // record's save status follows it. Everything else commits on blur or Enter.
   const autosaves = isLong && variant === "form";
-  const autosave = useAutosave(seed, (t) => onCommit({ text: t }));
+  const autosave = useAutosave(seed, (t, exit) => onCommit({ text: t, ...(exit && { exit }) }));
 
   const error = useMemo(() => {
     if (isLong || text.trim() === "") return null;
