@@ -1,44 +1,20 @@
 /**
- * The pieces of the capture box that appear once a table is picked: the line saying where it will
- * be saved, the table's primary field as a title, the choosers for the field that takes the note
- * and the one that takes the files, and the table's other fields (the same editors as the expanded
- * record's form).
+ * The pieces of the form an Inbox draft is filed through, once a collection is picked: the collection's title when it
+ * is not text, the choosers for the property that takes the note and the one that takes the files, and the other
+ * properties (the same editors as the record page).
  */
 import { useId, useState } from "react";
-import { ChevronDown, X } from "lucide-react";
-import type { Field, WorkspaceSummary } from "@/api/types";
-import { EntityTile } from "@/components/icons/EntityIcon";
+import { ChevronDown } from "lucide-react";
+import type { Field } from "@/api/types";
 import { EditorEnvProvider } from "@/components/record/editors/env";
 import { FieldEditor } from "@/components/record/editors/FieldEditor";
 import { FieldTypeIcon } from "@/components/ui/field-type-icon";
-import { IconButton } from "@/components/ui/icon-button";
 import { Select } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import { displayShapeOf, type DisplayShape } from "@/lib/cells/kinds";
-import { NOTE_AS_COMMENT, attachmentFields, formFields, isTextTitle, noteFields, primaryField, type TargetRef } from "./targets";
+import { NOTE_AS_COMMENT, attachmentFields, formFields, isTextTitle, noteFields, primaryField } from "./targets";
 import type { TargetForm } from "./useTargetForm";
-
-/** "Saving to Acme › Project tracker › Tasks", with Change and Remove. */
-export function TargetBar({ form, target, workspaces, onChange, onRemove }: { form: TargetForm; target: TargetRef; workspaces: readonly WorkspaceSummary[]; onChange: () => void; onRemove: () => void }) {
-  const base = workspaces.flatMap((w) => w.bases).find((b) => b.id === target.baseId);
-  const table = base?.tables.find((t) => t.id === target.tableId) ?? form.table;
-  return (
-    <div className="flex min-w-0 items-center gap-2 text-[0.8125rem]">
-      {base && <EntityTile name={base.name} icon={base.icon} color={base.color} size="sm" />}
-      <p className="min-w-0 flex-1 break-words leading-snug">
-        <span className="text-muted">Saving to </span>
-        <span className="font-semibold">{[base?.name, table?.name].filter(Boolean).join(" › ") || "this table"}</span>
-      </p>
-      <button type="button" onClick={onChange} className="shrink-0 rounded px-1.5 py-1 font-semibold text-muted hover:bg-hover hover:text-fg pointer-coarse:py-2.5">
-        Change
-      </button>
-      <IconButton label="Save as a plain note instead" size="sm" noTooltip onClick={onRemove}>
-        <X aria-hidden className="size-4" />
-      </IconButton>
-    </div>
-  );
-}
 
 /** What the form shows while the table's fields load, or when they cannot. */
 export function FormStatus({ form }: { form: TargetForm }) {
@@ -61,7 +37,7 @@ export function FormStatus({ form }: { form: TargetForm }) {
 
 /**
  * A primary field that is not text gets its own editor below the title (a text primary is the draft's
- * title itself, see `Capture`).
+ * title itself, see `FileDraftDialog`).
  */
 export function TitleField({ form }: { form: TargetForm }) {
   const table = form.table;

@@ -1,9 +1,8 @@
 /**
- * What the Inbox needs to know about tables: where a note can be saved to (projects the person can
- * add records to), which fields of a table take the note and the files, which others make up the
- * form, and how the form's values become the `fields` of `POST /api/inbox/{id}/file`.
+ * What filing an Inbox draft needs to know about a collection: which properties take the note and the files, which others
+ * make up the form, and how the form's values become the `fields` of `POST /api/inbox/{id}/file`.
  */
-import type { AttachmentRef, BaseSummary, Field, InboxItem, JsonValue, Table, WorkspaceSummary } from "@/api/types";
+import type { AttachmentRef, Field, InboxItem, JsonValue, Table } from "@/api/types";
 import { displayShapeOf, isComputed } from "@/lib/cells/kinds";
 import { isEmptyValue, toWire } from "@/lib/cells/wire";
 import { atLeast } from "@/lib/roles";
@@ -14,22 +13,9 @@ export interface TargetRef {
   tableId: string;
 }
 
-export interface TargetWorkspace {
-  workspace: WorkspaceSummary;
-  /** Projects with at least one table in which the person can create records. */
-  projects: BaseSummary[];
-}
-
-/** Creating a record takes the Editor role on the project (the server's rule for `POST /api/inbox/{id}/file`). */
+/** Creating a record takes the Editor role on the folder (the server's rule for `POST /api/inbox/{id}/file`). */
 export function canCreateRecords(role: string): boolean {
   return atLeast(role, "editor");
-}
-
-/** The workspaces and projects the picker offers: only those where a record can be created. */
-export function captureTargets(workspaces: readonly WorkspaceSummary[]): TargetWorkspace[] {
-  return workspaces
-    .map((workspace) => ({ workspace, projects: workspace.bases.filter((b) => canCreateRecords(b.role) && b.tables.length > 0) }))
-    .filter((w) => w.projects.length > 0);
 }
 
 // ---- the table's fields -------------------------------------------------------------------
@@ -45,9 +31,9 @@ export function noteFields(table: Table): Field[] {
  */
 export const NOTE_AS_COMMENT = "comment";
 
-/** The field the note goes into unless the person picks another: the first rich text, else the first multiline text. */
+/** The field the note goes into unless the person picks another: the collection's page, else the first rich text, else the first multiline text. */
 export function defaultNoteField(table: Table): Field | undefined {
-  return noteFields(table)[0];
+  return table.fields.find((f) => f.id === table.body_field_id) ?? noteFields(table)[0];
 }
 
 export function attachmentFields(table: Table): Field[] {
@@ -108,11 +94,6 @@ export function hasContent(fields: Record<string, JsonValue>): boolean {
 
 // ---- drafts --------------------------------------------------------------------------------
 
-/** A draft with nothing in it is not worth creating. */
-export function isBlank(title: string, body: string, attachments: readonly unknown[]): boolean {
-  return title.trim() === "" && body.trim() === "" && attachments.length === 0;
-}
-
 /** A draft's preview in the list: its title, else the first line with text, without Markdown's marks. */
 export function draftPreview(item: Pick<InboxItem, "title" | "body" | "attachments">): string {
   if (item.title.trim()) return item.title.trim();
@@ -125,23 +106,4 @@ export function draftPreview(item: Pick<InboxItem, "title" | "body" | "attachmen
     if (text) return text;
   }
   return item.attachments.length > 0 ? item.attachments[0]!.filename : "Empty draft";
-}
-
-/** Someone a note can mention. */
-export interface NotePerson {
-  id: string;
-  name: string;
-  email: string;
-}
-
-/**
- * Everyone who can open one of the person's projects (pending invites aside), once each, by name: who a
- * note may mention before a table is picked. Filing notifies only those who can see the record.
- */
-export function everyoneInProjects(workspaces: readonly WorkspaceSummary[]): NotePerson[] {
-  const byId = new Map<string, NotePerson>();
-  for (const ws of workspaces)
-    for (const base of ws.bases)
-      for (const p of base.people) if (p.user_id && !p.pending && !byId.has(p.user_id)) byId.set(p.user_id, { id: p.user_id, name: p.name, email: p.email });
-  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

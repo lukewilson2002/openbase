@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Field, WorkspaceSummary } from "@/api/types";
+import type { Field } from "@/api/types";
 import { field, makeTable } from "@/test/fields";
-import { attachmentFields, captureTargets, everyoneInProjects, defaultNoteField, draftPreview, fileFields, formFields, isBlank, noteFields } from "./targets";
+import { attachmentFields, defaultNoteField, draftPreview, fileFields, formFields, noteFields } from "./targets";
 
 const name = field("text", { multiline: false }, { id: "fld_name", name: "Name" });
 const plain = field("text", { multiline: true }, { id: "fld_plain", name: "Plain" });
@@ -17,6 +17,8 @@ describe("fields of a table", () => {
     expect(noteFields(table).map((f) => f.id)).toEqual(["fld_rich", "fld_plain"]);
     expect(defaultNoteField(table)?.id).toBe("fld_rich");
     expect(defaultNoteField(makeTable([name]))).toBeUndefined();
+    // The collection's page takes the note ahead of any other rich text.
+    expect(defaultNoteField({ ...table, body_field_id: "fld_plain" })?.id).toBe("fld_plain");
     expect(attachmentFields(table).map((f) => f.id)).toEqual(["fld_files"]);
   });
 
@@ -55,52 +57,5 @@ describe("drafts", () => {
     expect(draftPreview({ title: "", body: "- [ ] call [Ada](https://x.test)", attachments: [] })).toBe("call Ada");
     expect(draftPreview({ title: "", body: "", attachments: [{ id: "a", filename: "scan.pdf", mime: "", size: 1 }] })).toBe("scan.pdf");
     expect(draftPreview({ title: "  ", body: "  ", attachments: [] })).toBe("Empty draft");
-  });
-
-  it("is blank without a title, text and files", () => {
-    expect(isBlank("", " \n", [])).toBe(true);
-    expect(isBlank("", "", [1])).toBe(false);
-    expect(isBlank("", "x", [])).toBe(false);
-    expect(isBlank("Cabin", "", [])).toBe(false);
-  });
-});
-
-describe("captureTargets", () => {
-  const ws = (role: string, tables: number): WorkspaceSummary => ({
-    id: "w",
-    name: "W",
-    color: "green",
-    role: "owner",
-    member_count: 1,
-    pending_invite_count: 0,
-    bases: [{ id: "b", workspace_id: "w", name: "B", color: "blue", role, is_top_level: false, people: [], tables: Array.from({ length: tables }, (_, i) => ({ id: `t${i}`, name: `T${i}`, icon: null, color: "blue", record_count: 0, record_noun: "" })) }],
-  });
-
-  it("offers projects where records can be created and that have a table", () => {
-    expect(captureTargets([ws("editor", 1)])).toHaveLength(1);
-    expect(captureTargets([ws("owner", 2)])[0]!.projects[0]!.tables).toHaveLength(2);
-    expect(captureTargets([ws("commenter", 1)])).toHaveLength(0);
-    expect(captureTargets([ws("viewer", 1)])).toHaveLength(0);
-    expect(captureTargets([ws("editor", 0)])).toHaveLength(0);
-  });
-});
-
-describe("everyoneInProjects", () => {
-  it("lists the people of every project once, by name, without pending invites", () => {
-    const person = (user_id: string | null, name: string, pending = false) => ({ user_id, name, email: `${name.toLowerCase()}@example.com`, pending, role: "editor" });
-    const base = (id: string, people: ReturnType<typeof person>[]) => ({ id, workspace_id: "w", name: id, color: "blue", role: "editor", is_top_level: false, people, tables: [] });
-    const ws: WorkspaceSummary = {
-      id: "w",
-      name: "W",
-      color: "green",
-      role: "owner",
-      member_count: 3,
-      pending_invite_count: 1,
-      bases: [base("b1", [person("usr2", "Grace"), person("usr1", "Ada")]), base("b2", [person("usr2", "Grace"), person(null, "invitee", true)])],
-    };
-    expect(everyoneInProjects([ws])).toEqual([
-      { id: "usr1", name: "Ada", email: "ada@example.com" },
-      { id: "usr2", name: "Grace", email: "grace@example.com" },
-    ]);
   });
 });

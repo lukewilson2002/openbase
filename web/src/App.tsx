@@ -12,7 +12,7 @@ import { RootRoute } from "@/pages/RootRoute";
 import { NotificationsPage } from "@/pages/NotificationsPage";
 import { CollectionsPage } from "@/pages/workspace/CollectionsPage";
 import { WorkspaceAutomationsPage } from "@/pages/workspace/WorkspaceAutomationsPage";
-import { WorkspaceHomePage } from "@/pages/workspace/WorkspaceHomePage";
+import { HomePage } from "@/pages/home/HomePage";
 import { IntroGate, IntroProvider } from "@/onboarding/IntroContext";
 import { LoginPage } from "@/pages/LoginPage";
 import { TwoFactorLoginPage } from "@/pages/TwoFactorLoginPage";
@@ -67,7 +67,7 @@ export function AppRoutes() {
           {/* The signed-in app: one RequireAuth and one IntroGate for every page in it. */}
           <Route element={<SignedInArea />}>
             <Route path="/" element={<RootRoute />} />
-            <Route path="/workspace/:workspaceId" element={<WorkspaceHomePage />} />
+            <Route path="/workspace/:workspaceId" element={<HomePage />} />
             <Route path="/workspace/:workspaceId/collections" element={<CollectionsPage />} />
             <Route path="/workspace/:workspaceId/automations" element={<WorkspaceAutomationsPage />} />
             <Route path="/workspace/:workspaceId/members" element={<MembersPage />} />

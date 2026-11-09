@@ -13,20 +13,12 @@ import type { EditValue, EditorEnv } from "@/components/record/editors/env";
 import { personColors } from "@/lib/colors";
 import { jsonEqual, parseText } from "@/lib/cells/parse";
 import { atLeast } from "@/lib/roles";
-import { NOTE_AS_COMMENT, attachmentFields, defaultNoteField, type TargetRef } from "./targets";
-
-/** The browser's own zone, for people who have not set one. */
-function browserTimeZone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  } catch {
-    return "UTC";
-  }
-}
+import { browserTimeZone, type TableRef } from "./capture";
+import { NOTE_AS_COMMENT, attachmentFields, defaultNoteField } from "./targets";
 
 export interface TargetForm {
   /** The table being filled in, null for a plain note. */
-  target: TargetRef | null;
+  target: TableRef | null;
   schema: BaseSchema | undefined;
   table: Table | undefined;
   loading: boolean;
@@ -60,7 +52,7 @@ interface Typed {
 }
 
 /** `target` is null while no table is picked: nothing is fetched and the form is empty. */
-export function useTargetForm(target: TargetRef | null): TargetForm {
+export function useTargetForm(target: TableRef | null): TargetForm {
   const baseId = target?.baseId ?? "";
   const tableId = target?.tableId ?? "";
   const me = useMe();
