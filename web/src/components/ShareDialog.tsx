@@ -1,27 +1,28 @@
 /**
- * "Share": invite people into the workspace (choosing which of its bases they can open) and share
- * one view as a read-only link. Opened from a base's top bar and from a view's menu in the base
- * sidebar ("Share Chores", the base picked, the table's views on offer), and from the workspace
- * page and the Members page ("Share Household", every base picked, the views of every base on
- * offer, named after their base: "Chores › All chores").
+ * "Share" (APP-8): a dialog on a desktop and a full-screen sheet on a phone, in two parts. Invite people
+ * brings them into the workspace and chooses which of its folders they can open; Share a view manages the
+ * links to one view (enable, password, copy, delete). Opened from a collection's header and from a view's
+ * menu ("Share Chores", the folder picked, the collection's views on offer), and from the workspace
+ * page and the Members page ("Share Household", every folder picked, the views of every folder on
+ * offer, named after their folder: "Chores › All chores").
  */
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Tabs as T } from "radix-ui";
 import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSchema, BaseSummary, CreateInviteRequest, CreatedInvite, Table, View, WorkspaceSummary } from "@/api/types";
 import { InviteLinkResult, useEmailEnabled } from "@/components/invites/InviteLinkResult";
-import { EntityTile } from "@/components/icons/EntityIcon";
-import { ShareViewTab } from "@/components/share/ShareViewLink";
+import { ShareViewTab } from "@/components/share/ShareViewTab";
 import { canShareView } from "@/components/share/shareView";
 import { Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
+import { ColorMark } from "@/components/ui/color-mark";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/cn";
 import { ROLE_DESCRIPTIONS, ROLE_LABELS, atLeast, grantableRoles, type Role } from "@/lib/roles";
 
@@ -50,10 +51,6 @@ export type ShareDialogProps = ShareDialogTarget & {
   onOpenChange: (open: boolean) => void;
 };
 
-const TAB_LIST = "mb-5 grid grid-cols-2 gap-1 rounded-xl bg-subtle p-1";
-const TAB =
-  "h-10 rounded-[9px] text-sm font-semibold text-muted transition-colors hover:text-fg data-[state=active]:bg-surface data-[state=active]:text-fg data-[state=active]:shadow-[0_1px_3px_rgb(15_20_30/0.12)]";
-
 export function ShareDialog(props: ShareDialogProps) {
   const { open, onOpenChange } = props;
   const name = props.scope === "workspace" ? props.workspace.name : props.base.name;
@@ -70,35 +67,27 @@ export function ShareDialog(props: ShareDialogProps) {
     <InviteForm target={props} onNavigate={() => onOpenChange(false)} />
   ) : (
     <Notice>
-      {props.scope === "workspace" ? "Only owners can invite people to the whole workspace. Open a project to invite people to it, or share a view." : "Only creators and owners can invite people. Ask one of them, or share a view."}
+      {props.scope === "workspace" ? "Only owners can invite people to the whole workspace. Open a folder to invite people to it, or share a view." : "Only creators and owners can invite people. Ask one of them, or share a view."}
     </Notice>
   );
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title={`Share ${name}`} roomy className="max-w-[520px]">
+    <Dialog open={open} onOpenChange={onOpenChange} title={`Share ${name}`} size="lg">
       {open &&
         (viewTab ? (
-          <T.Root value={tab} onValueChange={setTab}>
-            <T.List aria-label="How to share" className={TAB_LIST}>
-              {[
-                ["invite", "Invite people"],
-                ["view", "Share a view"],
-              ].map(([value, label]) => (
-                <T.Trigger key={value} value={value!} className={TAB}>
-                  {label}
-                </T.Trigger>
-              ))}
-            </T.List>
-            <T.Content value="invite" className="focus-visible:outline-none">
-              {invite}
-            </T.Content>
-            <T.Content value="view" className="focus-visible:outline-none">
+          <Tabs value={tab} onValueChange={setTab}>
+            <TabsList aria-label="How to share">
+              <TabsTrigger value="invite">Invite people</TabsTrigger>
+              <TabsTrigger value="view">Share a view</TabsTrigger>
+            </TabsList>
+            <TabsContent value="invite">{invite}</TabsContent>
+            <TabsContent value="view">
               {props.scope === "base" ? (
                 <ShareViewTab views={baseViews} initialViewId={props.view?.id} />
               ) : (
                 <WorkspaceViews bases={(props.workspace.bases ?? []).filter((b) => atLeast(b.role, "creator"))} />
               )}
-            </T.Content>
-          </T.Root>
+            </TabsContent>
+          </Tabs>
         ) : (
           invite
         ))}
@@ -129,7 +118,7 @@ function WorkspaceViews({ bases }: { bases: readonly Pick<BaseSummary, "id" | "n
       }
     }
   }
-  return <ShareViewTab views={views} label={(v) => labels.get(v.id) ?? v.name} emptyText="None of these projects has a view that can be shared yet. Personal views stay private." />;
+  return <ShareViewTab views={views} label={(v) => labels.get(v.id) ?? v.name} emptyText="None of these folders has a view that can be shared yet. Personal views stay private." />;
 }
 
 function InviteForm({ target, onNavigate }: { target: ShareDialogTarget; onNavigate: () => void }) {
@@ -185,17 +174,17 @@ function InviteForm({ target, onNavigate }: { target: ShareDialogTarget; onNavig
     });
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-[18px]" aria-label="Invite people">
-      <p className="text-sm leading-normal text-muted">
-        People you invite join the <strong className="font-semibold text-fg">{workspaceName}</strong> workspace. Choose which of its projects they can open.
+    <form onSubmit={submit} className="flex flex-col gap-5" aria-label="Invite people">
+      <p className="text-ui text-muted">
+        People you invite join the <strong className="font-semibold text-fg">{workspaceName}</strong> workspace. Choose which of its folders they can open.
       </p>
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[minmax(0,1fr)_150px]">
         <Field label="Email" hint="Leave it empty to get a link anyone can use." className={FIELD}>
-          {(ctl) => <Input {...ctl} type="email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" className={CONTROL} />}
+          {(ctl) => <Input {...ctl} type="email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" />}
         </Field>
         <Field label="Role" hint={ROLE_DESCRIPTIONS[role]} className={FIELD}>
           {(ctl) => (
-            <Select {...ctl} value={role} onChange={(e) => setRole(e.target.value as Role)} className={CONTROL}>
+            <Select {...ctl} value={role} onChange={(e) => setRole(e.target.value as Role)}>
               {roles.map((r) => (
                 <option key={r} value={r}>
                   {ROLE_LABELS[r]}
@@ -207,31 +196,31 @@ function InviteForm({ target, onNavigate }: { target: ShareDialogTarget; onNavig
       </div>
 
       <fieldset disabled={role === "owner"} className="flex flex-col gap-1.5 disabled:opacity-70">
-        <legend className="mb-2 text-sm font-semibold">Projects they can open</legend>
+        <legend className="mb-2 text-ui font-semibold">Folders they can open</legend>
         {role === "owner" ? (
-          <p className="text-sm text-muted">Owners can always open every project in {workspaceName}.</p>
+          <p className="text-sm text-muted">Owners can always open every folder in {workspaceName}.</p>
         ) : (
           <>
             <Choice type="radio" name="share-access" checked={mode === "pick"} onChange={() => setMode("pick")}>
-              Only the projects I pick
+              Only the folders I pick
             </Choice>
             {mode === "pick" && (
-              <div className="ml-[42px] flex flex-col gap-0.5" role="group" aria-label="Projects">
+              <div className="ml-[42px] flex flex-col gap-0.5" role="group" aria-label="Folders">
                 {bases.length === 0 ? (
-                  <p className="px-2.5 py-2 text-sm text-muted">This workspace has no projects yet.</p>
+                  <p className="px-2.5 py-2 text-ui text-muted">This workspace has no folders yet.</p>
                 ) : (
                   bases.map((b) => (
-                    <Choice key={b.id} type="checkbox" small checked={picked.has(b.id)} onChange={(on) => toggle(b.id, on)} icon={<EntityTile name={b.name} icon={b.icon} color={b.color} variant="tint" size="sm" className="rounded-md" />}>
+                    <Choice key={b.id} type="checkbox" small checked={picked.has(b.id)} onChange={(on) => toggle(b.id, on)} icon={<ColorMark hue={b.color} name={b.name} size={14} />}>
                       {b.name}
                     </Choice>
                   ))
                 )}
-                {bases.length > 0 && pickedIds.length === 0 && <p className="px-2.5 text-xs text-danger">Pick at least one project.</p>}
+                {bases.length > 0 && pickedIds.length === 0 && <p className="px-2.5 text-meta text-danger">Pick at least one folder.</p>}
               </div>
             )}
             {isOwner && (
-              <Choice type="radio" name="share-access" checked={mode === "all"} onChange={() => setMode("all")} hint="Including projects made later">
-                All projects in {workspaceName}
+              <Choice type="radio" name="share-access" checked={mode === "all"} onChange={() => setMode("all")} hint="Including folders made later">
+                All folders in {workspaceName}
               </Choice>
             )}
           </>
@@ -242,10 +231,10 @@ function InviteForm({ target, onNavigate }: { target: ShareDialogTarget; onNavig
       {created && <InviteLinkResult created={created} emailEnabled={emailEnabled} />}
 
       <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-        <Link to={`/workspace/${workspaceId}/members`} onClick={onNavigate} className="text-sm">
+        <Link to={`/workspace/${workspaceId}/members`} onClick={onNavigate} className="text-ui">
           Manage all members
         </Link>
-        <Button type="submit" variant="primary" size="lg" className="h-11 rounded-[10px] px-5 font-semibold" loading={send.isPending} disabled={!everything && pickedIds.length === 0}>
+        <Button type="submit" variant="primary" size="lg" className="max-md:w-full" loading={send.isPending} disabled={!everything && pickedIds.length === 0}>
           Send invite
         </Button>
       </div>
@@ -253,9 +242,7 @@ function InviteForm({ target, onNavigate }: { target: ShareDialogTarget; onNavig
   );
 }
 
-const FIELD = "gap-1.5 [&>label]:text-sm [&>label]:font-semibold";
-// 16 px text: smaller makes iOS zoom into the field on focus.
-const CONTROL = "h-11 rounded-[10px] px-3 text-base";
+const FIELD = "[&>label]:font-semibold";
 
 /**
  * One choice as a whole clickable row (radio or checkbox), with an optional tile and hint. Native
@@ -282,7 +269,7 @@ function Choice({
 }) {
   const id = useId();
   return (
-    <label htmlFor={id} className={cn("flex cursor-pointer items-center gap-3 rounded-[10px] hover:bg-bg has-[:disabled]:cursor-default", small ? "px-2.5 py-2" : "px-3 py-2.5")}>
+    <label htmlFor={id} className={cn("flex cursor-pointer items-center gap-3 rounded-md hover:bg-hover has-[:disabled]:cursor-default", small ? "min-h-control-touch px-2.5 py-2" : "min-h-control-touch px-3 py-2.5")}>
       <input
         id={id}
         type={type}
@@ -292,15 +279,15 @@ function Choice({
         // Named by the text alone: the hint is its description, not part of its name.
         aria-labelledby={`${id}-text`}
         aria-describedby={hint ? `${id}-hint` : undefined}
-        className="m-0 size-[18px] shrink-0 accent-[var(--primary)]"
+        className="m-0 size-5 shrink-0 accent-[var(--primary)]"
       />
       {icon}
       <span className="flex min-w-0 flex-col">
-        <span id={`${id}-text`} className={small ? "truncate text-sm" : "text-[0.9375rem]"}>
+        <span id={`${id}-text`} className={small ? "truncate text-ui" : "text-ui"}>
           {children}
         </span>
         {hint && (
-          <span id={`${id}-hint`} className="text-[0.8125rem] text-muted">
+          <span id={`${id}-hint`} className="text-label text-muted">
             {hint}
           </span>
         )}

@@ -40,12 +40,12 @@ describe("Share dialog: invite people", () => {
     const api = routes("creator");
     fromBase("creator");
     const dialog = await screen.findByRole("dialog", { name: "Share Project tracker" });
-    expect(within(dialog).getByText(/People you invite join the/)).toHaveTextContent("People you invite join the Acme workspace. Choose which of its projects they can open.");
-    expect(within(dialog).getByRole("radio", { name: "Only the projects I pick" })).toBeChecked();
+    expect(within(dialog).getByText(/People you invite join the/)).toHaveTextContent("People you invite join the Acme workspace. Choose which of its folders they can open.");
+    expect(within(dialog).getByRole("radio", { name: "Only the folders I pick" })).toBeChecked();
     expect(await within(dialog).findByRole("checkbox", { name: "Project tracker" })).toBeChecked();
     expect(within(dialog).getByRole("checkbox", { name: "CRM" })).not.toBeChecked();
     // A creator can neither open everything up nor make owners.
-    expect(within(dialog).queryByRole("radio", { name: /All projects in Acme/ })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("radio", { name: /All folders in Acme/ })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("option", { name: "Owner" })).not.toBeInTheDocument();
     expect(within(dialog).getAllByRole("option").map((o) => o.textContent)).toEqual(["Editor", "Commenter", "Viewer", "Creator"]);
 
@@ -76,7 +76,7 @@ describe("Share dialog: invite people", () => {
     fromBase("creator");
     const dialog = await screen.findByRole("dialog");
     await user.click(await within(dialog).findByRole("checkbox", { name: "Project tracker" }));
-    expect(within(dialog).getByText("Pick at least one project.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Pick at least one folder.")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: /Send invite/ })).toBeDisabled();
   });
 
@@ -85,15 +85,15 @@ describe("Share dialog: invite people", () => {
     const api = routes("owner");
     fromBase("owner");
     const dialog = await screen.findByRole("dialog");
-    const all = within(dialog).getByRole("radio", { name: "All projects in Acme" });
-    expect(all).toHaveAccessibleDescription("Including projects made later");
+    const all = within(dialog).getByRole("radio", { name: "All folders in Acme" });
+    expect(all).toHaveAccessibleDescription("Including folders made later");
     await user.click(all);
     expect(within(dialog).queryByRole("checkbox", { name: "CRM" })).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: /Send invite/ }));
     await waitFor(() => expect(api.callsTo("POST /api/bases/app1/invites")[0]?.body).toEqual({ email: null, role: "editor", all_bases: true }));
 
     await user.selectOptions(within(dialog).getByLabelText("Role"), "owner");
-    expect(within(dialog).getByText("Owners can always open every project in Acme.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Owners can always open every folder in Acme.")).toBeInTheDocument();
   });
 
   it("from the workspace page, has no view tab and defaults an owner to every base", async () => {
@@ -102,26 +102,26 @@ describe("Share dialog: invite people", () => {
     renderWithProviders(<ShareDialog open onOpenChange={() => {}} scope="workspace" workspace={makeWorkspace("owner")} />);
     const dialog = await screen.findByRole("dialog", { name: "Share Acme" });
     expect(within(dialog).queryByRole("tab")).not.toBeInTheDocument();
-    expect(within(dialog).getByRole("radio", { name: "All projects in Acme" })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: "All folders in Acme" })).toBeChecked();
     await user.click(within(dialog).getByRole("button", { name: /Send invite/ }));
     await waitFor(() => expect(api.callsTo("POST /api/workspaces/wsp1/invites")[0]?.body).toEqual({ email: null, role: "editor", all_bases: true }));
     expect(await within(dialog).findByText("Anyone with this link can join. Send it to the person you are inviting:")).toBeInTheDocument();
   });
 
-  it("shows each base with its tile in the list to pick from", async () => {
+  it("shows each folder with its color mark in the list to pick from", async () => {
     routes("creator");
     fromBase("creator");
     const dialog = await screen.findByRole("dialog");
-    const list = within(dialog).getByRole("group", { name: "Projects" });
+    const list = within(dialog).getByRole("group", { name: "Folders" });
     await within(list).findByRole("checkbox", { name: "CRM" });
-    expect(list.querySelectorAll("[data-entity-tile]")).toHaveLength(2);
+    expect(list.querySelectorAll(".ob-mark")).toHaveLength(2);
   });
 
   it("from the workspace, tells someone who is not an owner how else to share", async () => {
     const api = routes("creator");
     renderWithProviders(<ShareDialog open onOpenChange={() => {}} scope="workspace" workspace={makeWorkspace("creator")} />);
     const dialog = await screen.findByRole("dialog", { name: "Share Acme" });
-    expect(within(dialog).getByRole("status")).toHaveTextContent("Only owners can invite people to the whole workspace. Open a project to invite people to it, or share a view.");
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Only owners can invite people to the whole workspace. Open a folder to invite people to it, or share a view.");
     expect(within(dialog).queryByRole("button", { name: /Send invite/ })).not.toBeInTheDocument();
     expect(api.callsTo("POST /api/workspaces/wsp1/invites")).toHaveLength(0);
   });
@@ -155,7 +155,7 @@ describe("Share dialog: share a view", () => {
     // Personal views cannot be shared, so they are not offered.
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["All tasks", "Board"]);
     expect(
-      within(dialog).getByText("Anyone with the link sees only what this view shows: its records and properties, now and as they change later. They can't edit anything or open the rest of the project."),
+      within(dialog).getByText("Anyone with the link sees only what this view shows: its records and properties, now and as they change later. They can't edit anything or open the rest of the folder."),
     ).toBeInTheDocument();
 
     await user.click(await within(dialog).findByRole("button", { name: /Create link/ }));
@@ -164,7 +164,7 @@ describe("Share dialog: share a view", () => {
     expect(within(dialog).getByRole("button", { name: "Copy" })).toBeInTheDocument();
   });
 
-  it("creates the link with a password, and sets or removes one on an existing link", async () => {
+  it("creates a link with a password of at least 8 characters, and sets, changes or removes one on an existing link", async () => {
     const user = userEvent.setup();
     let current = link();
     const api = routes("creator", {
@@ -172,7 +172,7 @@ describe("Share dialog: share a view", () => {
       "POST /api/views/viw1/shares": link({ view_id: "viw1", has_password: true }),
       "GET /api/views/viw2/shares": () => [current],
       "PATCH /api/shares/shr1": (call) => {
-        current = { ...current, has_password: (call.body as { password: string | null }).password !== null };
+        current = { ...current, has_password: (call.body as { password?: string | null }).password !== null };
         return current;
       },
     });
@@ -180,22 +180,26 @@ describe("Share dialog: share a view", () => {
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("tab", { name: "Share a view" }));
 
-    // An existing link: a password is set with its own button, and unticking removes it.
+    // An existing link: a password is set with its own button, and removed with another.
     await within(dialog).findByLabelText("View link");
-    await user.click(within(dialog).getByRole("checkbox", { name: "Require a password" }));
+    await user.click(within(dialog).getByRole("button", { name: "Set password" }));
+    await user.type(within(dialog).getByLabelText("Password"), "short");
+    await user.click(within(dialog).getByRole("button", { name: "Save password" }));
+    expect(await within(dialog).findByText("Use at least 8 characters.")).toBeInTheDocument();
+    expect(api.callsTo("PATCH /api/shares/shr1")).toHaveLength(0);
+    await user.clear(within(dialog).getByLabelText("Password"));
     await user.type(within(dialog).getByLabelText("Password"), "garden party");
     await user.click(within(dialog).getByRole("button", { name: "Save password" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/shares/shr1")[0]?.body).toEqual({ password: "garden party" }));
-    expect(await within(dialog).findByText("Visitors type the password once per visit.")).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("checkbox", { name: "Require a password" }));
+    await user.click(await within(dialog).findByRole("button", { name: "Remove password" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/shares/shr1")[1]?.body).toEqual({ password: null }));
 
     // Another view without a link: the password goes with the new link, and a short one is refused first.
     await user.selectOptions(within(dialog).getByLabelText("View"), "viw1");
-    await user.click(await within(dialog).findByRole("checkbox", { name: "Require a password" }));
+    await user.click(await within(dialog).findByRole("switch", { name: "Protect with a password" }));
     await user.type(within(dialog).getByLabelText("Password"), "ab");
     await user.click(within(dialog).getByRole("button", { name: /Create link/ }));
-    expect(await within(dialog).findByRole("alert")).toBeInTheDocument();
+    expect(await within(dialog).findByText("Use at least 8 characters.")).toBeInTheDocument();
     expect(api.callsTo("POST /api/views/viw1/shares")).toHaveLength(0);
     await user.type(within(dialog).getByLabelText("Password"), "cdefgh");
     await user.click(within(dialog).getByRole("button", { name: /Create link/ }));
@@ -221,13 +225,29 @@ describe("Share dialog: share a view", () => {
     expect(await within(dialog).findByRole("button", { name: /Create link/ })).toBeInTheDocument();
   });
 
-  it("offers to switch a link back on", async () => {
+  it("switches a link off and on, and deletes it after confirming", async () => {
     const user = userEvent.setup();
-    const api = routes("creator", { "GET /api/views/viw2/shares": [link({ enabled: false })], "PATCH /api/shares/shr1": link() });
+    let links = [link()];
+    const api = routes("creator", {
+      "GET /api/views/viw2/shares": () => links,
+      "PATCH /api/shares/shr1": (call) => {
+        links = [{ ...links[0]!, ...(call.body as Partial<ShareLink>) }];
+        return links[0];
+      },
+      "DELETE /api/shares/shr1": () => {
+        links = [];
+        return { ok: true };
+      },
+    });
     fromBase("creator");
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("tab", { name: "Share a view" }));
-    await user.click(await within(dialog).findByRole("button", { name: "Turn the link on" }));
-    await waitFor(() => expect(api.callsTo("PATCH /api/shares/shr1")[0]?.body).toEqual({ enabled: true }));
+    await user.click(await within(dialog).findByRole("switch", { name: "Link enabled" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/shares/shr1")[0]?.body).toEqual({ enabled: false }));
+    await user.click(await within(dialog).findByRole("switch", { name: "Link enabled" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/shares/shr1")[1]?.body).toEqual({ enabled: true }));
+    await user.click(within(dialog).getByRole("button", { name: "Delete link" }));
+    await user.click(await screen.findByRole("button", { name: "Delete link", hidden: false }));
+    await waitFor(() => expect(api.callsTo("DELETE /api/shares/shr1")).toHaveLength(1));
   });
 });
