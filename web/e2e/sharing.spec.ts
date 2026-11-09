@@ -189,13 +189,24 @@ test("builds a form, shares it, and a stranger's submission shows up as a record
     await expect(v.getByText("We write back within a day.")).toBeVisible();
     await expect(v.getByText("As on your ID")).toBeVisible();
     await expect(v.getByText("Powered by")).toBeVisible();
+    // A 640 px column with a color mark beside the title (APP-6).
+    expect((await v.locator("main").boundingBox())!.width).toBeLessThanOrEqual(672);
+    await expect(v.locator("form header .ob-mark").first()).toBeAttached();
+    // On a phone the fields are 44 px tall and the submit button is as wide as the form.
+    await v.setViewportSize({ width: 390, height: 844 });
+    expect((await v.getByLabel(/Your name/).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    const submitBox = (await v.getByRole("button", { name: "Sign me up" }).boundingBox())!;
+    const formBox = (await v.locator("form").boundingBox())!;
+    expect(submitBox.width).toBeGreaterThan(formBox.width - 48);
+    expect(await v.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await v.setViewportSize({ width: 1280, height: 720 });
     // Nothing of the app: no toolbar, no sign-in.
     await expect(v.getByRole("toolbar")).toHaveCount(0);
     await expect(v).not.toHaveURL(/login/);
 
     // Required fields are checked before anything is sent.
     await v.getByRole("button", { name: "Sign me up" }).click();
-    await expect(v.getByText("This field is required.")).toBeVisible();
+    await expect(v.getByText("This question is required.")).toBeVisible();
     await expect(v.getByLabel(/Your name/)).toBeFocused();
 
     await v.getByLabel(/Your name/).fill("Zed Visitor");
@@ -238,15 +249,14 @@ test("shares a grid with a password: a stranger gets the rows, not the hidden fi
     await dialog.getByRole("tab", { name: "Share a view" }).click();
     await expect(dialog.getByRole("combobox", { name: "View" })).toHaveValue(viewId);
     await expect(dialog.getByText(/The 1 hidden property never leaves the server/)).toBeVisible();
-    await dialog.getByRole("checkbox", { name: "Require a password" }).click();
+    await dialog.getByRole("switch", { name: "Protect with a password" }).click();
     await dialog.getByRole("textbox", { name: "Password" }).fill("open sesame");
     await dialog.getByRole("button", { name: "Create link" }).click();
     const address = dialog.getByRole("textbox", { name: "View link" });
     await expect(address).toHaveValue(/\/share\/[A-Za-z0-9_-]+$/);
     link = await address.inputValue();
     token = link.split("/").pop()!;
-    await expect(dialog.getByRole("checkbox", { name: "Require a password" })).toBeChecked();
-    await expect(dialog.getByText("Visitors type the password once per visit.")).toBeVisible();
+    await expect(dialog.getByText("Password protected")).toBeVisible();
     await page.keyboard.press("Escape");
   });
 
@@ -275,6 +285,8 @@ test("shares a grid with a password: a stranger gets the rows, not the hidden fi
     await v.getByRole("textbox", { name: "Password" }).fill("open sesame");
     await v.getByRole("button", { name: "Continue" }).click();
     await expect(v.getByRole("heading", { name: "Team sheet" })).toBeVisible();
+    // The view's name sits beside the collection's color mark (APP-7).
+    await expect(v.locator("header .ob-mark").first()).toBeAttached();
     const table = v.getByRole("table", { name: "Records" });
     await expect(table.getByText("Alpha")).toBeVisible();
     await expect(table.getByText("Bravo")).toBeVisible();
@@ -336,9 +348,9 @@ test("imports a CSV into a new table, then into an existing one, and reports bad
     await page.getByRole("menuitem", { name: "New collection from CSV" }).click();
     const dialog = page.getByRole("dialog", { name: "New collection from CSV" });
     await dialog.getByLabel("CSV file").setInputFiles({ name: "Customers 2026.csv", mimeType: "text/csv", buffer: Buffer.from("Name,Age,Joined,Active\nAnn,30,2024-01-05,yes\nBob,41,2023-12-31,no\nCyd,29,2022-06-30,yes\n") });
-    await expect(dialog.getByLabel("Table name")).toHaveValue("Customers 2026");
+    await expect(dialog.getByLabel("Collection name")).toHaveValue("Customers 2026");
     await expect(dialog.getByRole("region", { name: "Preview" }).getByText("Bob")).toBeVisible();
-    await dialog.getByRole("button", { name: "Create table" }).click();
+    await dialog.getByRole("button", { name: "Create collection" }).click();
     await expect(page).not.toHaveURL(new RegExp(fx.tableId));
     newTableId = new URL(page.url()).pathname.split("/")[3]!;
     await expect(page.getByRole("navigation", { name: "Main menu" }).getByRole("link", { name: /^Customers 2026/ })).toBeVisible();
