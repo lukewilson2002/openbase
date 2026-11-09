@@ -32,7 +32,7 @@ use super::http::{self, Request};
 use super::store::{self, AutomationRow};
 use super::template::{Escape, RecordCtx, RenderCtx};
 use super::triggers::TriggerData;
-use super::validate::{check_recipients, resolve_field, split_recipients};
+use super::validate::{check_recipients, resolve_field};
 use super::writer::{self, AutomationCtx};
 use crate::error::{AppError, AppResult};
 use crate::perm;
@@ -496,8 +496,7 @@ impl Executor {
                 "email is not configured on this server (an administrator can set it up under Admin > Email)",
             ));
         }
-        let to = ctx.render_str(to, Escape::None)?;
-        let recipients = split_recipients(&to);
+        let recipients = ctx.render_recipients(to)?;
         if recipients.is_empty() {
             return Err(StepError::permanent(
                 "there is no recipient after substitution",

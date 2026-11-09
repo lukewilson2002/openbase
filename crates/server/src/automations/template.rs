@@ -328,6 +328,46 @@ impl RenderCtx<'_> {
         Ok(out)
     }
 
+    /// Render a recipient list: commas and semicolons in the template's own text separate the
+    /// addresses, but a substituted value is part of one address. A value that holds a
+    /// separator is refused, so form, webhook or record data cannot add recipients or step out
+    /// of a fixed domain.
+    pub fn render_recipients(&self, src: &str) -> Result<Vec<String>, String> {
+        let t = Template::parse(src)?;
+        let mut list = Vec::new();
+        let mut current = String::new();
+        for seg in &t.segments {
+            match seg {
+                Segment::Text(s) => {
+                    let mut parts = s.split([',', ';']);
+                    current.push_str(parts.next().unwrap_or_default());
+                    for part in parts {
+                        list.push(std::mem::take(&mut current));
+                        current.push_str(part);
+                    }
+                }
+                Segment::Var(v) => {
+                    let text = json_text(&self.resolve(v));
+                    if text.contains([',', ';']) {
+                        return Err(
+                            "a recipient value holds a comma or semicolon; each placeholder in the recipient list must be one address".into(),
+                        );
+                    }
+                    current.push_str(&text);
+                }
+            }
+            if current.len() > MAX_RENDERED_LEN {
+                return Err("the rendered text is too large".into());
+            }
+        }
+        list.push(current);
+        Ok(list
+            .into_iter()
+            .map(|a| a.trim().to_string())
+            .filter(|a| !a.is_empty())
+            .collect())
+    }
+
     /// Parse and render a string.
     pub fn render_str(&self, src: &str, escape: Escape) -> Result<String, String> {
         self.render(&Template::parse(src)?, escape)
@@ -666,6 +706,28 @@ mod tests {
             )
             .unwrap();
         assert_eq!(url, "https://x.test/..%2Fevil%40host%2F%3F%23");
+    }
+
+    #[test]
+    fn a_recipient_placeholder_is_one_address() {
+        let f = fields();
+        let d = data();
+        let c = ctx(&f, &d, None, &[]);
+        assert_eq!(
+            c.render_recipients("{{trigger.record.fields.fldName}}@x.test, b@y.test; c@z.test")
+                .unwrap(),
+            ["Ada \"Lovelace\"@x.test", "b@y.test", "c@z.test"]
+        );
+        for evil in ["a@evil.test,x", "a@evil.test;x"] {
+            let mut d2 = data();
+            d2.insert("fldName".into(), json!(evil));
+            let c2 = ctx(&f, &d2, None, &[]);
+            assert!(
+                c2.render_recipients("{{trigger.record.fields.fldName}}@corp.test")
+                    .is_err(),
+                "{evil}"
+            );
+        }
     }
 
     #[test]

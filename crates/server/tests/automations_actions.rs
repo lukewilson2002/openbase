@@ -483,6 +483,19 @@ async fn send_email_with_a_bad_substituted_address_fails_without_sending() {
 }
 
 #[tokio::test]
+async fn send_email_refuses_a_substituted_value_that_adds_recipients() {
+    let env = Env::new().await;
+    let (_, _, run) = run_once(
+        &env,
+        json!([{ "type": "send_email", "to": "{{trigger.record.fields.Name}}@example.com", "subject": "s", "body": "b" }]),
+        json!({ &env.name: "attacker@evil.example,x" }),
+    )
+    .await;
+    assert_eq!(run["status"], "failed", "{run:#}");
+    assert!(env.f.app.mailer.sent().is_empty());
+}
+
+#[tokio::test]
 async fn send_email_fails_when_smtp_is_not_configured() {
     let env = Env::with_config(|c| c.smtp_host = None).await;
     // Saving is refused...

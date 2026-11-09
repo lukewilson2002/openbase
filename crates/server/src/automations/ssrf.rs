@@ -167,6 +167,9 @@ fn forbidden_v4(ip: Ipv4Addr) -> bool {
         || (o[0] == 192 && o[1] == 0 && o[2] == 0) // 192.0.0.0/24 IETF protocol assignments
         || (o[0] == 198 && (o[1] & 0xFE) == 18) // 198.18.0.0/15 benchmarking
         || o[0] >= 240 // 240.0.0.0/4 reserved
+        // Azure's WireServer and HostGAPlugin: a public number that answers only from inside
+        // the VM, like the link-local metadata address above.
+        || o == [168, 63, 129, 16]
 }
 
 fn forbidden_v6(ip: Ipv6Addr) -> bool {
@@ -237,6 +240,9 @@ mod tests {
             "198.18.0.1",
             "198.19.255.255",
             "192.0.0.8",
+            "168.63.129.16",
+            "::ffff:168.63.129.16",
+            "64:ff9b::a83f:8110",
             "::1",
             "::",
             "fe80::1",
