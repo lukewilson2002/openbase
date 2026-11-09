@@ -3,9 +3,6 @@
 # so the list can only shrink. A line may be deleted once its file has moved to tokens.
 components/ShareDialog.tsx
 components/accountMenu.tsx
-components/layouts.tsx
-onboarding/IntroOverlay.tsx
-onboarding/illustrations.tsx
 views/calendar/calendar.css
 views/common/SegmentedSwitch.tsx
 views/common/UnscheduledList.tsx

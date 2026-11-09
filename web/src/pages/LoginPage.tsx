@@ -6,7 +6,7 @@ import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { useMe, useSetUser, useSetupStatus } from "@/auth/useAuth";
 import { usePasskeyLogin } from "@/auth/usePasskeyLogin";
-import { AuthLayout, Notice } from "@/components/layouts";
+import { AUTH_BUTTON, AUTH_INPUT, AuthLayout, Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
@@ -75,27 +75,27 @@ export function LoginPage() {
         {login.isError && <Notice tone="error">{errorMessage(login.error)}</Notice>}
         {passkey.problem && <Notice tone="error">{passkey.problem}</Notice>}
         <Field label="Email">
-          {(ctl) => <Input {...ctl} type="email" autoComplete={passkey.conditional ? "username webauthn" : "username"} value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />}
+          {(ctl) => <Input {...ctl} type="email" autoComplete={passkey.conditional ? "username webauthn" : "username"} value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus className={AUTH_INPUT} />}
         </Field>
         <Field label="Password">
-          {(ctl) => <Input {...ctl} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />}
+          {(ctl) => <Input {...ctl} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required className={AUTH_INPUT} />}
         </Field>
-        <Button type="submit" variant="primary" size="lg" loading={login.isPending}>
+        <Button type="submit" variant="primary" size="lg" className={AUTH_BUTTON} loading={login.isPending}>
           Log in
         </Button>
-        <Link to="/forgot-password" className="text-center text-[0.8125rem]">
+        <Link to="/forgot-password" className="text-center text-label">
           Forgot your password?
         </Link>
       </form>
       {passkey.available && (
         <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
-          <Button size="lg" loading={passkey.pending} onClick={passkey.signIn}>
+          <Button variant="secondary" size="lg" className={AUTH_BUTTON} loading={passkey.pending} onClick={passkey.signIn}>
             <KeyRound aria-hidden className="size-4" /> Sign in with a passkey
           </Button>
         </div>
       )}
       {passkey.unsupported && (
-        <p className="mt-4 border-t border-line pt-4 text-center text-[0.8125rem] text-muted">
+        <p className="mt-4 border-t border-line pt-4 text-center text-label text-muted">
           Passkeys are set up on this server, but this browser cannot use them here. Sign in with your password.
         </p>
       )}

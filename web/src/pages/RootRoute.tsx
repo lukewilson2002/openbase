@@ -6,14 +6,15 @@
 import { useState, type FormEvent } from "react";
 import { Navigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { SquarePlus } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import { ColorField } from "@/components/ColorField";
+import { COLORS } from "@/lib/colors";
 import { Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { ColorMark } from "@/components/ui/color-mark";
+import { Field, Input } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
 import { HomeShell, useCreateWorkspace } from "@/shell/HomeShell";
 import { workspaceToOpen } from "./workspace/lastWorkspace";
@@ -40,7 +41,8 @@ export function RootRoute() {
 
 function FirstWorkspace() {
   const [name, setName] = useState("");
-  const [color, setColor] = useState<string | null>(null);
+  // Starts on the first hue, so the mark beside the name is the color the workspace is made with.
+  const [color, setColor] = useState<string>(COLORS[0]);
   const create = useCreateWorkspace();
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -49,40 +51,31 @@ function FirstWorkspace() {
   };
 
   return (
-    <div className="flex justify-center px-4 py-8 sm:px-6 sm:py-12">
-      <section aria-labelledby="first-workspace-title" className="flex w-full max-w-[520px] flex-col gap-[22px] sm:pt-10">
-        <span aria-hidden className="flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-fg">
-          <SquarePlus className="size-7" strokeWidth={1.8} />
-        </span>
+    <div className="flex justify-center px-4 py-8 md:px-10 md:py-12">
+      <section aria-labelledby="first-workspace-title" className="flex w-full max-w-[32.5rem] flex-col gap-5 md:pt-10">
         <div>
-          <h1 id="first-workspace-title" className="mb-2 text-[1.75rem] leading-tight tracking-[-0.015em]">
+          <h1 id="first-workspace-title" className="mb-2 text-home">
             Create your first workspace
           </h1>
-          <p className="text-base leading-relaxed text-muted">A workspace is a separate place with its own projects and its own people.</p>
+          <p className="text-read text-muted">A workspace is a separate place with its own collections and its own people. Name it and pick a color.</p>
         </div>
-        <form onSubmit={submit} className="flex flex-col gap-2">
-          <label htmlFor="first-workspace-name" className="text-sm font-semibold">
-            Workspace name
-          </label>
-          <div className="flex flex-wrap gap-2.5">
-            <Input
-              id="first-workspace-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="For example, Personal"
-              maxLength={255}
-              autoFocus
-              required
-              className="h-[46px] min-w-0 flex-[1_1_240px] rounded-[10px] px-3.5 text-base"
-            />
-            <Button type="submit" variant="primary" size="lg" className="h-[46px] rounded-[10px] px-5 font-semibold max-[420px]:w-full" loading={create.isPending} disabled={!name.trim()}>
-              Create workspace
-            </Button>
-          </div>
-          <ColorField value={color} onChange={setColor} className="mt-2.5" />
+        <form onSubmit={submit} className="flex flex-col gap-4">
+          <Field label="Workspace name">
+            {(ctl) => (
+              <div className="flex items-center gap-3">
+                {/* Shows the color the workspace will have, beside the name it will carry. */}
+                <ColorMark hue={color} size={28} />
+                <Input {...ctl} value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Personal" maxLength={255} autoFocus required className="h-control-lg min-w-0 flex-1 max-md:h-control-touch" />
+              </div>
+            )}
+          </Field>
+          <ColorField value={color} onChange={setColor} />
           {create.isError && <Notice tone="error">{errorMessage(create.error)}</Notice>}
+          <Button type="submit" variant="primary" size="lg" className="w-full md:w-auto md:self-start" loading={create.isPending} disabled={!name.trim()}>
+            Create workspace
+          </Button>
         </form>
-        <p className="text-sm text-muted">Workspaces are private until you invite someone.</p>
+        <p className="text-label text-muted">Workspaces are private until you invite someone.</p>
       </section>
     </div>
   );

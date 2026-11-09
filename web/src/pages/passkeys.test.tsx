@@ -236,7 +236,10 @@ describe("login with a passkey", () => {
   it("offers the button only where passkeys work", async () => {
     mockApi({ "GET /api/setup": SETUP_ON, "GET /api/auth/me": LOGGED_OUT });
     const on = renderApp({ route: "/login" });
-    expect(await screen.findByRole("button", { name: "Sign in with a passkey" })).toBeInTheDocument();
+    const passkey = await screen.findByRole("button", { name: "Sign in with a passkey" });
+    // A secondary button, as wide as the card and below the primary Log in (APP-1).
+    expect(passkey).toHaveClass("w-full", "border-line-strong");
+    expect(passkey).not.toHaveClass("bg-primary");
     on.unmount();
 
     mockApi({ "GET /api/setup": { ...SETUP_ON, passkeys_enabled: false }, "GET /api/auth/me": LOGGED_OUT });

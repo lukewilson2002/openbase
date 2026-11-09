@@ -119,7 +119,7 @@ describe("setup", () => {
     await user.type(screen.getByLabelText("Password"), "longenough1");
     await user.click(screen.getByRole("button", { name: "Create my account" }));
 
-    expect(await screen.findByRole("dialog", { name: "A project holds your tables" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Home catches your ideas" })).toBeInTheDocument();
     expect(api.callsTo("POST /api/auth/signup")[0]?.body).toMatchObject({ name: "Ada", email: "ada@example.com", password: "longenough1" });
     await user.click(screen.getByRole("button", { name: "Skip the intro" }));
     expect(await screen.findByRole("heading", { name: "Create your first workspace" })).toBeInTheDocument();
@@ -201,7 +201,7 @@ describe("signup and invites", () => {
   it("explains an invalid invite", async () => {
     mockApi({ "GET /api/auth/me": LOGGED_OUT, "GET /api/invites/by-token/bad": apiError(404, "not_found", "invite not found") });
     renderApp({ route: "/invite/bad" });
-    expect(await screen.findByText(/invalid, has expired/)).toBeInTheDocument();
+    expect(await screen.findByText(/invalid, has expired/)).toHaveTextContent("Ask the person who invited you for a new link.");
   });
 });
 
@@ -238,26 +238,38 @@ describe("password reset", () => {
   });
 });
 
-describe("icons on invites", () => {
-  it("shows the workspace icon on the invite page and in the sign-up notice", async () => {
-    mockApi({
-      "GET /api/auth/me": LOGGED_OUT,
-      "GET /api/invites/by-token/tok123": { target_name: "Acme", target_icon: "briefcase", target_kind: "workspace", role: "editor", invited_by: "Grace" },
-    });
-    const { unmount } = renderApp({ route: "/invite/tok123" });
-    expect(await screen.findByRole("heading", { name: "Join Acme" })).toBeInTheDocument();
-    expect(document.querySelectorAll("svg.lucide-briefcase").length).toBeGreaterThan(0);
-    unmount();
+describe("the workspace on invites", () => {
+  const INVITE = { target_name: "Acme", target_icon: "briefcase", target_color: "purple", target_kind: "workspace", role: "editor", invited_by: "Grace" };
+
+  it("shows the workspace by its color mark beside its name, with no icon", async () => {
+    mockApi({ "GET /api/auth/me": LOGGED_OUT, "GET /api/invites/by-token/tok123": INVITE });
+    renderApp({ route: "/invite/tok123" });
+    const title = await screen.findByRole("heading", { name: "Join Acme" });
+    const mark = title.previousElementSibling;
+    expect(mark).toHaveClass("ob-mark", "ob-mark-28", "ob-hue-purple", "ob-solid");
+    expect(mark).toHaveAttribute("aria-hidden", "true");
+    expect(document.querySelector("svg.lucide-briefcase")).toBeNull();
   });
 
-  it("falls back to the initial when the invited base has no icon", async () => {
-    mockApi({
-      "GET /api/auth/me": LOGGED_OUT,
-      "GET /api/invites/by-token/tok123": { target_name: "Roadmap", target_kind: "base", role: "viewer" },
-    });
-    renderApp({ route: "/invite/tok123" });
-    await screen.findByRole("heading", { name: "Join Roadmap" });
-    expect(document.querySelector("[data-entity-tile]")).toHaveTextContent("R");
+  it("shows it in the sign-up page's invitation notice too", async () => {
+    mockApi({ "GET /api/auth/me": LOGGED_OUT, "GET /api/setup": SETUP_DONE, "GET /api/invites/by-token/tok123": INVITE });
+    renderApp({ route: "/signup?invite=tok123" });
+    const notice = (await screen.findByText(/You were invited to/)).closest("[role=status]")!;
+    expect(notice.querySelector(".ob-mark.ob-hue-purple")).not.toBeNull();
+    expect(notice).toHaveTextContent("You were invited to Acme as editor.");
     expect(document.querySelector("svg.lucide-briefcase")).toBeNull();
+  });
+});
+
+describe("the sign-in card", () => {
+  it("is the lockup above a card, with 44 px inputs and a full-width primary button", async () => {
+    mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/auth/me": LOGGED_OUT });
+    renderApp({ route: "/login" });
+    const email = await screen.findByLabelText("Email");
+    expect(screen.getByRole("img", { name: "OpenBase" })).toBeInTheDocument();
+    expect(email).toHaveClass("h-control-touch");
+    expect(screen.getByLabelText("Password")).toHaveClass("h-control-touch");
+    expect(screen.getByRole("button", { name: "Log in" })).toHaveClass("w-full", "bg-primary");
+    expect(screen.getByRole("main")).toHaveClass("bg-bg");
   });
 });

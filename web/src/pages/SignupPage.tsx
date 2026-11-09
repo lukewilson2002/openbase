@@ -1,4 +1,3 @@
-import { EntityLabel } from "@/components/icons/EntityIcon";
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -6,8 +5,9 @@ import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import { useMe, useSetUser, useSetupStatus } from "@/auth/useAuth";
-import { AuthLayout, Notice } from "@/components/layouts";
+import { AUTH_BUTTON, AUTH_INPUT, AuthLayout, Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
+import { ColorMark } from "@/components/ui/color-mark";
 import { Field, Input } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
 import { ROLE_LABELS, isRole } from "@/lib/roles";
@@ -75,29 +75,30 @@ export function SignupPage() {
           {invite.data && (
             <Notice>
               You were invited to{" "}
-              <strong>
-                <EntityLabel icon={invite.data.target_icon}>{invite.data.target_name}</EntityLabel>
+              <strong className="inline-flex items-center gap-1.5 align-middle">
+                <ColorMark hue={invite.data.target_color} size={14} name={invite.data.target_name} />
+                {invite.data.target_name}
               </strong>
               {isRole(invite.data.role) && <> as {ROLE_LABELS[invite.data.role].toLowerCase()}</>}.
             </Notice>
           )}
-          {invite.isError && <Notice tone="error">This invitation is invalid or has expired.</Notice>}
+          {invite.isError && <Notice tone="error">This invitation is invalid or has expired. Ask the person who invited you for a new link.</Notice>}
           {(localError || signup.isError) && <Notice tone="error">{localError ?? errorMessage(signup.error)}</Notice>}
           <Field label="Your name">
-            {(ctl) => <Input {...ctl} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />}
+            {(ctl) => <Input {...ctl} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus className={AUTH_INPUT} />}
           </Field>
           <Field label="Email">
             {(ctl) => (
-              <Input {...ctl} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={invite.data?.email ?? undefined} required />
+              <Input {...ctl} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={invite.data?.email ?? undefined} required className={AUTH_INPUT} />
             )}
           </Field>
           <Field label="Password" hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}>
-            {(ctl) => <Input {...ctl} type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required />}
+            {(ctl) => <Input {...ctl} type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required className={AUTH_INPUT} />}
           </Field>
           <Field label="Confirm password">
-            {(ctl) => <Input {...ctl} type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />}
+            {(ctl) => <Input {...ctl} type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required className={AUTH_INPUT} />}
           </Field>
-          <Button type="submit" variant="primary" size="lg" loading={signup.isPending}>
+          <Button type="submit" variant="primary" size="lg" className={AUTH_BUTTON} loading={signup.isPending}>
             Create account
           </Button>
         </form>

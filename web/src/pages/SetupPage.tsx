@@ -5,16 +5,11 @@ import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import { useSetUser, useSetupStatus } from "@/auth/useAuth";
-import { AuthLayout, Notice } from "@/components/layouts";
+import { AUTH_BUTTON, AUTH_INPUT, AuthLayout, Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/cn";
 import { MIN_PASSWORD_LENGTH, validatePasswords } from "@/lib/password";
-
-const FIELD = "gap-1.5 [&>label]:text-sm [&>label]:font-semibold";
-// 16 px text: smaller makes iOS zoom into the field on focus.
-const CONTROL = "h-11 rounded-[10px] px-3 text-base";
 
 /** First run: the first account created becomes the instance administrator (the owner). */
 export function SetupPage() {
@@ -51,22 +46,22 @@ export function SetupPage() {
   };
 
   return (
-    <AuthLayout roomy title="Welcome to your OpenBase" subtitle="You are the first person here, so this OpenBase is yours. You can invite others once you are in.">
-      <form onSubmit={submit} className="flex flex-col gap-[18px]">
+    <AuthLayout title="Welcome to your OpenBase" subtitle="You are the first person here, so this OpenBase is yours. You can invite others once you are in.">
+      <form onSubmit={submit} className="flex flex-col gap-4">
         {(localError || create.isError) && <Notice tone="error">{localError ?? errorMessage(create.error)}</Notice>}
-        <Field label="Your name" className={FIELD}>
-          {(ctl) => <Input {...ctl} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus className={CONTROL} />}
+        <Field label="Your name">
+          {(ctl) => <Input {...ctl} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus className={AUTH_INPUT} />}
         </Field>
-        <Field label="Email" className={FIELD}>
-          {(ctl) => <Input {...ctl} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required className={CONTROL} />}
+        <Field label="Email">
+          {(ctl) => <Input {...ctl} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required className={AUTH_INPUT} />}
         </Field>
-        <Field label="Password" hint={`At least ${MIN_PASSWORD_LENGTH} characters. You can add a passkey later.`} className={cn(FIELD, "[&>p]:text-[0.8125rem]")}>
-          {(ctl) => <Input {...ctl} type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required className={CONTROL} />}
+        <Field label="Password" hint={`At least ${MIN_PASSWORD_LENGTH} characters. You can add a passkey later.`}>
+          {(ctl) => <Input {...ctl} type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required className={AUTH_INPUT} />}
         </Field>
-        <Button type="submit" variant="primary" size="lg" className="mt-1 h-12 rounded-[10px] text-base font-semibold" loading={create.isPending}>
+        <Button type="submit" variant="primary" size="lg" className={AUTH_BUTTON} loading={create.isPending}>
           Create my account
         </Button>
-        <p className="text-center text-[0.8125rem] leading-normal text-muted">As the owner you can manage accounts, email and backups in Settings.</p>
+        <p className="text-center text-label text-muted">As the owner you can manage accounts, email and backups in Settings.</p>
       </form>
     </AuthLayout>
   );

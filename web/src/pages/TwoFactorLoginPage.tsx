@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { useSetUser } from "@/auth/useAuth";
-import { AuthLayout, Notice } from "@/components/layouts";
+import { AUTH_BUTTON, AUTH_INPUT, AuthLayout, Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { isServerPath, safeNext } from "@/lib/format";
@@ -59,13 +59,13 @@ export function TwoFactorLoginPage() {
               maxLength={10}
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              className="text-center font-mono text-lg tracking-widest"
+              className={`${AUTH_INPUT} text-center font-mono tracking-widest`}
               required
               autoFocus
             />
           )}
         </Field>
-        <Button type="submit" variant="primary" size="lg" loading={verify.isPending} disabled={code.trim().length < 6}>
+        <Button type="submit" variant="primary" size="lg" className={AUTH_BUTTON} loading={verify.isPending} disabled={code.trim().length < 6}>
           Verify
         </Button>
       </form>

@@ -122,7 +122,7 @@ describe("/", () => {
 
     // The new workspace opens on its own Home.
     expect(await screen.findByRole("heading", { level: 1, name: "Home" })).toBeInTheDocument();
-    expect(api.callsTo("POST /api/workspaces")[0]?.body).toEqual({ name: "Studio" });
+    expect(api.callsTo("POST /api/workspaces")[0]?.body).toEqual({ name: "Studio", color: "blue" });
   });
 
   it("gives the first workspace the colour picked for it", async () => {
@@ -132,8 +132,13 @@ describe("/", () => {
       "POST /api/workspaces": { id: "wsp9", name: "Studio", color: "red", role: "owner", bases: [], member_count: 1, pending_invite_count: 0 },
     });
     renderApp();
-    await user.type(await screen.findByRole("textbox", { name: "Workspace name" }), "Studio");
+    const name = await screen.findByRole("textbox", { name: "Workspace name" });
+    // The mark beside the name starts on the first hue and follows the pick, so what is made is what was shown.
+    const mark = name.parentElement!.querySelector(".ob-mark")!;
+    expect(mark).toHaveClass("ob-hue-blue");
+    await user.type(name, "Studio");
     await user.click(screen.getByRole("radio", { name: "Red" }));
+    expect(mark).toHaveClass("ob-hue-red");
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
     await waitFor(() => expect(api.callsTo("POST /api/workspaces")[0]?.body).toEqual({ name: "Studio", color: "red" }));
   });

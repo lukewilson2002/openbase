@@ -1,12 +1,12 @@
-import { EntityLabel, EntityTile } from "@/components/icons/EntityIcon";
 import { Link, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import { useMe } from "@/auth/useAuth";
-import { AuthLayout, Notice } from "@/components/layouts";
+import { AUTH_BUTTON, AuthLayout, Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
+import { ColorMark } from "@/components/ui/color-mark";
 import { PageSpinner } from "@/components/ui/spinner";
 import { ROLE_DESCRIPTIONS, ROLE_LABELS, isRole } from "@/lib/roles";
 
@@ -37,8 +37,8 @@ export function InvitePage() {
   if (preview.isError) {
     return (
       <AuthLayout title="Invitation unavailable">
-        <Notice tone="error">This invitation is invalid, has expired, or was already used.</Notice>
-        <Button asChild variant="secondary" className="mt-4 w-full">
+        <Notice tone="error">This invitation is invalid, has expired, or was already used. Ask the person who invited you for a new link.</Notice>
+        <Button asChild variant="secondary" size="lg" className={`mt-4 ${AUTH_BUTTON}`}>
           <Link to="/">Go to OpenBase</Link>
         </Button>
       </AuthLayout>
@@ -51,21 +51,18 @@ export function InvitePage() {
 
   return (
     <AuthLayout
+      mark={<ColorMark hue={inv.target_color} size={28} name={inv.target_name} />}
       title={`Join ${inv.target_name}`}
       subtitle={
         <>
           {inv.invited_by ? <>{inv.invited_by} invited you to </> : "You are invited to "}
-          the {inv.target_kind}{" "}
-          <strong>
-            <EntityLabel icon={inv.target_icon}>{inv.target_name}</EntityLabel>
-          </strong>
+          the {inv.target_kind} <strong>{inv.target_name}</strong>
           {role && <> as {ROLE_LABELS[role].toLowerCase()}</>}.
         </>
       }
     >
       <div className="flex flex-col gap-3">
-        <EntityTile name={inv.target_name} icon={inv.target_icon} size="lg" className="self-center" />
-        {role && <p className="text-[0.8125rem] text-muted">{ROLE_DESCRIPTIONS[role]}.</p>}
+        {role && <p className="text-label text-muted">{ROLE_DESCRIPTIONS[role]}.</p>}
         {inv.email && (
           <Notice>
             This invitation is for <strong>{inv.email}</strong>.
@@ -74,19 +71,19 @@ export function InvitePage() {
         {accept.isError && <Notice tone="error">{errorMessage(accept.error)}</Notice>}
         {me ? (
           <>
-            <p className="text-[0.8125rem] text-muted">
+            <p className="text-label text-muted">
               Signed in as <strong>{me.email}</strong>.
             </p>
-            <Button variant="primary" size="lg" loading={accept.isPending} onClick={() => accept.mutate()}>
+            <Button variant="primary" size="lg" className={AUTH_BUTTON} loading={accept.isPending} onClick={() => accept.mutate()}>
               Accept invitation
             </Button>
           </>
         ) : (
           <>
-            <Button asChild variant="primary" size="lg">
+            <Button asChild variant="primary" size="lg" className={AUTH_BUTTON}>
               <Link to={`/signup?invite=${encodeURIComponent(token)}`}>Create an account</Link>
             </Button>
-            <Button asChild variant="secondary" size="lg">
+            <Button asChild variant="secondary" size="lg" className={AUTH_BUTTON}>
               <Link to={`/login?next=${encodeURIComponent(nextHref)}`}>I already have an account</Link>
             </Button>
           </>

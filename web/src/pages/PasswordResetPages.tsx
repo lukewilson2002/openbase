@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { useSetupStatus } from "@/auth/useAuth";
-import { AuthLayout, Notice } from "@/components/layouts";
+import { AUTH_BUTTON, AUTH_INPUT, AuthLayout, Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
@@ -38,9 +38,9 @@ export function ForgotPasswordPage() {
           )}
           {request.isError && <Notice tone="error">{errorMessage(request.error)}</Notice>}
           <Field label="Email">
-            {(ctl) => <Input {...ctl} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />}
+            {(ctl) => <Input {...ctl} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus className={AUTH_INPUT} />}
           </Field>
-          <Button type="submit" variant="primary" size="lg" loading={request.isPending}>
+          <Button type="submit" variant="primary" size="lg" className={AUTH_BUTTON} loading={request.isPending}>
             Send reset link
           </Button>
         </form>
@@ -77,7 +77,7 @@ export function ResetPasswordPage() {
     return (
       <AuthLayout title="Reset link missing">
         <Notice tone="error">This page needs a reset link. Request a new one.</Notice>
-        <Button asChild variant="secondary" className="mt-4 w-full">
+        <Button asChild variant="secondary" size="lg" className={`mt-4 ${AUTH_BUTTON}`}>
           <Link to="/forgot-password">Request a reset link</Link>
         </Button>
       </AuthLayout>
@@ -89,12 +89,12 @@ export function ResetPasswordPage() {
       <form onSubmit={submit} className="flex flex-col gap-4">
         {(localError || confirmReset.isError) && <Notice tone="error">{localError ?? errorMessage(confirmReset.error)}</Notice>}
         <Field label="New password" hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}>
-          {(ctl) => <Input {...ctl} type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus />}
+          {(ctl) => <Input {...ctl} type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus className={AUTH_INPUT} />}
         </Field>
         <Field label="Confirm new password">
-          {(ctl) => <Input {...ctl} type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />}
+          {(ctl) => <Input {...ctl} type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required className={AUTH_INPUT} />}
         </Field>
-        <Button type="submit" variant="primary" size="lg" loading={confirmReset.isPending}>
+        <Button type="submit" variant="primary" size="lg" className={AUTH_BUTTON} loading={confirmReset.isPending}>
           Update password
         </Button>
       </form>
