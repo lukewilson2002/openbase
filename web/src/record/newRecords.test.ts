@@ -26,6 +26,20 @@ describe("a record added a moment ago", () => {
     expect(isNewRecord("new1")).toBe(false);
   });
 
+  it("takes its add out of the undo history when it is taken back, and keeps it there when it stays", async () => {
+    mockApi({ [GET]: record({}), [DISCARD]: { discarded: true } });
+    const dropped = vi.fn();
+    rememberNewRecord("new1", {}, dropped);
+    expect(await discardNewRecord(new QueryClient(), table, "new1")).toBe(true);
+    expect(dropped).toHaveBeenCalledTimes(1);
+
+    mockApi({ [GET]: record({ fld_name: "Typed" }) });
+    const kept = vi.fn();
+    rememberNewRecord("new1", {}, kept);
+    expect(await discardNewRecord(new QueryClient(), table, "new1")).toBe(false);
+    expect(kept).not.toHaveBeenCalled();
+  });
+
   it("stays when the server says it was touched", async () => {
     mockApi({ [GET]: record({}), [DISCARD]: { discarded: false } });
     rememberNewRecord("new1", {});

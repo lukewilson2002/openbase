@@ -10,6 +10,7 @@ import { makeRecord } from "@/test/fields";
 import type { ViewRecordsData } from "./cache";
 import { TABLE_FIELDS } from "./viewTestUtils";
 import { isNewRecord } from "@/record/newRecords";
+import { useUndoScope } from "@/lib/undo/registry";
 import { useRecordWrites } from "./useRecordWrites";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -23,7 +24,9 @@ const data = (): ViewRecordsData => ({
   truncated: false,
 });
 
-function harness(canEdit = true, extra: { queryConfig?: { filter: Filter } } = {}) {
+// Undo histories outlive a screen, so each test gets a view of its own, as each has its own folder in real use.
+let views = 0;
+function harness(canEdit = true, extra: { queryConfig?: { filter: Filter } } = {}, viewId = `viw${++views}`) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(KEY, data());
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -31,7 +34,7 @@ function harness(canEdit = true, extra: { queryConfig?: { filter: Filter } } = {
       <ToastProvider>{children}</ToastProvider>
     </QueryClientProvider>
   );
-  const hook = renderHook(() => useRecordWrites({ tableId: "tbl1", fields: TABLE_FIELDS, canEdit, ...extra }), { wrapper });
+  const hook = renderHook(() => useRecordWrites({ baseId: "app1", viewId, tableId: "tbl1", fields: TABLE_FIELDS, canEdit, ...extra }), { wrapper });
   const cached = () => client.getQueryData<ViewRecordsData>(KEY)!;
   return { client, ...hook, cached };
 }
@@ -39,6 +42,23 @@ function harness(canEdit = true, extra: { queryConfig?: { filter: Filter } } = {
 const ids = (d: ViewRecordsData) => d.records.map((r) => r.id);
 
 describe("useRecordWrites", () => {
+  it("keeps its undo history when the screen is gone and back, as it is across a record's page", async () => {
+    mockApi({ "PATCH /api/tables/tbl1/records": (c: { body: { records: { id: string }[] } }) => ({ records: [makeRecord({ f_status: "s3" }, c.body.records[0]!.id)] }) });
+    const first = harness(true, {}, "viwShared");
+    await act(async () => void (await first.result.current.update("r1", { f_status: "s3" })));
+    expect(first.result.current.history.canUndo).toBe(true);
+    first.unmount();
+    // The page that replaced the screen holds the folder's histories; the screen comes back to the same one.
+    const page = renderHook(() => useUndoScope("app1"));
+    const again = harness(true, {}, "viwShared");
+    expect(again.result.current.history.canUndo).toBe(true);
+    again.unmount();
+    page.unmount();
+    // Leaving the folder for good lets them go.
+    await act(async () => void (await new Promise((r) => setTimeout(r, 5))));
+    expect(harness(true, {}, "viwShared").result.current.history.canUndo).toBe(false);
+  });
+
   it("applies an edit to the cache immediately and sends one PATCH with wire values", async () => {
     const api = mockApi({ "PATCH /api/tables/tbl1/records": (c: { body: { records: { id: string }[] } }) => ({ records: [makeRecord({ f_status: "s3", f_owner: ["usr1"] }, c.body.records[0]!.id)] }) });
     const { result, cached } = harness();
@@ -64,7 +84,7 @@ describe("useRecordWrites", () => {
 
   it("moves a record optimistically then calls the move endpoint; rolls back if it fails", async () => {
     const api = mockApi({ "POST /api/tables/tbl1/records/move": { records: [] } });
-    const first = harness();
+    const first = harness(true, {}, "viwShared");
     await act(async () => {
       expect(await first.result.current.move("r3", { beforeId: "r1" })).toBe(true);
     });

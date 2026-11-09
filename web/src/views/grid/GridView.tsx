@@ -49,6 +49,7 @@ import { queryRelevantKey, reorderVisible, resolveFieldOrder, ROW_HEIGHT_PX, set
 import { useDebounced } from "@/components/record/editors/useDebounced";
 import { browserTimeZone } from "@/lib/format";
 import { atLeast } from "@/lib/roles";
+import { undoStackIn, useUndoScope } from "@/lib/undo/registry";
 import { personColors } from "@/lib/colors";
 import { useTheme } from "@/theme/ThemeProvider";
 import { formatAggregate, aggregationShortLabel } from "@/lib/cells/aggregations";
@@ -66,7 +67,7 @@ import { GlideGrid, gridHeaderHeight } from "./glide/GlideGrid";
 import { floatingAddGroup, newRecordValues } from "./addRows";
 import { discardIfUntouched, type Fresh } from "./freshRows";
 import { PAGE_SIZE, buildRowMap, groupPathKeys } from "./rowMap";
-import { UndoStack, type CellChange, type UndoOp } from "./undo";
+import { type CellChange, type UndoOp } from "./undo";
 import { useGridData } from "./useGridData";
 import { useRecordOps } from "./useRecordOps";
 import { useViewConfig } from "./useViewConfig";
@@ -220,7 +221,9 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   readerRef.current = reader;
 
   // ---- operations ------------------------------------------------------------------------------
-  const stack = useMemo(() => new UndoStack<UndoOp>(), []);
+  // Kept outside the screen: a record's page replaces it while open, and Ctrl/Cmd+Z should still reach what was done here before.
+  const stack = useMemo(() => undoStackIn<UndoOp>(schema.id, `grid:${view.id}`), [schema.id, view.id]);
+  useUndoScope(schema.id);
   const gridRef = useRef<GridHandle>(null);
   const selectionRef = useRef<GridSelectionInfo>(EMPTY_SELECTION);
   // Records came or went (a delete, a copy, an undo of either): the rows a selection named hold other records now.
@@ -606,11 +609,11 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       const made = fresh.current.get(rec.id);
       if (made) {
         expandedRef.current = rec.id;
-        rememberNewRecord(rec.id, made.values);
+        rememberNewRecord(rec.id, made.values, () => made.op && stack.drop(made.op));
       }
       openRecord(rec.id);
     },
-    [recordAtRow, openRecord],
+    [recordAtRow, openRecord, stack],
   );
 
   // A linked record's chip under the pointer: its preview floats over it, with Open (the linked record's page).
@@ -722,10 +725,11 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       const created = await createFresh({ values });
       if (!created) return;
       expandedRef.current = created.id;
-      rememberNewRecord(created.id, fresh.current.get(created.id)?.values ?? writableValues(table.fields, created.values as Record<string, unknown>));
+      const made = fresh.current.get(created.id);
+      rememberNewRecord(created.id, made?.values ?? writableValues(table.fields, created.values as Record<string, unknown>), () => made?.op && stack.drop(made.op));
       openRecord(created.id);
     },
-    [table.fields, queryConfig.filter, me.data?.id, createFresh, openRecord],
+    [table.fields, queryConfig.filter, me.data?.id, createFresh, openRecord, stack],
   );
 
   const insertRecord = useCallback(

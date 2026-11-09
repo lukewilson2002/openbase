@@ -18,7 +18,7 @@ import { useToast } from "@/components/ui/toast";
 import { jsonEqual } from "@/lib/cells/parse";
 import { toWire, writableValues } from "@/lib/cells/wire";
 import { hasPlacement, type Placement, type RecordOp, type ValueChange } from "@/lib/undo/recordOps";
-import { UndoStack } from "@/lib/undo/stack";
+import { undoStackIn, useUndoScope } from "@/lib/undo/registry";
 import { isViewRecordsData, moveRecordInList, patchRecordValues, removeRecords, upsertRecords, type ViewRecordsData } from "./cache";
 import { forgetNewRecord, rememberNewRecord } from "@/record/newRecords";
 import { prefillFor } from "./prefill";
@@ -76,6 +76,9 @@ export interface RecordWrites {
 }
 
 export interface RecordWritesParams {
+  /** The folder and the view whose undo history these writes go on. */
+  baseId: string;
+  viewId: string;
   tableId: string;
   fields: readonly Field[];
   canEdit: boolean;
@@ -91,11 +94,13 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
   return out;
 }
 
-export function useRecordWrites({ tableId, fields, canEdit, queryConfig, currentUserId = null }: RecordWritesParams): RecordWrites {
+export function useRecordWrites({ baseId, viewId, tableId, fields, canEdit, queryConfig, currentUserId = null }: RecordWritesParams): RecordWrites {
   const qc = useQueryClient();
   const toast = useToast();
   const fieldById = useMemo(() => new Map(fields.map((f) => [f.id, f] as const)), [fields]);
-  const stack = useMemo(() => new UndoStack<RecordOp>(), []);
+  // Kept outside the screen: a record's page replaces the screen while it is open, and Ctrl/Cmd+Z should still reach what was done before.
+  const stack = useMemo(() => undoStackIn<RecordOp>(baseId, `records:${viewId}`), [baseId, viewId]);
+  useUndoScope(baseId);
   const creating = useRef(false);
   const filter = queryConfig?.filter ?? null;
 
@@ -355,7 +360,7 @@ export function useRecordWrites({ tableId, fields, canEdit, queryConfig, current
         const rec = await insert(opts?.prefill === false ? values : { ...prefill(), ...values }, opts?.afterRecordId);
         const op: RecordOp = { kind: "create", label: "Add record", ids: [rec.id] };
         stack.push(op);
-        rememberNewRecord(rec.id, writableValues(fields, rec.values as Record<string, unknown>));
+        rememberNewRecord(rec.id, writableValues(fields, rec.values as Record<string, unknown>), () => stack.drop(op));
         settle(true);
         return rec;
       } catch (e) {

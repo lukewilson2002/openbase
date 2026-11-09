@@ -10,11 +10,15 @@ import type { Table, TableRecord } from "@/api/types";
 import { writableValues } from "@/lib/cells/wire";
 import { discardIfUntouched, isUntouched } from "@/views/grid/freshRows";
 
-const made = new Map<string, Record<string, unknown>>();
+const made = new Map<string, { values: Record<string, unknown>; dropStep?: () => void }>();
 
-/** `values` is what the record held when it was made, which the view's filter may have filled in; computed values do not count. */
-export function rememberNewRecord(recordId: string, values: Record<string, unknown>): void {
-  made.set(recordId, values);
+/**
+ * `values` is what the record held when it was made, which the view's filter may have filled in; computed values
+ * do not count. `dropStep` takes the add out of the undo history, for when the record is taken back: Ctrl+Z
+ * would otherwise restore a record that was never there.
+ */
+export function rememberNewRecord(recordId: string, values: Record<string, unknown>, dropStep?: () => void): void {
+  made.set(recordId, { values, dropStep });
 }
 
 /** Whether the record was just added (its title starts being edited). */
@@ -34,12 +38,12 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  * have landed. Resolves true when the server discarded it.
  */
 export async function discardNewRecord(qc: QueryClient, table: Table, recordId: string): Promise<boolean> {
-  const values = made.get(recordId);
-  if (!values) return false;
+  const entry = made.get(recordId);
+  if (!entry) return false;
   made.delete(recordId);
   const gone = await discardIfUntouched(
     recordId,
-    { values: writableValues(table.fields, values), op: null },
+    { values: writableValues(table.fields, entry.values), op: null },
     {
       fields: table.fields,
       touched: () => false,
@@ -49,7 +53,10 @@ export async function discardNewRecord(qc: QueryClient, table: Table, recordId: 
       sleep,
     },
   );
-  if (gone) void qc.invalidateQueries({ queryKey: ["records", table.id] });
+  if (gone) {
+    entry.dropStep?.();
+    void qc.invalidateQueries({ queryKey: ["records", table.id] });
+  }
   return gone;
 }
 
@@ -67,11 +74,11 @@ function typingSomething(): boolean {
  * record that was touched), so a wrong guess leaves a record, never takes one. Answers whether it asked.
  */
 export function discardNewRecordOnExit(qc: QueryClient, table: Table, recordId: string, unsent: boolean): boolean {
-  const values = made.get(recordId);
-  if (!values || unsent || typingSomething()) return false;
+  const entry = made.get(recordId);
+  if (!entry || unsent || typingSomething()) return false;
   if (qc.isMutating({ mutationKey: ["record-save", table.id] }) > 0) return false;
   const loaded = qc.getQueryData<TableRecord>(recordKeys.record(table.id, recordId));
-  if (!loaded || !isUntouched(table.fields, { values: writableValues(table.fields, values), op: null }, loaded)) return false;
+  if (!loaded || !isUntouched(table.fields, { values: writableValues(table.fields, entry.values), op: null }, loaded)) return false;
   made.delete(recordId);
   recordsApi.discardOnExit(table.id, recordId);
   return true;

@@ -95,7 +95,7 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
   const filtered = isFiltered(cfg.config, debouncedSearch);
   const resetFilters = useResetFilters(cfg, view, search, setSearch);
 
-  const writes = useRecordWrites({ tableId: table.id, fields: table.fields, canEdit, queryConfig: cfg.queryConfig, currentUserId });
+  const writes = useRecordWrites({ baseId: schema.id, viewId: view.id, tableId: table.id, fields: table.fields, canEdit, queryConfig: cfg.queryConfig, currentUserId });
   const actions = useRecordActions({ writes, role, canEdit });
 
   const baseId = schema.id;
