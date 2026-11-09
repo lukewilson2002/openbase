@@ -214,8 +214,10 @@ describe("History page", () => {
     await screen.findAllByRole("article");
     expect(lastQuery(api).get("kind")).toBeNull();
     const bar = screen.getByRole("combobox", { name: "Filter the history" });
-    // The bar offers a few of each filter before anything is typed.
+    // Nothing is offered until something is typed, as in a collection's bar.
     await user.click(bar);
+    expect(screen.queryByRole("option")).toBeNull();
+    await user.type(bar, "chang");
     await user.click(await screen.findByRole("option", { name: /Kind: Changes/ }));
     await waitFor(() => expect(lastQuery(api).get("kind")).toBe("update"));
     expect(screen.getByRole("button", { name: "Remove Kind: Changes" })).toBeInTheDocument();

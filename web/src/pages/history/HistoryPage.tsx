@@ -117,7 +117,7 @@ export function HistoryPage() {
               user: userId ? authors.get(userId) : undefined,
             }}
             label="Filter the history"
-            placeholder="Filter by workspace, folder, collection, person or kind"
+            placeholder="Type to filter by workspace, folder, collection, person or kind"
           />
           <Button aria-label={`Sort: ${asc ? "Oldest first" : "Newest first"}`} onClick={() => update({ order: asc ? "newest" : "oldest" })} className="max-md:w-full">
             <Icon icon={asc ? ArrowUpNarrowWide : ArrowDownWideNarrow} />

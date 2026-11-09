@@ -99,13 +99,14 @@ export function PlaceFilterBar({ parts, workspaces, people = [], kinds = [], val
   const suggestions: FilterBarSuggestion[] = useMemo(() => {
     const q = text.trim().toLowerCase();
     const open = options.filter((o) => value[o.part] !== o.id);
-    // An empty field offers a few of each kind of filter, so there is something to pick; typing narrows to matches.
+    // As in a collection's filter bar, an empty field opens no list: it would cover the page, and it comes back
+    // every time a chip is removed. Typing narrows to the things that match.
     const picked = q
       ? open
           .filter((o) => `${o.name} ${CATEGORY[o.part]}`.toLowerCase().includes(q))
           .sort((a, b) => Number(b.name.toLowerCase().startsWith(q)) - Number(a.name.toLowerCase().startsWith(q)))
           .slice(0, 8)
-      : parts.flatMap((part) => open.filter((o) => o.part === part).slice(0, part === "kind" ? 5 : 2));
+      : [];
     return picked.map((o) => ({
       id: key(o.part, o.id),
       label: (

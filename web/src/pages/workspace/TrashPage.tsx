@@ -86,7 +86,7 @@ export function TrashPage() {
           onChange={update}
           fallbackNames={{ base: listing.data?.items.find((i) => i.base_id === baseId)?.base_name ?? undefined }}
           label="Filter the trash"
-          placeholder="Filter by workspace or folder"
+          placeholder="Type to filter by workspace or folder"
         />
         <div role="group" aria-label="What kind of thing" className="flex flex-wrap gap-1.5">
           {KIND_CHIPS.map((c) => {
