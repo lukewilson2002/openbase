@@ -92,8 +92,8 @@ export function SharedView({ token, password, view }: SharedViewProps) {
   }, [type, fields.list, cfg.calendar_date_field_id, cfg.calendar_end_field_id, cfg.timeline_start_field_id, cfg.timeline_end_field_id]);
   const stackField = type === "kanban" ? fields.byId.get(cfg.kanban_stack_field_id ?? "") : undefined;
 
-  const mode: "table" | "gallery" | "kanban" | "calendar" | "timeline" =
-    type === "gallery" ? "gallery" : type === "kanban" && stackKind(stackField) ? "kanban" : type === "calendar" && dates ? "calendar" : type === "timeline" && dates ? "timeline" : "table";
+  const mode: "table" | "list" | "gallery" | "kanban" | "calendar" | "timeline" =
+    type === "list" ? "list" : type === "gallery" ? "gallery" : type === "kanban" && stackKind(stackField) ? "kanban" : type === "calendar" && dates ? "calendar" : type === "timeline" && dates ? "timeline" : "table";
   const fallback = mode === "table" && (type === "kanban" || type === "calendar" || type === "timeline");
 
   return (
@@ -104,6 +104,7 @@ export function SharedView({ token, password, view }: SharedViewProps) {
         </p>
       )}
       {mode === "table" && <TableBody view={view} fields={fields} token={token} password={password} search={search} searchText={searchText} onSearch={setSearchText} offset={offset} onOffset={setOffset} sort={sort} onSort={setSort} transient={transient} timeZone={timeZone} />}
+      {mode === "list" && <ListBody fields={fields} token={token} password={password} search={search} searchText={searchText} onSearch={setSearchText} descriptionId={cfg.description_field_id} timeZone={timeZone} />}
       {mode === "gallery" && <GalleryBody fields={fields} token={token} password={password} search={search} searchText={searchText} onSearch={setSearchText} coverId={cfg.gallery_cover_field_id} descriptionId={cfg.description_field_id} timeZone={timeZone} />}
       {mode === "kanban" && stackField && <KanbanBody fields={fields} token={token} password={password} search={search} searchText={searchText} onSearch={setSearchText} stackFieldId={stackField.id} hideEmpty={cfg.kanban_hide_empty_stacks} stackOrder={cfg.kanban_stack_order} hiddenStacks={cfg.kanban_hidden_stacks} cardFieldLimit={cfg.kanban_card_field_limit ?? undefined} coverFit={cfg.kanban_cover_fit} coverId={cfg.kanban_cover_field_id} descriptionId={cfg.description_field_id} timeZone={timeZone} />}
       {mode === "calendar" && dates && (
@@ -146,9 +147,6 @@ function TableBody(p: BodyProps & { view: PublicView; offset: number; onOffset: 
         )}
       </Toolbar>
       {page.error && !data && <ErrorLine error={page.error} onRetry={page.refetch} />}
-      {p.view.type === "list" ? (
-        <PublicList fields={p.fields} records={data?.records ?? []} groups={data?.groups ?? []} colors={data?.colors ?? {}} descriptionField={p.fields.byId.get(p.view.config.description_field_id ?? "")} />
-      ) : (
       <PublicTable
         fields={p.fields.list}
         widths={p.view.config.field_widths}
@@ -160,7 +158,25 @@ function TableBody(p: BodyProps & { view: PublicView; offset: number; onOffset: 
         onSort={p.onSort}
         loading={page.loading}
       />
-      )}
+    </>
+  );
+}
+
+/**
+ * A list loads whole, like a board: the outline reads each group's rows from the group headers' positions in the one ordered
+ * result, so a page of it (whose records start somewhere in the middle of the headers' numbering) would put rows under the wrong group.
+ */
+function ListBody(p: BodyProps & { descriptionId: string | null | undefined }) {
+  const all = usePublicAll({ token: p.token, password: p.password, fields: p.fields, search: p.search, timeZone: p.timeZone });
+  const data = all.data;
+  return (
+    <>
+      <Toolbar search={p.searchText} onSearch={p.onSearch} summary={data ? (data.total === 0 ? (p.search ? "No records match your search." : "No records.") : count(data.total)) : "Loading…"}>
+        {all.fetching && <Spinner className="size-4" label="Loading records" />}
+      </Toolbar>
+      {all.error && !data && <ErrorLine error={all.error} onRetry={all.refetch} />}
+      {data && <PublicList fields={p.fields} records={data.records} groups={data.groups} colors={data.colors} descriptionField={p.fields.byId.get(p.descriptionId ?? "")} />}
+      {data?.truncated && <p className="mt-3 text-meta text-muted">Showing the first {data.records.length.toLocaleString()} of {data.total.toLocaleString()} records.</p>}
     </>
   );
 }

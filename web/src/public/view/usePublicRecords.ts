@@ -1,6 +1,6 @@
 /**
  * Records of a shared view: `POST /api/public/shares/{token}/query`. Tables page through the
- * result; boards, galleries, calendars and timelines load it whole (pages of 1,000, up to 5,000
+ * result; boards, galleries, lists, calendars and timelines load it whole (pages of 1,000, up to 5,000
  * records) because they need every card to lay themselves out. Queries are cached under
  * `["public", token, ...]`; the password never enters a key (it is read from a ref when the
  * request is made).

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroupHeader, PublicField, PublicRecord, PublicView, QueryRequest } from "@/api/types";
 import { apiError, mockApi, renderApp, type Handler, type RecordedCall } from "@/test/utils";
+import { groupsWithin } from "./PublicList";
 import { installBoardLayout, type BoardLayout } from "@/views/kanban/boardLayout";
 
 let layout: BoardLayout;
@@ -271,7 +272,38 @@ describe("shared views of other types", () => {
     expect(row).toHaveTextContent("Ada Lovelace");
     // The table is the grid's, not the list's.
     expect(screen.queryByRole("table", { name: "Records" })).not.toBeInTheDocument();
-    expect(screen.getByText(/of 3 records/)).toBeInTheDocument();
+    expect(screen.getByText("3 records")).toBeInTheDocument();
+  });
+
+  it("puts every record of a grouped list under its own group, however many there are", async () => {
+    // More than a page (100): a page of it would start in the middle of the headers' numbering.
+    const many = Array.from({ length: 150 }, (_, i) => record(i + 1, { f_status: i < 120 ? "s1" : "s2" }));
+    const groups: GroupHeader[] = [
+      { depth: 0, field_id: "f_status", key: "s1", label: "Todo", value: "s1", start: 0, count: 120 },
+      { depth: 0, field_id: "f_status", key: "s2", label: "Done", value: "s2", start: 120, count: 30 },
+    ];
+    const { asked } = open(view("list"), { "POST /api/public/shares/tok_s/query": queryHandler(many, [], { groups }) });
+    const tree = await screen.findByRole("tree");
+    const done = await within(tree).findByRole("treeitem", { name: /^Done/ });
+    const rows = within(tree).getAllByRole("treeitem");
+    const after = rows.slice(rows.indexOf(done) + 1);
+    expect(after).toHaveLength(30);
+    expect(after[0]).toHaveTextContent("Task 121");
+    expect(after[29]).toHaveTextContent("Task 150");
+    expect(within(tree).queryByRole("treeitem", { name: "Loading records" })).not.toBeInTheDocument();
+    expect(screen.getByText("150 records")).toBeInTheDocument();
+    // No page to turn to: the one list is the whole result.
+    expect(screen.queryByRole("button", { name: /Next/ })).not.toBeInTheDocument();
+    expect(asked.every((a) => a.offset === 0 || a.offset === undefined)).toBe(true);
+  });
+
+  it("cuts a group at the records it has when the share is longer than what loads", async () => {
+    const groups: GroupHeader[] = [
+      { depth: 0, field_id: "f_status", key: "s1", label: "Todo", value: "s1", start: 0, count: 2 },
+      { depth: 0, field_id: "f_status", key: "s2", label: "Done", value: "s2", start: 2, count: 1 },
+    ];
+    expect(groupsWithin(groups, 1)).toEqual([{ ...groups[0], count: 1 }]);
+    expect(groupsWithin(groups, 3)).toEqual(groups);
   });
 
   it("folds a list's groups, which are the visitor's own and saved nowhere", async () => {
