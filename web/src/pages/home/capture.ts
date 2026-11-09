@@ -46,11 +46,13 @@ export interface CollectionOptions {
 }
 
 /**
- * The collections a capture can go to: the person can add records to the folder (Editor and up) and the collection's title is
- * a text property. A title's type lives in the folder's schema, which the workspace list does not carry, so a folder whose
- * schema is not in `schemas` yet is reported in `pending` instead of being guessed at.
+ * The collections a record can be added to: the person can add records to the folder (Editor and up). The capture box takes
+ * only those whose title is a text property (`titles: "text"`: a typed line cannot fill a number or a date), while filing a
+ * draft takes any (`"any"`: the target form has an editor for the title of each kind). A title's type lives in the folder's
+ * schema, which the workspace list does not carry, so a folder whose schema is not in `schemas` yet is reported in `pending`
+ * instead of being guessed at.
  */
-export function collectionOptions(workspace: WorkspaceSummary, schemas: ReadonlyMap<string, BaseSchema>): CollectionOptions {
+export function collectionOptions(workspace: WorkspaceSummary, schemas: ReadonlyMap<string, BaseSchema>, titles: "text" | "any" = "text"): CollectionOptions {
   const options: CollectionOption[] = [];
   const pending: string[] = [];
   for (const base of workspace.bases) {
@@ -63,26 +65,42 @@ export function collectionOptions(workspace: WorkspaceSummary, schemas: Readonly
     for (const summary of base.tables) {
       const table = schema.tables.find((t) => t.id === summary.id);
       const primary = table && primaryField(table);
-      if (!table || !primary || !isTextTitle(primary)) continue;
+      if (!table || !primary || (titles === "text" && !isTextTitle(primary))) continue;
       options.push({ baseId: base.id, tableId: table.id, name: summary.name, color: summary.color, folder: base.is_top_level ? null : base.name });
     }
   }
   return { options, pending };
 }
 
+const isListed = (found: CollectionOptions, ref: TableRef) => found.options.some((o) => o.baseId === ref.baseId && o.tableId === ref.tableId);
+
+/** The last collection captured into, while it can still be used (its folder's schema may be on the way). */
+function usableRemembered(remembered: TableRef | null, found: CollectionOptions, workspace: WorkspaceSummary): TableRef | null {
+  if (!remembered) return null;
+  if (isListed(found, remembered)) return remembered;
+  const waiting = found.pending.includes(remembered.baseId) && workspace.bases.some((b) => b.id === remembered.baseId && b.tables.some((t) => t.id === remembered.tableId));
+  return waiting ? remembered : null;
+}
+
 /**
- * Where the box points: the person's pick, else the last collection captured into (while its folder's schema is still on
- * the way it is trusted, so the chip does not flash Inbox), else the first collection there is, else Inbox.
+ * Where the box points (HOME-3): the person's pick, else the last collection captured into (while its folder's schema is still
+ * on the way it is trusted, so the chip does not flash Inbox), else Inbox. "With no such collection" is read as no collection
+ * captured into yet, so a first note is a draft rather than a record in a collection nobody chose; it also means the box
+ * never has to wait for every folder's schema before it can say where it goes.
  */
 export function pickTarget(chosen: TargetChoice | null, remembered: TableRef | null, found: CollectionOptions, workspace: WorkspaceSummary): TargetChoice {
-  const listed = (ref: TableRef) => found.options.some((o) => o.baseId === ref.baseId && o.tableId === ref.tableId);
-  if (chosen && (chosen.kind === "inbox" || listed(chosen))) return chosen;
-  if (remembered) {
-    const waiting = found.pending.includes(remembered.baseId) && workspace.bases.some((b) => b.id === remembered.baseId && b.tables.some((t) => t.id === remembered.tableId));
-    if (listed(remembered) || waiting) return { kind: "collection", ...remembered };
-  }
+  if (chosen && (chosen.kind === "inbox" || isListed(found, chosen))) return chosen;
+  const last = usableRemembered(remembered, found, workspace);
+  return last ? { kind: "collection", ...last } : INBOX_CHOICE;
+}
+
+/** Where filing a draft points first: the person's pick, else the last collection captured into, else the first one there is. */
+export function pickFileTarget(chosen: TableRef | null, remembered: TableRef | null, found: CollectionOptions, workspace: WorkspaceSummary): TableRef | null {
+  if (chosen && isListed(found, chosen)) return chosen;
+  const last = usableRemembered(remembered, found, workspace);
+  if (last) return last;
   const first = found.options[0];
-  return first ? { kind: "collection", baseId: first.baseId, tableId: first.tableId } : INBOX_CHOICE;
+  return first ? { baseId: first.baseId, tableId: first.tableId } : null;
 }
 
 const LAST_KEY = "ob-last-capture";
@@ -112,6 +130,36 @@ export function rememberCaptured(workspaceId: string, ref: TableRef): void {
     localStorage.setItem(LAST_KEY, JSON.stringify({ ...readAll(), [workspaceId]: ref }));
   } catch {
     /* storage unavailable: the next visit starts from the first collection */
+  }
+}
+
+const UNSENT_KEY = "ob-capture-text";
+
+function readUnsent(): Record<string, string> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(UNSENT_KEY) ?? "null");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).filter((e): e is [string, string] => typeof e[1] === "string" && e[1] !== ""));
+  } catch {
+    return {};
+  }
+}
+
+/** What was typed into the box in this workspace and not added, kept on this device so a click away does not lose it. */
+export function unsentText(workspaceId: string): string {
+  return readUnsent()[workspaceId] ?? "";
+}
+
+/** Keeps the text, or forgets it when it is empty. */
+export function keepUnsentText(workspaceId: string, text: string): void {
+  try {
+    const all = readUnsent();
+    if (text === "") delete all[workspaceId];
+    else all[workspaceId] = text;
+    if (Object.keys(all).length === 0) localStorage.removeItem(UNSENT_KEY);
+    else localStorage.setItem(UNSENT_KEY, JSON.stringify(all));
+  } catch {
+    /* storage unavailable: the text lives as long as the page */
   }
 }
 

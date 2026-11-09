@@ -1,6 +1,7 @@
 /**
  * Home's Inbox card (HOME-8): the person's drafts, which belong to them rather than to a workspace and so show on every Home.
- * Each has File (into a collection of this workspace, through the target form) and Delete.
+ * Each opens to be edited (its title, text and files), and has File (into a collection of this workspace, through the target
+ * form) and Delete.
  */
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -14,11 +15,13 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FeedRow } from "@/components/ui/feed-row";
 import { Icon } from "@/components/ui/icon";
 import { relativeTime } from "@/lib/relativeTime";
+import { EditDraftDialog } from "./EditDraftDialog";
 import { FileDraftDialog } from "./FileDraftDialog";
 import { draftPreview } from "./targets";
 
 export function InboxCard({ drafts, workspace }: { drafts: readonly InboxItem[]; workspace: WorkspaceSummary }) {
   const qc = useQueryClient();
+  const [editing, setEditing] = useState<InboxItem | null>(null);
   const [filing, setFiling] = useState<InboxItem | null>(null);
   const [deleting, setDeleting] = useState<InboxItem | null>(null);
   if (drafts.length === 0) return null;
@@ -33,6 +36,7 @@ export function InboxCard({ drafts, workspace }: { drafts: readonly InboxItem[];
             <li key={d.id}>
               <FeedRow
                 title={draftPreview(d)}
+                onOpen={() => setEditing(d)}
                 meta={
                   <span className="inline-flex items-center gap-2">
                     {relativeTime(d.updated_at)}
@@ -45,7 +49,8 @@ export function InboxCard({ drafts, workspace }: { drafts: readonly InboxItem[];
                   </span>
                 }
                 trailing={
-                  <span className="flex items-center gap-1">
+                  /* Above the row's open target, which stretches over the whole row. */
+                  <span className="relative z-10 flex items-center gap-1">
                     <Button size="sm" onClick={() => setFiling(d)} aria-label={`File ${draftPreview(d)}`}>
                       File
                     </Button>
@@ -59,6 +64,7 @@ export function InboxCard({ drafts, workspace }: { drafts: readonly InboxItem[];
           ))}
         </ul>
       </Card>
+      {editing && <EditDraftDialog key={editing.id} draft={editing} workspace={workspace} onClose={() => setEditing(null)} />}
       {filing && <FileDraftDialog key={filing.id} draft={filing} workspace={workspace} onClose={() => setFiling(null)} />}
       <ConfirmDialog
         open={!!deleting}

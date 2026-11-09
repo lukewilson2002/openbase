@@ -10,7 +10,7 @@ import { FilePreview } from "@/components/record/FilePreview";
 import { Spinner } from "@/components/ui/spinner";
 import { formatBytes } from "@/lib/format";
 
-const chip = "flex min-h-9 max-w-full items-center gap-2 rounded-[10px] border border-line bg-subtle px-2.5 py-1 text-[0.8125rem] pointer-coarse:min-h-11";
+const chip = "flex min-h-control-md max-w-full items-center gap-2 rounded-md border border-line bg-subtle px-2.5 py-1 text-label max-md:min-h-control-touch pointer-coarse:min-h-control-touch";
 
 export function AttachmentChips({ files, uploading, onRemove }: { files: readonly AttachmentRef[]; uploading: readonly string[]; onRemove?: (id: string) => void }) {
   if (files.length === 0 && uploading.length === 0) return null;

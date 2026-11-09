@@ -34,9 +34,9 @@ export interface Uploads {
   dismissErrors(): void;
 }
 
-/** `scope` names where the files will land; `send` uploads one file there. */
-export function useUploads(scope: string, send: (file: File) => Promise<AttachmentRef>, max = MAX_DRAFT_FILES): Uploads {
-  const [files, setFiles] = useState<AttachmentRef[]>([]);
+/** `scope` names where the files will land; `send` uploads one file there; `initial` is what is already attached (a draft being edited). */
+export function useUploads(scope: string, send: (file: File) => Promise<AttachmentRef>, max = MAX_DRAFT_FILES, initial: readonly AttachmentRef[] = []): Uploads {
+  const [files, setFiles] = useState<AttachmentRef[]>(() => [...initial]);
   const [uploading, setUploading] = useState<string[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const scopeRef = useRef(scope);

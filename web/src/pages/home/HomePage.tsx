@@ -58,7 +58,7 @@ function HomeContent({ ws }: { ws: WorkspaceSummary }) {
         <p className="text-label text-muted">{today}</p>
         <h1 className="text-home max-md:text-home-phone">Home</h1>
       </header>
-      <CaptureBox workspace={ws} />
+      <CaptureBox key={ws.id} workspace={ws} />
       <InboxCard drafts={data?.drafts ?? []} workspace={ws} />
       {collections === 0 ? (
         <EmptyState

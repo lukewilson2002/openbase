@@ -20,7 +20,7 @@ import { recordPath } from "@/lib/recordPath";
 import { AttachmentChips } from "./AttachmentChips";
 import { CollectionPicker } from "./CollectionPicker";
 import { FileChooser, FormStatus, NoteChooser, OtherFields, TitleField } from "./TargetFormParts";
-import { INBOX_CHOICE, lastCaptured, pickTarget, type TargetChoice } from "./capture";
+import { INBOX_CHOICE, lastCaptured, pickFileTarget, type TableRef, type TargetChoice } from "./capture";
 import { NOTE_AS_COMMENT, fileFields, hasContent, isTextTitle, primaryField } from "./targets";
 import { useCollections } from "./useCollections";
 import { useTargetForm } from "./useTargetForm";
@@ -29,10 +29,11 @@ export function FileDraftDialog({ draft, workspace, onClose }: { draft: InboxIte
   const qc = useQueryClient();
   const toast = useToast();
   const navigate = useNavigate();
-  const { found, loading } = useCollections(workspace, undefined, true);
-  const [chosen, setChosen] = useState<TargetChoice | null>(null);
-  const choice = pickTarget(chosen, lastCaptured(workspace.id), found, workspace);
-  const ref = choice.kind === "collection" ? { baseId: choice.baseId, tableId: choice.tableId } : null;
+  // Every collection the person can add to, whatever kind its title is: the form has an editor for each.
+  const { found, loading } = useCollections(workspace, undefined, true, "any");
+  const [chosen, setChosen] = useState<TableRef | null>(null);
+  const ref = pickFileTarget(chosen, lastCaptured(workspace.id), found, workspace);
+  const choice: TargetChoice = ref ? { kind: "collection", ...ref } : INBOX_CHOICE;
   const form = useTargetForm(ref);
   const [title, setTitle] = useState(draft.title);
   const [filing, setFiling] = useState(false);
@@ -90,7 +91,7 @@ export function FileDraftDialog({ draft, workspace, onClose }: { draft: InboxIte
           <p className="text-label text-muted">You can't add records to any collection in this workspace yet. Ask for the Editor role on a folder, or make a collection of your own.</p>
         ) : (
           <div>
-            <CollectionPicker options={found.options} loading={loading} value={ref ? choice : INBOX_CHOICE} withInbox={false} verb="Files to" onPick={setChosen} />
+            <CollectionPicker options={found.options} loading={loading} value={choice} withInbox={false} verb="Files to" onPick={(c) => c.kind === "collection" && setChosen({ baseId: c.baseId, tableId: c.tableId })} />
           </div>
         )}
         <FormStatus form={form} />

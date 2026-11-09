@@ -16,13 +16,14 @@ export interface Collections {
 /**
  * The collections of a workspace a record can be added to. A collection's title type is in its folder's schema, so the folders
  * are fetched: every one when `all`, else only `needed` (the folder in use), which keeps Home from opening a request per folder.
+ * `titles` is which collections count (see `collectionOptions`).
  */
-export function useCollections(workspace: WorkspaceSummary, needed: string | undefined, all: boolean): Collections {
+export function useCollections(workspace: WorkspaceSummary, needed: string | undefined, all: boolean, titles: "text" | "any" = "text"): Collections {
   const editable = workspace.bases.filter((b) => atLeast(b.role, "editor") && b.tables.length > 0);
   const queries = useQueries({
     queries: editable.filter((b) => all || b.id === needed).map((b) => ({ queryKey: keys.base(b.id), queryFn: () => api.bases.get(b.id), staleTime: 60_000 })),
   });
   const schemas = useMemo(() => new Map(queries.flatMap((q) => (q.data ? [[q.data.id, q.data] as const] : []))), [queries]);
-  const found = useMemo(() => collectionOptions(workspace, schemas), [workspace, schemas]);
+  const found = useMemo(() => collectionOptions(workspace, schemas, titles), [workspace, schemas, titles]);
   return { schemas, found, loading: queries.some((q) => q.isPending) };
 }

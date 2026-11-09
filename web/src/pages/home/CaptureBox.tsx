@@ -1,7 +1,7 @@
 /**
  * Home's capture box (HOME-3, HOME-4): one raised card to put something down. The first line is the title and any further
- * lines become the page; a "Goes to" chip says which collection it lands in (the last one used, else the first there is, else
- * the Inbox as a draft to file later); a date phrase in the title becomes a chip on the collection's Home date; a dashed chip
+ * lines become the page; a "Goes to" chip says which collection it lands in (the last one used, else the Inbox as a draft to
+ * file later); what is typed and not added is kept on the device; a date phrase in the title becomes a chip on the collection's Home date; a dashed chip
  * sets any other property. Files pasted or dropped on the card go to the collection's first attachment property.
  *
  * The words of a date phrase stay in the box while the person types (taking them out under the caret would move it) and leave
@@ -23,6 +23,8 @@ import { Button } from "@/components/ui/button";
 import { CaptureChip } from "@/components/ui/capture-chip";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
+import { COARSE_POINTER, DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
+import { useVisualViewport } from "@/hooks/useVisualViewport";
 import { toWire } from "@/lib/cells/wire";
 import { restorePhrase, type DateGuess } from "@/lib/dateGuess";
 import { recordPath } from "@/lib/recordPath";
@@ -31,7 +33,7 @@ import { valueFor } from "@/record/newProperty";
 import { AttachmentChips } from "./AttachmentChips";
 import { CollectionPicker } from "./CollectionPicker";
 import { PropertyChip, type PropertyEntry } from "./PropertyChip";
-import { browserTimeZone, dateChip, firstLineOf, guessLine, homeDateField, lastCaptured, pickTarget, rememberCaptured, splitCapture, type TargetChoice } from "./capture";
+import { browserTimeZone, dateChip, firstLineOf, guessLine, homeDateField, keepUnsentText, lastCaptured, pickTarget, rememberCaptured, splitCapture, unsentText, type TargetChoice } from "./capture";
 import { attachmentFields, primaryField } from "./targets";
 import { useCollections } from "./useCollections";
 import { useUploads } from "./useUploads";
@@ -43,6 +45,13 @@ interface DateState {
 }
 const NO_DATE: DateState = { committed: null, dismissed: null };
 
+/**
+ * A 24 px remove button with a 44 px target on a phone or a finger: the chip around it stays as it is, so the hit area reaches
+ * past it instead of growing it.
+ */
+const REMOVE_BUTTON =
+  "relative -mr-1.5 inline-flex size-6 items-center justify-center rounded-pill text-muted hover:bg-hover hover:text-fg max-md:after:absolute max-md:after:-inset-2.5 pointer-coarse:after:absolute pointer-coarse:after:-inset-2.5";
+
 export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -50,7 +59,7 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
   const me = useMe();
   const id = useId();
   const area = useRef<HTMLTextAreaElement>(null);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => unsentText(workspace.id));
   const [chosen, setChosen] = useState<TargetChoice | null>(null);
   const [date, setDate] = useState<DateState>(NO_DATE);
   const [extras, setExtras] = useState<PropertyEntry[]>([]);
@@ -59,15 +68,20 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
   const [listed, setListed] = useState(false);
   // Read again as the text changes, which is when a phrase can start to mean "today" or "Friday".
   const [now, setNow] = useState(() => Date.now());
+  // On a phone the on-screen keyboard covers the Add row once the box grows, so the row is kept in view while typing.
+  const phone = !useMediaQuery(DESKTOP_QUERY);
+  const coarse = useMediaQuery(COARSE_POINTER);
+  const [focused, setFocused] = useState(false);
+  const visible = useVisualViewport(phone && focused);
+  const addRow = useRef<HTMLDivElement>(null);
 
   const timeZone = me.data?.timezone || browserTimeZone();
   const weekStart: 0 | 1 = me.data?.week_start === 1 ? 1 : 0;
 
   // ---- where it goes ------------------------------------------------------------------------------------------------
   const remembered = useMemo(() => lastCaptured(workspace.id), [workspace.id]);
-  // A collection's title type lives in its folder's schema. Only the folder in use is fetched until the person opens the list
-  // (or has no favourite yet, so the first collection must be found).
-  const wantAll = listed || !remembered;
+  // A collection's title type lives in its folder's schema. Only the folder in use is fetched until the person opens the list.
+  const wantAll = listed;
   const needed = chosen?.kind === "collection" ? chosen.baseId : remembered?.baseId;
   const { schemas, found, loading: loadingFolders } = useCollections(workspace, needed, wantAll);
   const target = pickTarget(chosen, remembered, found, workspace);
@@ -86,16 +100,19 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
   // A phrase the chip cannot hold (a time on a date-only property) stays in the title: `live` is dropped with its chip.
   const pending = chip && !date.committed ? chip.guess : null;
 
-  // The collection changed to one with no Home date: the words come back.
+  // The collection changed to one that cannot hold the date (the Inbox, no Home date, or one without a time): the words come
+  // back, so nothing the person typed is dropped. A collection whose folder is still loading is waited for.
+  const holdsDate = !!chip;
+  const known = inbox || !!table;
   useEffect(() => {
-    if (date.committed && !dateField && table) {
+    if (date.committed && known && !holdsDate) {
       setText((cur) => {
         const { line: l, tail: t } = firstLineOf(cur);
         return restorePhrase(date.committed!, l) + t;
       });
       setDate(NO_DATE);
     }
-  }, [date.committed, dateField, table]);
+  }, [date.committed, known, holdsDate]);
   useEffect(() => setExtras([]), [targetKey]);
 
   // ---- files --------------------------------------------------------------------------------------------------------
@@ -103,6 +120,10 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
   const fileField = table && attachmentFields(table)[0];
   const takeFiles = (files: File[]) => {
     if (files.length === 0) return;
+    if (!inbox && !table) {
+      uploads.refuse("Still loading where this goes. Try again in a moment.");
+      return;
+    }
     if (table && !fileField) {
       uploads.refuse(`${table.name} has no attachment property, so a file can't be added to it. Send the capture to Inbox, or add an attachment property.`);
       return;
@@ -124,6 +145,12 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
     e.preventDefault();
     takeFiles(files);
   };
+
+  // What is typed and not added survives leaving the page. A phrase that has left the box for its chip goes back in the saved copy.
+  useEffect(() => {
+    const { line: l, tail: t } = firstLineOf(text);
+    keepUnsentText(workspace.id, date.committed ? restorePhrase(date.committed, l) + t : text);
+  }, [workspace.id, text, date.committed]);
 
   // The box grows with its lines.
   useLayoutEffect(() => {
@@ -147,6 +174,11 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
 
   const add = async () => {
     if (!canAdd) return;
+    // Files uploaded for another place are let go when Goes to changes; any still here cannot go to a collection with no room for them.
+    if (table && uploads.files.length > 0 && !fileField) {
+      setProblem(`${table.name} has no attachment property, so the files can't be added to it. Remove them, or send the capture to Inbox.`);
+      return;
+    }
     setBusy(true);
     setProblem(null);
     try {
@@ -227,8 +259,15 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
     }
   };
 
+  // The Add row stays above the keyboard as the box grows.
+  useEffect(() => {
+    const row = addRow.current;
+    if (phone && focused && row && typeof row.scrollIntoView === "function") row.scrollIntoView({ block: "nearest" });
+  }, [phone, focused, text, visible.height]);
+
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+    // A finger's keyboard has no Shift+Enter: there Return starts a new line and Add is the way to add.
+    if (coarse || e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
     e.preventDefault();
     void add();
   };
@@ -252,6 +291,8 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
     if (!guess) return;
     if (date.committed) setText(restorePhrase(date.committed, line) + tail);
     setDate({ committed: null, dismissed: guess.phrase });
+    // The button leaves with its chip: focus goes back to the box rather than to the top of the page.
+    area.current?.focus();
   };
 
   const taken = new Set<string>([primary?.id, table?.body_field_id, dateField && chip ? dateField.id : undefined, ...extras.flatMap((x) => (x.kind === "field" ? [x.field.id] : []))].filter((x): x is string => !!x));
@@ -279,7 +320,11 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
         onPaste={onPaste}
-        onBlur={settle}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          setFocused(false);
+          settle();
+        }}
         className="block max-h-60 w-full resize-none bg-transparent text-capture text-fg outline-none placeholder:text-faint max-md:text-capture-phone"
       />
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -296,7 +341,7 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
         {chip && (
           <CaptureChip static>
             <span>{chip.label}</span>
-            <button type="button" aria-label={`Remove ${chip.label}`} onClick={removeDate} className="-mr-1.5 inline-flex size-6 items-center justify-center rounded-pill text-muted hover:bg-hover hover:text-fg pointer-coarse:size-9">
+            <button type="button" aria-label={`Remove ${chip.label}`} onClick={removeDate} className={REMOVE_BUTTON}>
               <Icon icon={X} size="sm" />
             </button>
           </CaptureChip>
@@ -307,8 +352,11 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
             <button
               type="button"
               aria-label={`Remove ${x.label}`}
-              onClick={() => setExtras((cur) => cur.filter((c) => c !== x))}
-              className="-mr-1.5 inline-flex size-6 items-center justify-center rounded-pill text-muted hover:bg-hover hover:text-fg pointer-coarse:size-9"
+              onClick={() => {
+                setExtras((cur) => cur.filter((c) => c !== x));
+                area.current?.focus();
+              }}
+              className={REMOVE_BUTTON}
             >
               <Icon icon={X} size="sm" />
             </button>
@@ -333,7 +381,15 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
               <li key={m}>{m}</li>
             ))}
           </ul>
-          <button type="button" aria-label="Dismiss" onClick={uploads.dismissErrors} className="-my-1 inline-flex size-7 shrink-0 items-center justify-center rounded hover:bg-hover pointer-coarse:size-9">
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => {
+              uploads.dismissErrors();
+              area.current?.focus();
+            }}
+            className="relative -my-1 inline-flex size-7 shrink-0 items-center justify-center rounded hover:bg-hover max-md:after:absolute max-md:after:-inset-2 pointer-coarse:after:absolute pointer-coarse:after:-inset-2"
+          >
             <X aria-hidden className="size-4" />
           </button>
         </div>
@@ -343,8 +399,8 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
           {problem}
         </p>
       )}
-      <div className="mt-3 flex items-center justify-end gap-3">
-        <span id={`${id}-hint`} className="text-meta text-faint max-md:hidden">
+      <div ref={addRow} className="mt-3 flex items-center justify-end gap-3">
+        <span id={`${id}-hint`} className="text-meta text-faint max-md:hidden pointer-coarse:hidden">
           Enter to add
         </span>
         <Button variant="primary" size="md" disabled={!canAdd} loading={busy} onClick={() => void add()}>

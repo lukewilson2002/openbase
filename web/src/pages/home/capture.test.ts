@@ -3,7 +3,7 @@ import type { BaseSchema, Field, WorkspaceSummary } from "@/api/types";
 import { guessDate } from "@/lib/dateGuess";
 import { field, makeTable } from "@/test/fields";
 import { makeSchema } from "@/test/utils";
-import { collectionOptions, dateChip, dayWords, firstLineOf, guessLine, headerDate, homeDateField, lastCaptured, pickTarget, rememberCaptured, splitCapture } from "./capture";
+import { collectionOptions, dateChip, dayWords, firstLineOf, guessLine, headerDate, homeDateField, keepUnsentText, lastCaptured, pickFileTarget, pickTarget, rememberCaptured, splitCapture, unsentText } from "./capture";
 
 afterEach(() => localStorage.clear());
 
@@ -135,19 +135,47 @@ describe("where a capture goes", () => {
     expect(collectionOptions(workspace, new Map([["app1", schemas.get("app1")!]])).pending).toEqual(["app3"]);
   });
 
-  it("defaults to the last collection captured into, then the first one there is, then Inbox", () => {
+  it("lists every collection a draft can be filed into when titles may be any kind", () => {
+    const found = collectionOptions(workspace, schemas, "any");
+    expect(found.options.map((o) => o.name)).toEqual(["Tasks", "Scans", "Plants"]);
+  });
+
+  it("defaults to the last collection captured into, else Inbox: a first note is a draft, not a record nobody chose", () => {
     const found = collectionOptions(workspace, schemas);
     expect(pickTarget(null, { baseId: "app3", tableId: "tbl5" }, found, workspace)).toEqual({ kind: "collection", baseId: "app3", tableId: "tbl5" });
-    expect(pickTarget(null, { baseId: "app3", tableId: "gone" }, found, workspace)).toEqual({ kind: "collection", baseId: "app1", tableId: "tbl1" });
-    expect(pickTarget(null, null, collectionOptions(workspace, new Map()), { ...workspace, bases: [] })).toEqual({ kind: "inbox" });
+    expect(pickTarget(null, { baseId: "app3", tableId: "gone" }, found, workspace)).toEqual({ kind: "inbox" });
+    expect(pickTarget(null, null, found, workspace)).toEqual({ kind: "inbox" });
     // The person's own pick wins, Inbox included.
     expect(pickTarget({ kind: "inbox" }, { baseId: "app3", tableId: "tbl5" }, found, workspace)).toEqual({ kind: "inbox" });
+    expect(pickTarget({ kind: "collection", baseId: "app1", tableId: "tbl1" }, null, found, workspace)).toEqual({ kind: "collection", baseId: "app1", tableId: "tbl1" });
+  });
+
+  it("points filing at the pick, else the last collection captured into, else the first one there is, else nothing", () => {
+    const found = collectionOptions(workspace, schemas, "any");
+    expect(pickFileTarget({ baseId: "app1", tableId: "tbl2" }, { baseId: "app3", tableId: "tbl5" }, found, workspace)).toEqual({ baseId: "app1", tableId: "tbl2" });
+    expect(pickFileTarget(null, { baseId: "app3", tableId: "tbl5" }, found, workspace)).toEqual({ baseId: "app3", tableId: "tbl5" });
+    expect(pickFileTarget(null, null, found, workspace)).toEqual({ baseId: "app1", tableId: "tbl1" });
+    expect(pickFileTarget(null, null, collectionOptions(workspace, new Map(), "any"), { ...workspace, bases: [] })).toBeNull();
   });
 
   it("trusts the remembered collection while its folder is still being checked, so the chip does not flash Inbox", () => {
     const waiting = collectionOptions(workspace, new Map());
     expect(pickTarget(null, { baseId: "app3", tableId: "tbl5" }, waiting, workspace)).toEqual({ kind: "collection", baseId: "app3", tableId: "tbl5" });
     expect(pickTarget(null, { baseId: "app3", tableId: "gone" }, waiting, workspace)).toEqual({ kind: "inbox" });
+  });
+
+  it("keeps unsent text per workspace on the device, and forgets it when it is emptied", () => {
+    expect(unsentText("wsp1")).toBe("");
+    keepUnsentText("wsp1", "Call Dana\nabout the quote");
+    keepUnsentText("wsp2", "Other");
+    expect(unsentText("wsp1")).toBe("Call Dana\nabout the quote");
+    keepUnsentText("wsp1", "");
+    expect(unsentText("wsp1")).toBe("");
+    expect(unsentText("wsp2")).toBe("Other");
+    keepUnsentText("wsp2", "");
+    expect(localStorage.getItem("ob-capture-text")).toBeNull();
+    localStorage.setItem("ob-capture-text", "not json");
+    expect(unsentText("wsp1")).toBe("");
   });
 
   it("remembers the last collection per workspace", () => {

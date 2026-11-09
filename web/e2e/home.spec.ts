@@ -76,6 +76,10 @@ test("Home lists what is due, captures into a collection with a date chip, and c
   });
 
   await test.step("a date phrase becomes a chip, the first line the title and the other lines the page", async () => {
+    // Nothing has been captured here yet, so a first note would be a draft: the person picks the collection.
+    await expect(page.getByRole("button", { name: /Goes to Inbox/ })).toBeVisible();
+    await page.getByRole("button", { name: /Goes to/ }).click();
+    await page.getByRole("option", { name: /^Tasks/ }).click();
     await expect(page.getByRole("button", { name: /Goes to Tasks/ })).toBeVisible();
     await box(page).fill("Call Dana tomorrow\nAbout the quote");
     await expect(page.getByText("Due tomorrow")).toBeVisible();
@@ -112,6 +116,13 @@ test("Home lists what is due, captures into a collection with a date chip, and c
     await page.getByRole("button", { name: "Add", exact: true }).click();
     const card = page.getByRole("region", { name: "Inbox" });
     await expect(card.getByText("Buy a cake")).toBeVisible();
+    // A draft opens to carry on with it.
+    await card.getByText("Buy a cake").click();
+    const edit = page.getByRole("dialog", { name: "Edit draft" });
+    await edit.getByRole("textbox", { name: "Text" }).fill("for Sunday");
+    await edit.getByRole("button", { name: "Save" }).click();
+    await expect(edit).toHaveCount(0);
+    await expect.poll(async () => (await page.request.get("/api/inbox").then((r) => r.json()) as { title: string; body: string }[]).find((d) => d.title === "Buy a cake")?.body).toBe("for Sunday");
     await card.getByRole("button", { name: "Delete Buy a cake" }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
     await expect(page.getByRole("region", { name: "Inbox" })).toHaveCount(0);
@@ -144,5 +155,11 @@ test("Home on a phone: the capture box, Inbox and lists stack, the Add button is
   const order = await page.locator("main h1, main h2").allTextContents();
   expect(order).toEqual(["Home", "Due soon", "Recently changed"]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  // The Goes to sheet hands focus back to its chip when it closes, though its search box took focus first.
+  const chip = page.getByRole("button", { name: /^Goes to/ });
+  await chip.click();
+  await expect(page.getByRole("combobox", { name: "Search collections" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(chip).toBeFocused();
   await context.close();
 });
