@@ -282,14 +282,29 @@ fn is_plain_number(text: &str) -> bool {
 /// Protect against formula injection when the file is opened in a
 /// spreadsheet: a cell starting with `=`, `+`, `-`, `@`, tab or carriage
 /// return gets a leading single quote. Numbers keep their sign when
-/// `numeric` says the cell holds a number.
+/// `numeric` says the cell holds a number. Spreadsheets whose list separator is
+/// `;` read the text after one as a cell of its own, and the CSV writer does not
+/// quote a field for it, so the same guard goes after every `;`.
 pub fn guard_cell(text: String, numeric: bool) -> String {
-    match text.chars().next() {
+    let lead = match text.chars().next() {
         Some('=' | '+' | '-' | '@' | '\t' | '\r') if !(numeric && is_plain_number(&text)) => {
-            format!("'{text}")
+            Some('\'')
         }
-        _ => text,
+        _ => None,
+    };
+    let mut out = String::with_capacity(text.len() + 1);
+    out.extend(lead);
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        out.push(c);
+        if c == ';' {
+            let next = chars.clone().find(|n| *n != ' ');
+            if matches!(next, Some('=' | '+' | '-' | '@' | '\t' | '\r')) {
+                out.push('\'');
+            }
+        }
     }
+    out
 }
 
 // --------------------------------------------------------------- inference
@@ -852,6 +867,15 @@ mod tests {
         assert_eq!(guard_cell("-5".into(), false), "'-5");
         assert_eq!(guard_cell("safe".into(), false), "safe");
         assert_eq!(guard_cell(String::new(), false), "");
+        // A `;` inside the text starts a new cell in spreadsheets that split on it.
+        assert_eq!(
+            guard_cell("x;=cmd|' /c calc'!A1;".into(), false),
+            "x;'=cmd|' /c calc'!A1;"
+        );
+        assert_eq!(guard_cell("a; @SUM(1)".into(), false), "a;' @SUM(1)");
+        assert_eq!(guard_cell("a;+1;-2".into(), false), "a;'+1;'-2");
+        assert_eq!(guard_cell("a; b;c".into(), false), "a; b;c");
+        assert_eq!(guard_cell("-5;=1".into(), true), "'-5;'=1");
     }
 
     #[test]
