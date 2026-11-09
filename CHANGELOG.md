@@ -101,7 +101,10 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   "Collections in other folders can't be linked" and shows each collection by its colour, never its
   icon (the same in the automation editor's collection pickers); the formula editor's `{Property}`
   suggestions and live check, and the choice editor's pastel chips and "next palette color" for a new
-  choice, are as they were, restyled. Inputs and selects are 44 px tall on a phone.
+  choice, are as they were, restyled. Inputs and selects are 44 px tall on a phone. The property type
+  list opens scrolled to the chosen type, a linked card's label ("Amount") keeps up to half the card
+  instead of being cut to three letters on a phone, and the phone's linked-record sheet names the record
+  once.
 - **The grid, List and Board in the new look.** The grid's header row is 12 px and muted on the
   page's grey, the title column is bold, choices are drawn as chips in their own colour and linked
   records as chips with the colour of their collection, and each group ends in "+ New client" (the
