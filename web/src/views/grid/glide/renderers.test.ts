@@ -22,6 +22,7 @@ function recorder() {
     rect: vi.fn(),
     clip: vi.fn(),
     moveTo: vi.fn(),
+    lineTo: vi.fn(),
     arcTo: vi.fn(),
     closePath: vi.fn(),
     fill: vi.fn(),
@@ -36,7 +37,7 @@ function recorder() {
 }
 
 const theme = { baseFontFull: "14px sans-serif", textDark: "#111", textMedium: "#444", textLight: "#777", linkColor: "#00f", accentColor: "#00f", bgCell: "#fff", bgHeader: "#eee", cellHorizontalPadding: 14, cellVerticalPadding: 3, lineHeight: 1.4, borderColor: "#ddd" };
-const rc = (over: Partial<RendererContext> = {}): RendererContext => ({ searchTerm: "", dark: false, newLabel: "New client", hoveredRow: () => null, isSelected: () => false, onExpand: vi.fn(), onOpenUrl: vi.fn(), ...over });
+const rc = (over: Partial<RendererContext> = {}): RendererContext => ({ searchTerm: "", dark: false, newLabel: "New client", hoveredRow: () => null, isSelected: () => false, canExpand: true, onExpand: vi.fn(), thumbUrl: (id) => `/api/attachments/${id}/thumb`, onOpenUrl: vi.fn(), ...over });
 const drawn = (cell: ObCell, context: RendererContext) => {
   const { ctx, writes } = recorder();
   const renderer = createRenderer(() => context);
@@ -70,5 +71,30 @@ describe("the grid's custom cells", () => {
     // The chip is the page's grey; its mark is the collection's own shade (teal), not the choice pastel.
     expect(fills).toContain("#eee");
     expect(fills).toContain("#00857e");
+  });
+  it("offers to open a record from its title only where there is a page to open", () => {
+    const model: RecordCellModel = { kind: "cell", recordId: "r1", field: ALL_FIELDS.text!, value: "Harper", display: "Harper", chips: [], readOnly: true, isPrimary: true };
+    const click = (context: RendererContext) => {
+      const preventDefault = vi.fn();
+      createRenderer(() => context).onClick!({ cell: toGridCell(model) as ObCell, location: [0, 3], posX: 235, bounds: { x: 0, y: 0, width: 240, height: 46 }, preventDefault } as never);
+      return preventDefault;
+    };
+    const open = rc();
+    expect(click(open)).toHaveBeenCalled();
+    expect(open.onExpand).toHaveBeenCalledWith(3);
+    const shared = rc({ canExpand: false });
+    expect(click(shared)).not.toHaveBeenCalled();
+    expect(shared.onExpand).not.toHaveBeenCalled();
+    // And the icon is not drawn over the end of the cell.
+    const iconDrawn = (context: RendererContext) => {
+      const { ctx } = recorder();
+      const arcs = vi.fn();
+      Object.assign(ctx, { arcTo: arcs });
+      const args = { ctx, rect: { x: 0, y: 0, width: 240, height: 46 }, theme, highlighted: true, hoverAmount: 1, col: 0, row: 0 } as unknown as DrawArgs<ObCell>;
+      createRenderer(() => context).draw(args, toGridCell(model) as ObCell);
+      return arcs.mock.calls.length > 0;
+    };
+    expect(iconDrawn(open)).toBe(true);
+    expect(iconDrawn(shared)).toBe(false);
   });
 });

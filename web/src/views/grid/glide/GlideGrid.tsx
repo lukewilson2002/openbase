@@ -29,6 +29,7 @@ import {
 import { Pin } from "lucide-react";
 import "@glideapps/glide-data-grid/dist/index.css";
 import type { CellEdit, CellModel, GridAdapterProps, GridHandle, GridRange, GridSelectionInfo, ScreenRect } from "../adapter";
+import { attachmentsApi } from "@/api/records";
 import { isFormulaError } from "@/lib/cells/format";
 import { displayShapeOf } from "@/lib/cells/kinds";
 import { layoutChips, wrapLines, type PlacedChip } from "./draw";
@@ -192,7 +193,9 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
           const cell = selectionRef.current.current?.cell;
           return !!cell && cell[0] === c && cell[1] === r;
         },
+        canExpand: pr.current.canExpand !== false,
         onExpand: (r) => pr.current.onExpand(r),
+        thumbUrl: (id) => (pr.current.thumbUrl ? pr.current.thumbUrl(id) : attachmentsApi.thumbUrl(id)),
         onOpenUrl: (url) => void window.open(url, "_blank", "noopener,noreferrer"),
       })),
     [],

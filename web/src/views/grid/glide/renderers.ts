@@ -8,7 +8,6 @@ import { displayShapeOf } from "@/lib/cells/kinds";
 import { attachmentRefs } from "@/lib/cells/kinds";
 import { isFormulaError } from "@/lib/cells/format";
 import { hrefFor, isSafeLink } from "@/lib/cells/text";
-import { attachmentsApi } from "@/api/records";
 import { fileExt, hasPreview, isVideo, previewAlignTop } from "@/lib/filePreview";
 import type { RecordCellModel } from "../adapter";
 import { isObCell, withPending, type ObCell } from "./cells";
@@ -24,7 +23,11 @@ export interface RendererContext {
   hoveredRow(): number | null;
   /** What the row at the end of a group says, "New client" (the collection's record name). */
   newLabel: string;
+  /** Whether the primary field's cell shows the expand icon and answers a click on it. */
+  canExpand: boolean;
   onExpand(row: number): void;
+  /** Where a file tile's preview comes from, or null while it has none to draw (the type's tile shows instead). */
+  thumbUrl(fileId: string): string | null;
   onOpenUrl(url: string): void;
 }
 
@@ -77,7 +80,7 @@ function drawRating(args: DrawArgs<ObCell>, m: RecordCellModel, active: boolean,
 /** Largest file tile in a grid cell, in pixels (the extra-tall row). */
 const MAX_TILE = 120;
 
-function drawAttachments(args: DrawArgs<ObCell>, m: RecordCellModel): void {
+function drawAttachments(args: DrawArgs<ObCell>, m: RecordCellModel, rc: RendererContext): void {
   const { ctx, rect, theme, imageLoader, col, row } = args;
   const files = attachmentRefs(m.value);
   // Tiles grow with the row, so a taller row shows bigger previews, and sit in its middle in one line.
@@ -98,7 +101,8 @@ function drawAttachments(args: DrawArgs<ObCell>, m: RecordCellModel): void {
     roundRectPath(ctx, x, y, size, size, 4);
     ctx.clip();
     // An image itself, a PDF's first page, a video's first frame; the type's tile while it loads or without one.
-    const img = hasPreview(f) ? imageLoader.loadOrGetImage(attachmentsApi.thumbUrl(f.id), col, row) : undefined;
+    const url = hasPreview(f) ? rc.thumbUrl(f.id) : null;
+    const img = url ? imageLoader.loadOrGetImage(url, col, row) : undefined;
     if (img) {
       const iw = "width" in img ? img.width : size;
       const ih = "height" in img ? img.height : size;
@@ -202,7 +206,7 @@ function drawRecordCell(args: DrawArgs<ObCell>, m: RecordCellModel, rc: Renderer
       else drawChips(ctx, theme, rect, chipsFor(m), rc.dark, hl);
       break;
     case "attachment":
-      drawAttachments(args, m);
+      drawAttachments(args, m, rc);
       break;
     case "rating":
       drawRating(args, m, args.highlighted && !m.readOnly, rc.dark);
@@ -375,7 +379,7 @@ export function createRenderer(getContext: () => RendererContext): CustomRendere
             ctx.fillStyle = mixColors(pal.bg, pal.fg, 0.35);
             ctx.fillRect(rect.x, rect.y, 3, rect.height);
           }
-          if (args.highlighted || args.hoverAmount > 0.01) {
+          if (rc.canExpand && (args.highlighted || args.hoverAmount > 0.01)) {
             drawExpandIcon(ctx, { x: rect.x + rect.width - EXPAND_SIZE - 4, y: rect.y + (rect.height - EXPAND_SIZE) / 2, width: EXPAND_SIZE, height: EXPAND_SIZE }, args.theme.textMedium, args.theme.bgCell);
           }
         }
@@ -389,7 +393,7 @@ export function createRenderer(getContext: () => RendererContext): CustomRendere
       const m = data.model;
       const [col, row] = args.location;
       // Expand icon on the primary field.
-      if (m.isPrimary && args.posX >= args.bounds.width - EXPAND_SIZE - 8) {
+      if (rc.canExpand && m.isPrimary && args.posX >= args.bounds.width - EXPAND_SIZE - 8) {
         rc.onExpand(row);
         args.preventDefault();
         return undefined;

@@ -17,7 +17,8 @@ import { useShare, useShareOrNull, type ShareCtx } from "./ShareContext";
 /** Blob URLs by attachment, shared by every cell of the page (a few thumbnails are reused a lot). */
 const blobUrls = new Map<string, Promise<string>>();
 
-function loadBlobUrl(token: string, password: string, file: AttachmentRef): Promise<string> {
+/** A protected link's thumbnail as a blob URL (fetched once per page). */
+export function loadBlobUrl(token: string, password: string, file: Pick<AttachmentRef, "id">): Promise<string> {
   const key = `${token}|${file.id}`;
   let p = blobUrls.get(key);
   if (!p) {

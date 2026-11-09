@@ -172,6 +172,10 @@ export interface GridAdapterProps {
   onAddRow(row: number): void;
   onSummaryClick(col: number, bounds: ScreenRect): void;
   onExpand(row: number): void;
+  /** Whether the primary field's cell offers to open its record (the expand icon). Off where a record has no page to open: a shared view. Default on. */
+  canExpand?: boolean;
+  /** Where a file's preview comes from, or null while there is none to draw yet. Default: the signed-in attachment thumbnail. A shared view brings its own. */
+  thumbUrl?(fileId: string): string | null;
   onSelectionChange(sel: GridSelectionInfo): void;
   /** Key pressed on the grid. Return true when handled (the grid then skips its own handling). */
   onKeyDown(key: { key: string; shiftKey: boolean; ctrlKey: boolean; metaKey: boolean; altKey: boolean; cell: GridPoint | null }): boolean;

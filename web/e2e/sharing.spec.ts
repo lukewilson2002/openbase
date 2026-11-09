@@ -287,20 +287,24 @@ test("shares a grid with a password: a stranger gets the rows, not the hidden fi
     await expect(v.getByRole("heading", { name: "Team sheet" })).toBeVisible();
     // The view's name sits beside the collection's color mark (APP-7).
     await expect(v.locator("header .ob-mark").first()).toBeAttached();
-    const table = v.getByRole("table", { name: "Records" });
-    await expect(table.getByText("Alpha")).toBeVisible();
-    await expect(table.getByText("Bravo")).toBeVisible();
-    await expect(v.getByText(/\d+–\d+ of \d+ records/)).toBeVisible();
+    // The signed-in grid's canvas draws the rows; its accessible table beneath carries the same text.
+    const table = v.getByRole("region", { name: "Records" });
+    const cells = table.locator("canvas[data-testid='data-grid-canvas']");
+    await expect(cells).toBeVisible();
+    await expect.poll(async () => (await cells.textContent()) ?? "").toContain("Alpha");
+    expect((await cells.textContent()) ?? "").toContain("Bravo");
+    await expect(v.getByText(/\d+ records?/)).toBeVisible();
     // Visible fields only: the hidden one is not a column, and its values are nowhere in the page.
-    await expect(table.getByRole("columnheader")).toContainText(["Name", "Qty", "Status"]);
-    await expect(table.getByRole("columnheader", { name: /Salary/ })).toHaveCount(0);
+    const text = (await cells.textContent()) ?? "";
+    for (const name of ["Name", "Qty", "Status"]) expect(text).toContain(name);
+    expect(text).not.toContain("Salary");
     expect(await v.content()).not.toContain("SECRET-");
     await expect(v.getByText("Powered by")).toBeVisible();
 
     // Search narrows the rows; the password is not in the address bar or storage.
     await v.getByRole("searchbox", { name: "Search records" }).fill("brav");
-    await expect(table.getByText("Alpha")).toHaveCount(0);
-    await expect(table.getByText("Bravo")).toBeVisible();
+    await expect.poll(async () => (await cells.textContent()) ?? "").not.toContain("Alpha");
+    expect((await cells.textContent()) ?? "").toContain("Bravo");
     expect(v.url()).not.toContain("sesame");
     expect(await v.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain("sesame");
     expect(await visitor.context.cookies()).toEqual([]);

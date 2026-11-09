@@ -21,7 +21,9 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   keep their names, and the Airtable-compatible API answers as before. A workspace's top-level folder holds
   the collections that sit directly under it. On a phone, menus, pickers and editors are bottom sheets, every
   target is 44 px, and the bottom navigation has Home, Collections and Notifications. Every screen was
-  checked with axe-core in both themes at desktop and phone width, and with the keyboard.
+  checked with axe-core in both themes at desktop and phone width, and with the keyboard. A shared-view link
+  draws the app's own grid, board, list, calendar and timeline, read-only, and a shared grid loads its rows as
+  it is scrolled instead of in pages of 100.
 - **Home.** `/workspace/<id>` is the workspace's Home. A capture box puts a thought down as a draft or as a
   record in the collection you pick; a date written in words ("friday 3pm") becomes the record's date, and a
   dashed chip sets any other property. Below it are what is due soon (from every collection with a Home date,

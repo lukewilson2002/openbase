@@ -9,48 +9,34 @@
  * chips under the title. Layout and date are remembered per view in this browser, and weeks start
  * on the viewer's day (their language's, or the choice in the view settings).
  *
- * FullCalendar runs in its UTC mode on wall times (see ../common/wallTime.ts), so the
- * viewer's and the fields' time zones, not the browser's, decide where events sit.
- *
- * FullCalendar's own toolbar is off: the card's header (Today, ‹ title ›, Month | Week | List)
- * drives it through its API, so it looks like the rest of the app's views.
+ * The drawing (FullCalendar, its header, the chips) is `CalendarSurface`, which a shared view uses
+ * too; this file is what the signed-in view adds: where the records come from, every editing
+ * gesture, the unscheduled column and the settings.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import FullCalendar from "@fullcalendar/react";
-import dayGridPlugin from "@fullcalendar/daygrid";
-import timeGridPlugin from "@fullcalendar/timegrid";
-import listPlugin from "@fullcalendar/list";
-import interactionPlugin, { Draggable, type DateClickArg, type DropArg } from "@fullcalendar/interaction";
-import type { DatesSetArg, DayCellContentArg, EventClickArg, EventContentArg, EventDropArg, EventMountArg, MoreLinkArg } from "@fullcalendar/core";
+import { Draggable, type DateClickArg, type DropArg } from "@fullcalendar/interaction";
+import type { EventDropArg } from "@fullcalendar/core";
 import type { EventResizeDoneArg } from "@fullcalendar/interaction";
-import { ChevronLeft, ChevronRight, Info } from "lucide-react";
-import type { DateRange, Field, TableRecord, ViewConfig } from "@/api/types";
+import { Info } from "lucide-react";
+import type { DateRange, Field, ViewConfig } from "@/api/types";
 import { FIELD_TYPE_LABELS } from "@/components/ui/field-type-icon";
-import { Button } from "@/components/ui/button";
-import { IconButton } from "@/components/ui/icon-button";
 import { Field as FormField, Select } from "@/components/ui/input";
-import { SheetMenu, SheetMenuGroup, SheetMenuRow } from "@/components/ui/sheet-menu";
-import { Spinner } from "@/components/ui/spinner";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
-import type { FormatCtx } from "@/lib/cells/format";
-import { choiceClass } from "@/lib/colors";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { cardFields } from "../common/cardFields";
-import { DescriptionHover, DescriptionSelect, setDescriptionField, useDescriptionField } from "../common/description";
-import { SegmentedSwitch } from "../common/SegmentedSwitch";
+import { DescriptionSelect, setDescriptionField, useDescriptionField } from "../common/description";
 import { usePersistedSet } from "../common/usePersistedSet";
 import { useViewRecords } from "../common/useViewRecords";
 import { useViewSetup } from "../common/useViewSetup";
 import { FieldSelect } from "../common/FieldSelect";
 import { ViewSetupState } from "../common/ViewSetupState";
 import { ViewFrame } from "../common/ViewFrame";
-import { floorDay, isDateLike, isWritableDate, likelyDateField, wallNow, wallYmd } from "../common/wallTime";
+import { floorDay, isDateLike, isWritableDate, likelyDateField, wallNow } from "../common/wallTime";
 import type { ViewProps } from "../types";
-import "./calendar.css";
-import { removeIconFont } from "./iconFont";
-import { addDay, dateClickValues, eventWrites, readingOrder, recordEventSpan, recordsToEvents, resolveCalendarFields, unscheduleValues, unscheduledRecords, unscheduledTransient, visibleRange } from "./eventMath";
-import { LAYOUTS, WEEK_STARTS, firstDayOf, layoutOf, loadCalendarState, loadWeekStart, saveCalendarState, saveWeekStart, viewType, type Grid, type Layout, type Unit, type WeekStart } from "./layout";
+import { CalendarSurface, MONTHS_SHORT, type ChipDescription, type CalendarSurfaceHandle } from "./CalendarSurface";
+import { addDay, dateClickValues, eventWrites, readingOrder, recordEventSpan, recordsToEvents, resolveCalendarFields, unscheduleValues, unscheduledRecords, unscheduledTransient } from "./eventMath";
+import { WEEK_STARTS, firstDayOf, loadWeekStart, saveWeekStart, type WeekStart } from "./layout";
 import { UnscheduledList } from "../common/UnscheduledList";
 
 export default function CalendarView(props: ViewProps) {
@@ -70,21 +56,6 @@ function setCalendar(c: ViewConfig, patch: Partial<ViewConfig["calendar"]>): Vie
   return { ...c, calendar: { ...c.calendar, ...patch } };
 }
 
-const PLUGINS = [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin];
-const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const WEEKDAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-// "Sun 11", like the timeline's day ticks (the locale's own order puts the number first).
-const dayHeader = { dayHeaderContent: (arg: { date: Date }) => `${WEEKDAYS_SHORT[arg.date.getUTCDay()]} ${arg.date.getUTCDate()}` };
-const VIEW_OPTIONS = {
-  dayGridMonth: { dayHeaderFormat: { weekday: "short" } },
-  timeGridWeek: dayHeader,
-  timeGridDay: dayHeader,
-  dayGridWeek: dayHeader,
-  dayGridDay: dayHeader,
-} as const;
-/** FullCalendar's own order of events within a day; with a sort, the view's order decides before any of it. */
-const EVENT_ORDER = ["start", "-duration", "allDay", "title"];
-const SORTED_EVENT_ORDER = ["sortIndex", ...EVENT_ORDER];
 const DELETE_KEYS = new Set(["Delete", "Backspace"]);
 
 /** "12 Mar" for toasts. */
@@ -109,77 +80,6 @@ function inside(el: Element | null | undefined, p: { x: number; y: number } | nu
   return p.x >= r.left && p.x < r.right && p.y >= r.top && p.y < r.bottom;
 }
 
-// FullCalendar's stylesheet is in by now; its data: icon font would only trip the CSP (see iconFont.ts).
-removeIconFont();
-
-/** Where an event chip finds its record's description (null: the view has none). */
-interface ChipDescription {
-  field: Field;
-  byId: ReadonlyMap<string, TableRecord>;
-  format: FormatCtx;
-}
-
-/**
- * An event as a chip tinted with the record's colour (the primary tint when it has none). A chip
- * has room for the title only; pointing at it shows the record's description.
- */
-function EventChip({ arg, description }: { arg: EventContentArg; description: ChipDescription | null }) {
-  const color = arg.event.extendedProps.color as string | undefined;
-  const details = arg.event.extendedProps.details as string[] | undefined;
-  const timed = !!arg.timeText && !arg.event.allDay;
-  const chip = (
-    <span className={cn("ob-cal-chip", color ? choiceClass(color) : "ob-cal-chip-plain", details && !timed && "ob-cal-chip-detailed")}>
-      {timed && <span className="shrink-0 font-medium opacity-80">{arg.timeText}</span>}
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="ob-cal-title">{arg.event.title}</span>
-        {details && <span className="ob-cal-details">{details.join(" · ")}</span>}
-      </span>
-    </span>
-  );
-  const record = description?.byId.get(String(arg.event.extendedProps.recordId));
-  if (!description || !record) return chip;
-  return (
-    <DescriptionHover field={description.field} record={record} title={arg.event.title} format={description.format}>
-      {chip}
-    </DescriptionHover>
-  );
-}
-
-/** "Oct 1" on the first of the month, the bare day number elsewhere; today is a filled circle. */
-function DayNumber({ arg }: { arg: DayCellContentArg }) {
-  // The week and day layouts have no day numbers (their column headers carry the dates).
-  if (arg.view.type !== "dayGridMonth") return null;
-  const d = arg.date.getUTCDate();
-  const text = d === 1 && !arg.isOther ? `${MONTHS_SHORT[arg.date.getUTCMonth()]} 1` : arg.dayNumberText;
-  return arg.isToday ? <span className="ob-cal-today">{d}</span> : <span>{text}</span>;
-}
-
-/** A day's records, for the sheet a "+N more" opens on a phone (PH-3), where FullCalendar's own pop-over is too small to tap in. */
-interface DayList {
-  title: string;
-  items: { id: string; title: string; time?: string }[];
-}
-
-const DAY_TITLE = new Intl.DateTimeFormat(undefined, { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
-const CLOCK = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone: "UTC" });
-
-function dayListOf(arg: MoreLinkArg): DayList {
-  return {
-    title: DAY_TITLE.format(arg.date),
-    items: arg.allSegs.map((seg) => ({
-      id: String(seg.event.extendedProps.recordId),
-      title: seg.event.title || "Untitled",
-      time: !seg.event.allDay && seg.event.start ? CLOCK.format(seg.event.start) : undefined,
-    })),
-  };
-}
-
-/**
- * FullCalendar opens its pop-over for an empty or "popover" answer and zooms to a view for a string; any other answer does
- * nothing, which is what a function that has opened its own sheet wants. (Its types only know the first two.)
- */
-const NO_FURTHER_ACTION = true as unknown as string;
-
 /** Why events cannot be moved, when the date fields are computed (null when they can be). */
 function readOnlyReason(fields: { start: Field; end: Field | null }): string | null {
   const kind = (f: Field) => (f.type === "created_time" || f.type === "last_modified_time" ? `a ${FIELD_TYPE_LABELS[f.type]} property, which fills itself in` : `a ${FIELD_TYPE_LABELS[f.type]} property, which is worked out from other properties`);
@@ -192,7 +92,7 @@ function CalendarInner(props: ViewProps) {
   const setup = useViewSetup(props);
   const { table, view, config, cfg, writes, timeZone, addRecord } = setup;
   const desktop = useMediaQuery(DESKTOP_QUERY);
-  const calendar = useRef<FullCalendar>(null);
+  const surface = useRef<CalendarSurfaceHandle>(null);
   const zone = useRef<HTMLElement>(null);
   // The event being dragged was let go over the unscheduled column (FullCalendar tells us this before it tells us where it landed).
   const releasedOnZone = useRef(false);
@@ -200,19 +100,7 @@ function CalendarInner(props: ViewProps) {
   const fields = useMemo(() => resolveCalendarFields(table.fields, config.calendar.date_field_id, config.calendar.end_field_id), [table.fields, config.calendar.date_field_id, config.calendar.end_field_id]);
   const primary = table.fields.find((f) => f.id === table.primary_field_id);
   const [visible, setVisible] = useState<{ from: string; to: string } | null>(null);
-  const [title, setTitle] = useState("");
-  const [dayList, setDayList] = useState<DayList | null>(null);
-  const onMoreLink = (arg: MoreLinkArg) => {
-    setDayList(dayListOf(arg));
-    return NO_FURTHER_ACTION;
-  };
-  // Where the view was left last time; FullCalendar reads it when it starts (and again if the date field's kind changes).
-  const remembered = useMemo(() => loadCalendarState(view.id), [view.id]);
-  const [layout, setLayout] = useState<Layout>(remembered?.layout ?? "month");
-  const [unit, setUnit] = useState<Unit>(remembered?.unit ?? "month");
-  const shownDate = useRef(remembered?.date);
-  // The stretch of time on screen (wall ms, end exclusive): Add creates on today only when it is in it.
-  const period = useRef<{ start: number; end: number } | null>(null);
+  const onVisibleRange = useCallback((next: { from: string; to: string }) => setVisible((cur) => (cur?.from !== next.from || cur?.to !== next.to ? next : cur)), []);
   const [weekPref, setWeekPref] = useState<WeekStart>(loadWeekStart);
   const firstDay = firstDayOf(weekPref);
   // The column is remembered per view on a desktop; a phone has no room for it until asked.
@@ -220,9 +108,6 @@ function CalendarInner(props: ViewProps) {
   const [phoneOpen, setPhoneOpen] = useState(false);
   const unscheduledOpen = desktop ? !folded.has(view.id) : phoneOpen;
   const toggleUnscheduled = () => (desktop ? toggleFolded(view.id) : setPhoneOpen((o) => !o));
-  // A date field that tells the time of day gets an hourly grid for week and day; a date-only one a grid of days.
-  const grid: Grid = fields?.start.opts.include_time ? "timed" : "days";
-
   const range = useMemo<DateRange | null>(
     () => (fields && visible ? { field_id: fields.start.field.id, end_field_id: fields.end?.field.id ?? null, from: visible.from, to: visible.to } : null),
     [fields, visible],
@@ -262,22 +147,6 @@ function CalendarInner(props: ViewProps) {
   const startWritable = setup.canEdit && isWritableDate(fields?.start.field);
   const reason = setup.canEdit && fields ? readOnlyReason({ start: fields.start.field, end: fields.end?.field ?? null }) : null;
 
-  const onDatesSet = useCallback(
-    (arg: DatesSetArg) => {
-      const next = visibleRange(arg.start.getTime(), arg.end.getTime());
-      setVisible((cur) => (next && (cur?.from !== next.from || cur?.to !== next.to) ? next : cur));
-      setTitle(arg.view.title);
-      period.current = { start: arg.view.currentStart.getTime(), end: arg.view.currentEnd.getTime() };
-      const shown = layoutOf(arg.view.type);
-      if (!shown) return;
-      setLayout(shown.layout);
-      setUnit(shown.unit);
-      shownDate.current = wallYmd(arg.view.calendar.getDate().getTime());
-      saveCalendarState(view.id, { layout: shown.layout, unit: shown.unit, date: shownDate.current });
-    },
-    [view.id],
-  );
-
   const apply = useCallback(
     (recordId: string, times: { startMs: number; endMs: number | null; allDay: boolean; change: "move" | "resize" }, toast: string, revert?: () => void) => {
       if (!fields) return;
@@ -312,7 +181,7 @@ function CalendarInner(props: ViewProps) {
   // Add puts the record on today when today is on screen, else on the first day shown.
   const addHere = () => {
     const now = wallNow(timeZone);
-    const shown = period.current;
+    const shown = surface.current?.period() ?? null;
     void createOn(shown ? addDay(now, shown.start, shown.end) : floorDay(now), true);
   };
 
@@ -373,11 +242,6 @@ function CalendarInner(props: ViewProps) {
     releasedOnZone.current = startWritable && inside(zone.current, pointOf(arg.jsEvent));
     if (releasedOnZone.current) unschedule(String(arg.event.extendedProps.recordId));
   };
-  // Every event can be focused and carries its record, for Delete.
-  const onEventMount = (arg: EventMountArg) => {
-    arg.el.setAttribute("data-record-id", String(arg.event.extendedProps.recordId));
-    if (!arg.el.hasAttribute("tabindex")) arg.el.tabIndex = 0;
-  };
   // After Delete the focus goes to the event beside the one taken off, once the calendar has redrawn without it.
   const box = useRef<HTMLDivElement>(null);
   const focusNext = useRef<string | null>(null);
@@ -402,7 +266,6 @@ function CalendarInner(props: ViewProps) {
     unschedule(id);
   };
 
-  const api = () => calendar.current?.getApi();
   const chooseDate = (id: string | null) => cfg.update((c) => setCalendar(c, { date_field_id: id }));
   const settings = (
     <>
@@ -465,102 +328,47 @@ function CalendarInner(props: ViewProps) {
   } else {
     body = (
       <div className={cn("absolute inset-0 flex", !desktop && "flex-col")}>
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line py-2.5 pl-2.5 pr-3">
-            <Button size="sm" onClick={() => api()?.today()}>
-              Today
-            </Button>
-            {/* The arrows step around the dates they change; the title keeps a width so › stays put. */}
-            <div className="flex items-center gap-0.5">
-              <IconButton label={`Previous ${unit}`} size="sm" onClick={() => api()?.prev()}>
-                <ChevronLeft aria-hidden className="size-4" />
-              </IconButton>
-              <h3 aria-live="polite" className="min-w-[10.5rem] text-center text-h3 num">
-                {title}
-              </h3>
-              <IconButton label={`Next ${unit}`} size="sm" onClick={() => api()?.next()}>
-                <ChevronRight aria-hidden className="size-4" />
-              </IconButton>
-            </div>
-            {records.fetching && <Spinner className="size-4" label="Loading records" />}
-            {/* The list shows the stretch of time the layout before it did (a week's worth after Week). */}
-            <SegmentedSwitch label="Calendar range" className="ml-auto" value={layout} options={LAYOUTS} onChange={(v) => api()?.changeView(viewType(v, grid, unit))} />
-          </div>
-          {reason && (
-            <p role="status" className="flex items-start gap-2 border-b border-line bg-warning-soft px-3 py-2 text-label">
-              <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
-              {reason}
-            </p>
-          )}
-          {/* On a phone the closed Unscheduled pill floats over the foot of the view: room is left for it, or it would sit over the last week's "+N more". */}
-          <div ref={box} className={cn("ob-calendar relative min-h-0 flex-1", !desktop && !unscheduledOpen && "pb-14")} onKeyDown={onKeyDown}>
-            <FullCalendar
-              // A different kind of date field draws weeks and days differently: start over in the same layout.
-              key={grid}
-              ref={calendar}
-              plugins={PLUGINS}
-              initialView={viewType(layout, grid, unit)}
-              initialDate={shownDate.current}
-              headerToolbar={false}
-              // FullCalendar draws icons with a font it inlines as a data: URI, which the server's
-              // Content-Security-Policy (default-src 'self') blocks; the header above has its own.
-              buttonIcons={false}
-              timeZone="UTC"
-              firstDay={firstDay}
-              now={() => new Date(wallNow(timeZone))}
-              nowIndicator
-              height="100%"
-              fixedWeekCount={false}
-              views={VIEW_OPTIONS}
-              dayMaxEvents
-              // A desktop gets FullCalendar's pop-over; a phone gets the day's records in a bottom sheet.
-              moreLinkClick={desktop ? "popover" : onMoreLink}
-              // FullCalendar gives the "+N more" link aria-expanded and no role, which a link does not allow.
-              moreLinkDidMount={(arg) => arg.el.setAttribute("role", "button")}
-              scrollTime="08:00:00"
-              events={events}
-              eventOrder={sorted ? SORTED_EVENT_ORDER : EVENT_ORDER}
-              eventBackgroundColor="transparent"
-              eventBorderColor="transparent"
-              eventContent={(arg) => <EventChip arg={arg} description={chipDescription} />}
-              eventDidMount={onEventMount}
-              dayCellContent={(arg) => <DayNumber arg={arg} />}
-              // FullCalendar names a day's cell by its date number alone, while the cell also draws the day's records: the
-              // name would not hold the drawn text (WCAG 2.5.3). Without it the cell is named by its content, number first.
-              dayCellDidMount={(arg) => arg.el.removeAttribute("aria-labelledby")}
-              // FullCalendar's weekday headers are `th` without a scope (A11Y-3).
-              dayHeaderDidMount={(arg) => arg.el.setAttribute("scope", "col")}
-              editable={startWritable}
-              droppable={startWritable}
-              eventStartEditable={startWritable}
-              eventDurationEditable={startWritable && !!fields.end}
-              datesSet={onDatesSet}
-              eventClick={(arg: EventClickArg) => {
-                arg.jsEvent.preventDefault();
-                setup.openRecord(String(arg.event.extendedProps.recordId));
-              }}
-              eventDragStart={(arg) => {
-                releasedOnZone.current = false;
-                dragged.current = String(arg.event.extendedProps.recordId);
-                setDragging(true);
-              }}
-              eventDragStop={onEventDragStop}
-              eventDrop={onEventDrop}
-              eventResize={onEventResize}
-              dateClick={onDateClick}
-              drop={onDrop}
-            />
-          </div>
-        </div>
-        <SheetMenu open={!!dayList} onOpenChange={(open) => !open && setDayList(null)} title={dayList?.title ?? ""}>
-          <SheetMenuGroup>
-            {dayList?.items.map((item, i) => (
-              <SheetMenuRow key={`${item.id}-${i}`} hint={item.time} onSelect={() => setup.openRecord(item.id)}>
-                {item.title}
-              </SheetMenuRow>
-            ))}
-          </SheetMenuGroup>
-        </SheetMenu>
+        <CalendarSurface
+          ref={surface}
+          stateKey={view.id}
+          fields={fields}
+          events={events}
+          timeZone={timeZone}
+          desktop={desktop}
+          firstDay={firstDay}
+          sorted={sorted}
+          fetching={records.fetching}
+          description={chipDescription}
+          onVisibleRange={onVisibleRange}
+          onOpen={setup.openRecord}
+          notice={
+            reason && (
+              <p role="status" className="flex items-start gap-2 border-b border-line bg-warning-soft px-3 py-2 text-label">
+                <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
+                {reason}
+              </p>
+            )
+          }
+          padFoot={!desktop && !unscheduledOpen}
+          boxRef={box}
+          onBoxKeyDown={onKeyDown}
+          options={{
+            editable: startWritable,
+            droppable: startWritable,
+            eventStartEditable: startWritable,
+            eventDurationEditable: startWritable && !!fields.end,
+            eventDragStart: (arg) => {
+              releasedOnZone.current = false;
+              dragged.current = String(arg.event.extendedProps.recordId);
+              setDragging(true);
+            },
+            eventDragStop: onEventDragStop,
+            eventDrop: onEventDrop,
+            eventResize: onEventResize,
+            dateClick: onDateClick,
+            drop: onDrop,
+          }}
+        />
         <UnscheduledList
           open={unscheduledOpen}
           onToggle={toggleUnscheduled}

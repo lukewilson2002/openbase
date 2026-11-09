@@ -2,9 +2,40 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroupHeader, PublicField, PublicRecord, PublicView, QueryRequest } from "@/api/types";
-import { apiError, mockApi, renderApp, type Handler, type RecordedCall } from "@/test/utils";
+import { apiError, mockApi, renderApp, stubDesktop, type Handler, type RecordedCall } from "@/test/utils";
 import { groupsWithin } from "./PublicList";
 import { installBoardLayout, type BoardLayout } from "@/views/kanban/boardLayout";
+import type { GridAdapterProps } from "@/views/grid/adapter";
+
+// Glide draws to a canvas jsdom has none of: a stand-in keeps the props the page hands it and lists the cells those props describe.
+const canvas = vi.hoisted(() => ({ props: null as unknown }));
+vi.mock("@/views/grid/glide/GlideGrid", async () => {
+  const React = await import("react");
+  return {
+    gridHeaderHeight: () => 44,
+    GlideGrid: React.forwardRef(function FakeGrid(props: GridAdapterProps, ref: React.ForwardedRef<unknown>) {
+      canvas.props = props;
+      React.useImperativeHandle(ref, () => ({ invalidate: () => {}, focus: () => {} }));
+      const rows = Array.from({ length: props.rowCount }, (_, r) =>
+        props.columns.map((_c, c) => {
+          const cell = props.getCell(c, r);
+          return cell.kind === "cell" ? cell.display : cell.kind === "group" ? `${cell.label} ${cell.count} records${cell.collapsed ? " folded" : ""}` : "";
+        }),
+      );
+      return (
+        <div data-testid="canvas">
+          {rows.map((cells, r) => (
+            <div key={r} role="row">
+              {cells.join(" | ")}
+            </div>
+          ))}
+        </div>
+      );
+    }),
+  };
+});
+const grid = () => canvas.props as GridAdapterProps;
+const rowsText = () => screen.getAllByRole("row").map((r) => r.textContent);
 
 let layout: BoardLayout;
 beforeEach(() => {
@@ -62,20 +93,22 @@ function open(v: PublicView, routes: Record<string, Handler> = {}, path = "/shar
 }
 
 describe("a shared grid", () => {
-  it("shows the visible fields and records read-only, with the footer, and never asks who you are", async () => {
+  it("draws the visible properties and records on the signed-in grid's canvas, read-only, with the footer, and never asks who you are", async () => {
     const { api, onUnauthorized } = open(view("grid"));
     expect(await screen.findByRole("heading", { name: "Team board" })).toBeInTheDocument();
-    const table = await screen.findByRole("table", { name: "Records" });
-    expect(within(table).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Name", "Status", "Owner", "Start", "Cover"]);
-    await within(table).findByText("Task 1");
-    const row = within(table).getByText("Task 1").closest("tr")!;
-    expect(within(row).getByText("Todo")).toBeInTheDocument();
-    expect(within(row).getByText("Ada Lovelace")).toBeInTheDocument(); // people by name
-    expect(within(row).getByText("2026-03-10")).toBeInTheDocument();
-    expect(screen.getByText("1–3 of 3 records")).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Records" })).toBeInTheDocument();
+    await screen.findByText(/^Task 1/);
+    expect(grid().columns.map((c) => c.title)).toEqual(["Name", "Status", "Owner", "Start", "Cover"]);
+    // People by name, dates as written, choices by name.
+    expect(rowsText()[0]).toBe("Task 1 | Todo | Ada Lovelace | 2026-03-10 | logo.png");
+    expect(screen.getByText("3 records")).toBeInTheDocument();
     expect(screen.getByText("Powered by")).toBeInTheDocument();
-    // No editors: nothing in the table is editable.
-    expect(within(table).queryAllByRole("textbox")).toHaveLength(0);
+    // Nothing is editable, and a record has no page to open from here.
+    expect(grid().canEdit).toBe(false);
+    expect(grid().canExpand).toBe(false);
+    expect(grid().canAddField).toBe(false);
+    expect(grid().canReorderRows || grid().canReorderColumns).toBe(false);
+    expect(grid().getCell(0, 0)).toMatchObject({ kind: "cell", readOnly: true });
     expect(api.calls.map((c) => `${c.method} ${c.path}`).filter((k) => !k.startsWith("GET /api/attachments"))).toEqual(["GET /api/public/shares/tok_s", "POST /api/public/shares/tok_s/query"]);
     expect(onUnauthorized).not.toHaveBeenCalled();
   });
@@ -88,55 +121,57 @@ describe("a shared grid", () => {
   it("searches", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const { asked } = open(view("grid"));
-    await screen.findByText("Task 1");
+    await screen.findByText(/^Task 1/);
     await user.type(screen.getByRole("searchbox", { name: "Search records" }), "task 2");
     await act(async () => void (await vi.advanceTimersByTimeAsync(400)));
     await waitFor(() => expect(asked.some((a) => a.search === "task 2")).toBe(true));
-    await waitFor(() => expect(screen.queryByText("Task 1")).not.toBeInTheDocument());
-    expect(screen.getByText("Task 2")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText(/^Task 1/)).not.toBeInTheDocument());
+    expect(screen.getByText(/^Task 2/)).toBeInTheDocument();
   });
 
-  it("pages through long results", async () => {
-    const many = Array.from({ length: 230 }, (_, i) => record(i + 1));
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  it("loads the pages of a long result as the rows come into view", async () => {
+    const many = Array.from({ length: 450 }, (_, i) => record(i + 1));
     const asked: QueryRequest[] = [];
     open(view("grid"), { "POST /api/public/shares/tok_s/query": queryHandler(many, asked) });
-    expect(await screen.findByText("1–100 of 230 records")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Previous/ })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: /Next/ }));
-    expect(await screen.findByText("101–200 of 230 records")).toBeInTheDocument();
-    expect(asked.map((a) => a.offset)).toContain(100);
-    await user.click(screen.getByRole("button", { name: /Next/ }));
-    expect(await screen.findByText("201–230 of 230 records")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Next/ })).toBeDisabled();
+    expect(await screen.findByText("450 records")).toBeInTheDocument();
+    expect(asked.map((a) => a.offset)).toEqual([0]);
+    expect(grid().rowCount).toBe(450);
+    expect(grid().getCell(0, 300).kind).toBe("loading");
+    act(() => grid().onVisibleRowsChange(300, 320));
+    await waitFor(() => expect(asked.map((a) => a.offset)).toContain(200));
+    await waitFor(() => expect(grid().getCell(0, 300)).toMatchObject({ kind: "cell", display: "Task 301" }));
   });
 
-  it("sorts on a header click with a one-off override that is never saved", async () => {
+  it("sorts from a header's menu with a one-off override that is never saved", async () => {
+    stubDesktop();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const { asked, api } = open(view("grid"));
-    await screen.findByText("Task 1");
-    await user.click(screen.getByRole("button", { name: "Name" }));
+    await screen.findByText(/^Task 1/);
+    act(() => grid().onHeaderMenu(0, { x: 5, y: 5, width: 1, height: 1 }));
+    await user.click(await screen.findByRole("menuitem", { name: "Sort A → Z" }));
     await waitFor(() => expect(asked.some((a) => a.transient?.sorts?.[0]?.direction === "asc")).toBe(true));
     expect(asked.find((a) => a.transient)!.transient).toEqual({ sorts: [{ field_id: "f_name", direction: "asc" }] });
-    expect(screen.getByRole("columnheader", { name: /Name/ })).toHaveAttribute("aria-sort", "ascending");
-    await user.click(screen.getByRole("button", { name: "Name" }));
+    act(() => grid().onHeaderMenu(0, { x: 5, y: 5, width: 1, height: 1 }));
+    await user.click(await screen.findByRole("menuitem", { name: "Sort Z → A" }));
     await waitFor(() => expect(asked.some((a) => a.transient?.sorts?.[0]?.direction === "desc")).toBe(true));
+    // The way back to the view's own order.
+    act(() => grid().onHeaderMenu(0, { x: 5, y: 5, width: 1, height: 1 }));
+    await user.click(await screen.findByRole("menuitem", { name: "Remove sort" }));
+    await waitFor(() => expect(asked.at(-1)!.transient).toBeUndefined());
     expect(api.calls.every((c) => c.method === "GET" || c.path.endsWith("/query"))).toBe(true);
   });
 
-  it("shows group header rows from the server's groups", async () => {
+  it("shows group header rows from the server's groups, and folds a group without saving anything", async () => {
     const groups: GroupHeader[] = [
       { depth: 0, field_id: "f_status", key: "s1", label: "Todo", value: "s1", start: 0, count: 1 },
       { depth: 0, field_id: "f_status", key: "s2", label: "Done", value: "s2", start: 1, count: 2 },
     ];
-    open(view("grid"), { "POST /api/public/shares/tok_s/query": queryHandler(RECORDS, [], { groups }) });
-    const table = await screen.findByRole("table", { name: "Records" });
-    await within(table).findByText("Task 1");
-    expect(within(table).getByText("2 records")).toBeInTheDocument();
-    const order = [...table.querySelectorAll("tbody tr")].map((tr) => tr.textContent);
-    expect(order[0]).toContain("Todo");
-    expect(order[1]).toContain("Task 1");
-    expect(order[2]).toContain("Done");
+    const { api } = open(view("grid"), { "POST /api/public/shares/tok_s/query": queryHandler(RECORDS, [], { groups }) });
+    await screen.findByText(/^Task 1/);
+    expect(rowsText().map((t) => t!.split(" | ")[0])).toEqual(["Todo 1 records", "Task 1", "Done 2 records", "Task 2", "Task 3"]);
+    act(() => grid().onGroupToggle(1));
+    await waitFor(() => expect(rowsText().map((t) => t!.split(" | ")[0])).toEqual(["Todo 1 records", "Task 1", "Done 2 records folded"]));
+    expect(api.calls.every((c) => c.method === "GET" || c.path.endsWith("/query"))).toBe(true);
   });
 
   it("explains an empty result", async () => {
@@ -146,17 +181,15 @@ describe("a shared grid", () => {
 });
 
 describe("attachments in a shared view", () => {
-  it("uses the share token on thumbnail and download addresses for an open link", async () => {
+  it("uses the share token on the thumbnail addresses the canvas draws for an open link", async () => {
     open(view("grid"));
-    const table = await screen.findByRole("table", { name: "Records" });
-    await within(table).findByText("Task 1");
-    const thumb = table.querySelector("tr[data-record-id='rec1'] img");
-    expect(thumb).toHaveAttribute("src", "/api/attachments/att1/thumb?share=tok_s");
+    await screen.findByText(/^Task 1/);
+    expect(grid().thumbUrl?.("att1")).toBe("/api/attachments/att1/thumb?share=tok_s");
     // A PDF shows its first page, through the share too.
-    expect(table.querySelector("tr[data-record-id='rec2'] img")).toHaveAttribute("src", "/api/attachments/att2/thumb?share=tok_s");
+    expect(grid().thumbUrl?.("att2")).toBe("/api/attachments/att2/thumb?share=tok_s");
   });
 
-  it("fetches images with the password header for a protected link (an <img> cannot send it)", async () => {
+  it("fetches images with the password header for a protected link (an image cannot send it) and draws the tile's type until they arrive", async () => {
     const created = vi.fn(() => "blob:thumb-1");
     vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: created, revokeObjectURL: vi.fn() }));
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -171,8 +204,9 @@ describe("attachments in a shared view", () => {
     });
     await user.type(await screen.findByLabelText("Password"), "pw12");
     await user.click(screen.getByRole("button", { name: "Continue" }));
-    const table = await screen.findByRole("table", { name: "Records" });
-    await waitFor(() => expect(table.querySelector("tr[data-record-id='rec1'] img")).toHaveAttribute("src", "blob:thumb-1"));
+    await screen.findByText(/^Task 1/);
+    expect(grid().thumbUrl?.("att1")).toBeNull();
+    await waitFor(() => expect(grid().thumbUrl?.("att1")).toBe("blob:thumb-1"));
     const thumbCall = api.api.callsTo("GET /api/attachments/att1/thumb")[0]!;
     expect(thumbCall.headers.get("X-Share-Password")).toBe("pw12");
   });
@@ -197,7 +231,7 @@ describe("a protected shared view", () => {
     await user.clear(screen.getByLabelText("Password"));
     await user.type(screen.getByLabelText("Password"), "hunter22");
     await user.click(screen.getByRole("button", { name: "Continue" }));
-    expect(await screen.findByText("Task 1")).toBeInTheDocument();
+    expect(await screen.findByText(/^Task 1/)).toBeInTheDocument();
     // The page request and the records request both carried it.
     expect(seen.filter((p) => p === "hunter22")).toHaveLength(2);
     expect(JSON.stringify({ ...localStorage })).not.toContain("hunter22");
@@ -216,7 +250,7 @@ describe("problems with a shared view", () => {
     expect(await screen.findByText(/Could not load records: transient refers to a field/)).toBeInTheDocument();
     api.set("POST /api/public/shares/tok_s/query", queryHandler(RECORDS));
     await user.click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByText("Task 1")).toBeInTheDocument();
+    expect(await screen.findByText(/^Task 1/)).toBeInTheDocument();
   });
 });
 
@@ -270,8 +304,8 @@ describe("shared views of other types", () => {
     expect(row).toHaveAttribute("data-nav");
     expect(row).toHaveTextContent("Todo");
     expect(row).toHaveTextContent("Ada Lovelace");
-    // The table is the grid's, not the list's.
-    expect(screen.queryByRole("table", { name: "Records" })).not.toBeInTheDocument();
+    // The canvas is the grid's, not the list's.
+    expect(screen.queryByRole("region", { name: "Records" })).not.toBeInTheDocument();
     expect(screen.getByText("3 records")).toBeInTheDocument();
   });
 
@@ -342,19 +376,27 @@ describe("shared views of other types", () => {
   it("falls back to a table when the board's stack field is not shared", async () => {
     open(view("kanban", { kanban_stack_field_id: null }));
     expect(await screen.findByText("This Board needs a property that is not shared, so its records are shown as a table.")).toBeInTheDocument();
-    expect(await screen.findByRole("table", { name: "Records" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Records" })).toBeInTheDocument();
   });
 
-  it("shows records on the month calendar, one query per month with the range", async () => {
+  it("draws the signed-in calendar's surface with the link's records, one query per stretch of days on screen, and nothing that edits", async () => {
+    stubDesktop();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const { asked } = open(view("calendar", { calendar_date_field_id: "f_start" }));
+    const { asked, api } = open(view("calendar", { calendar_date_field_id: "f_start" }));
     expect(await screen.findByRole("heading", { name: "March 2026" })).toBeInTheDocument();
-    const cell = await screen.findByRole("gridcell", { name: "2026-03-10" });
-    expect(within(cell).getByText("Task 1")).toBeInTheDocument();
-    expect(asked[0]!.range).toEqual({ field_id: "f_start", end_field_id: null, from: "2026-03-01", to: "2026-04-11" });
+    // The chip is the signed-in calendar's: the record's colour-less tint, its title, no editing.
+    const chip = await screen.findByText("Task 1");
+    expect(chip.closest(".ob-cal-chip")).toHaveClass("ob-cal-chip-plain");
+    expect(screen.getByText("Task 2")).toBeInTheDocument();
+    // The month shows its own weeks, Sun Mar 1 to Sat Apr 4; the query pads a day each side.
+    expect(asked.find((a) => a.range)!.range).toEqual({ field_id: "f_start", end_field_id: null, from: "2026-02-28", to: "2026-04-05" });
+    expect(document.querySelector(".fc-event-draggable")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Next month" }));
     expect(await screen.findByRole("heading", { name: "April 2026" })).toBeInTheDocument();
-    await waitFor(() => expect(asked.some((a) => a.range?.from === "2026-03-29")).toBe(true));
+    await waitFor(() => expect(asked.some((a) => a.range?.from === "2026-03-28")).toBe(true));
+    // Week and List are the surface's too.
+    expect(screen.getByRole("button", { name: "Week" })).toBeInTheDocument();
+    expect(api.calls.every((c) => c.method === "GET" || c.path.endsWith("/query"))).toBe(true);
   });
 
   it("draws the timeline chart without any editing gesture", async () => {

@@ -1,7 +1,7 @@
 /**
- * Records of a shared view: `POST /api/public/shares/{token}/query`. Tables page through the
- * result; boards, galleries, lists, calendars and timelines load it whole (pages of 1,000, up to 5,000
- * records) because they need every card to lay themselves out. Queries are cached under
+ * Records of a shared view: `POST /api/public/shares/{token}/query`. The grid pages through the
+ * result as it is scrolled (`PublicGrid`); boards, galleries, lists, calendars and timelines load it whole
+ * (pages of 1,000, up to 5,000 records) because they need every card to lay themselves out. Queries are cached under
  * `["public", token, ...]`; the password never enters a key (it is read from a ref when the
  * request is made).
  */
@@ -11,7 +11,6 @@ import { publicApi } from "@/api/sharing";
 import type { DateRange, GroupHeader, PublicQueryResponse, TableRecord, TransientConfig } from "@/api/types";
 import { toRecord, type SharedFields } from "./publicFields";
 
-export const PUBLIC_PAGE = 100;
 const FETCH_PAGE = 1000;
 export const PUBLIC_CAP = 5000;
 
@@ -38,22 +37,6 @@ interface Common {
 
 function shape(res: PublicQueryResponse, fields: SharedFields, truncated: boolean): PublicData {
   return { records: res.records.map((r) => toRecord(r, fields)), total: res.total, offset: res.offset, groups: res.groups ?? [], colors: res.colors ?? {}, truncated };
-}
-
-/** One page of the shared view's records. */
-export function usePublicPage(p: Common & { offset: number; limit?: number }) {
-  const limit = p.limit ?? PUBLIC_PAGE;
-  const password = useRef(p.password);
-  password.current = p.password;
-  const q = useQuery({
-    queryKey: ["public", p.token, "page", p.search, p.offset, limit, p.timeZone, p.transient ?? null],
-    queryFn: ({ signal }) =>
-      publicApi.query(p.token, { offset: p.offset, limit, search: p.search || null, timezone: p.timeZone, ...(p.transient ? { transient: p.transient } : {}) }, password.current, signal),
-    enabled: p.enabled ?? true,
-    placeholderData: keepPreviousData,
-  });
-  const data = useMemo(() => (q.data ? shape(q.data, p.fields, false) : undefined), [q.data, p.fields]);
-  return { data, loading: q.isPending, fetching: q.isFetching, error: q.error, refetch: () => void q.refetch() };
 }
 
 /** Every record of the shared view (up to the cap), optionally restricted to a date range. */

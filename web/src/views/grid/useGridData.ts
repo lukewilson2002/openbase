@@ -15,6 +15,15 @@ import { recordKeys, recordsApi } from "@/api/records";
 import type { GroupHeader, QueryResponse, TableRecord, TransientConfig } from "@/api/types";
 import { PAGE_SIZE, pagesFor } from "./rowMap";
 
+/**
+ * Where the pages come from when it is not the signed-in view query: a shared view reads them from its link.
+ * `key` names the query in the cache and must change whenever the pages would.
+ */
+export interface GridPageSource {
+  key: readonly unknown[];
+  fetch(offset: number, limit: number, signal?: AbortSignal): Promise<QueryResponse>;
+}
+
 export interface GridDataParams {
   tableId: string;
   viewId: string;
@@ -24,6 +33,8 @@ export interface GridDataParams {
   timeZone: string;
   /** Local filter/sort/group override sent with every page request (already reflected in `configKey`). */
   transient?: TransientConfig | null;
+  /** Read the pages from here instead of `POST /api/views/{id}/query`; `tableId`, `viewId` and `configKey` then only name the query. */
+  source?: GridPageSource;
 }
 
 export interface GridData {
@@ -50,7 +61,7 @@ export interface GridData {
   refresh(): void;
 }
 
-export function useGridData({ tableId, viewId, configKey, search, timeZone, transient = null }: GridDataParams): GridData {
+export function useGridData({ tableId, viewId, configKey, search, timeZone, transient = null, source }: GridDataParams): GridData {
   const qc = useQueryClient();
   const pages = useRef(new Map<number, QueryResponse>());
   const index = useRef(new Map<string, number>());
@@ -63,8 +74,8 @@ export function useGridData({ tableId, viewId, configKey, search, timeZone, tran
   const [error, setError] = useState<Error | null>(null);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
 
-  const pageKey = useCallback((page: number) => recordKeys.page(tableId, viewId, configKey, search, page), [tableId, viewId, configKey, search]);
-  const queryPrefix = useMemo(() => recordKeys.viewQuery(tableId, viewId, configKey, search), [tableId, viewId, configKey, search]);
+  const pageKey = useCallback((page: number) => (source ? [...source.key, page] : recordKeys.page(tableId, viewId, configKey, search, page)), [source, tableId, viewId, configKey, search]);
+  const queryPrefix = useMemo(() => (source ? source.key : recordKeys.viewQuery(tableId, viewId, configKey, search)), [source, tableId, viewId, configKey, search]);
 
   const store = useCallback((page: number, res: QueryResponse) => {
     pages.current.set(page, res);
@@ -79,7 +90,7 @@ export function useGridData({ tableId, viewId, configKey, search, timeZone, tran
       try {
         const res = await qc.fetchQuery({
           queryKey: pageKey(page),
-          queryFn: ({ signal }) => recordsApi.query(viewId, { offset: page * PAGE_SIZE, limit: PAGE_SIZE, search: search || null, timezone: timeZone, transient }, signal),
+          queryFn: ({ signal }) => (source ? source.fetch(page * PAGE_SIZE, PAGE_SIZE, signal) : recordsApi.query(viewId, { offset: page * PAGE_SIZE, limit: PAGE_SIZE, search: search || null, timezone: timeZone, transient }, signal)),
           staleTime: force ? 0 : 10_000,
         });
         if (gen !== generation.current) return;
@@ -94,7 +105,7 @@ export function useGridData({ tableId, viewId, configKey, search, timeZone, tran
         setLoading(false);
       }
     },
-    [qc, pageKey, viewId, search, timeZone, transient, store, bump],
+    [qc, pageKey, source, viewId, search, timeZone, transient, store, bump],
   );
 
   // A different query (view, filter, sort, search...) starts from scratch.

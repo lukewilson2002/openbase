@@ -562,15 +562,17 @@ Date writes honour the field: a date-only field stores `YYYY-MM-DD`, a field wit
   `POST /api/public/forms/{token}/attachments`; after submitting: the success message, "submit another" and the redirect (http/https only).
   Link and user fields are never collected by public forms (server policy); the builder marks them "Not public", and a preview switch shows
   only what visitors get.
-- **Shared views** are read-only, drawn with the signed-in layout components where they can be given data that is not the signed-in API's
-  (APP-7): the board is `KanbanBoard` with `readOnly` (cards are articles, a stack's header has only its fold), gallery and board cards are
-  `CardBody` (its cover and attachments go through the share, `useCardThumb`, and `CellValue` draws a file through `PublicAttachments` inside
-  a share), the list is `ListOutline` with `canEdit` off, and the timeline is the real chart with every editing gesture off. Two layouts keep
-  a read-only drawing of their own because the signed-in ones are bound to the signed-in record API: the grid (a Glide canvas whose cells,
-  paging and editing are wired to `useGridData`) is a DOM table (group header rows, click a header to sort, paging, search), and the
-  calendar (FullCalendar over `useViewRecords`) is a month grid, one query per month. A board, calendar or timeline whose configured field
-  is hidden in the share falls back to the table and says so. Card titles use the first visible field (the public view does not say which
-  field is primary). Folding a stack or a group is the visitor's own and is saved nowhere.
+- **Shared views** are read-only and drawn by the signed-in layout components, told they only show, over records read from the link
+  (`/api/public/shares/*`) instead of the signed-in API (APP-7): the grid is `GlideGrid` (`PublicGrid`; `canEdit` and `canExpand` off, its
+  pages from `useGridData` through its `source` option, so a long share loads as it is scrolled; a header's menu sorts and a group header
+  folds, both the visitor's own), the board is `KanbanBoard` with `readOnly` (cards are articles, a stack's header has only its fold),
+  gallery and board cards are `CardBody` (its cover and attachments go through the share, `useCardThumb`, and `CellValue` draws a file through
+  `PublicAttachments` inside a share; the grid canvas asks the page for a tile's picture through `thumbUrl`, which is a blob fetched with the
+  password for a protected link), the list is `ListOutline` with `canEdit` off, the calendar is `CalendarSurface` (the surface
+  `CalendarView` draws: header, Month | Week | List, chips, the phone's day sheet) with no editing gesture and no Unscheduled column, one
+  query per stretch of days on screen, and the timeline is the real chart with every editing gesture off. A board, calendar or timeline whose
+  configured field is hidden in the share falls back to the grid and says so. Card titles use the first visible field (the public view does
+  not say which field is primary). Folding a stack or a group is the visitor's own and is saved nowhere.
 - **Attachments of a shared view** are authorised by `?share=<token>`; an `<img>` cannot send `X-Share-Password`, so for protected links the
   page fetches the bytes with the header and shows a blob URL (CSP allows `blob:`); open links use plain URLs.
 - **CSV**: export is `GET /api/views/{id}/export.csv?timezone=` saved from a blob under the server's file name; import maps columns by the
