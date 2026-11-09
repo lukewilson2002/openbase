@@ -62,7 +62,7 @@ test("the shell, its sheets, the collection and the record page fit a phone", as
   // `/` is the last workspace's Home: a capture box that fits the phone, under the header with the switcher, the avatar and the search.
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Note" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Add a task, a note, a meal, anything" })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/workspace/${ws.id}$`));
   await expectFits(page, "home");
   // There is no drawer and no menu button: the bottom navigation is the main menu.

@@ -101,10 +101,12 @@ export default defineConfig({
     // Every route of the signed-in app opens inside the new shell: the sidebar on a desktop, the bottom bar on a phone.
     // Signs up its own users and signs in as the journey's administrator for /admin, so it needs only the instance to be set up.
     { name: "shell-routes", testMatch: /shellRoutes\.spec\.ts$/, use: chrome, dependencies: ["journey"] },
+    // Home: the lists, the capture box with a date chip, the Done checkbox with Undo, the Inbox card and the phone layout. Signs up its own user.
+    { name: "home", testMatch: /home\.spec\.ts$/, use: chrome, dependencies: ["journey"] },
     // The screen ledger's screenshots (docs/plans/ux-overhaul-screenshots): skipped unless LEDGER_SHOTS=1. Signs up its own users.
     { name: "ledger", testMatch: /ledger\.spec\.ts$/, use: chrome, dependencies: ["journey"] },
     // Administration -> Email: changes the instance-wide mail settings and restores them, so it
     // runs after everything else.
-    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views", "date-groups", "oauth", "assistants", "appearance", "mobile", "passkeys", "search", "sidebar", "collection", "linked-records", "record-page", "record-panels", "page-embeds", "record-flows", "shell-routes"] },
+    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views", "date-groups", "oauth", "assistants", "appearance", "mobile", "passkeys", "search", "sidebar", "collection", "linked-records", "record-page", "record-panels", "page-embeds", "record-flows", "shell-routes", "home"] },
   ],
 });

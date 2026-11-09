@@ -143,7 +143,7 @@ const SHOTS: Shot[] = [
     open: async ({ page, seed, phone }) => {
       if (phone) {
         await page.goto(home(seed));
-        await expect(page.getByRole("textbox", { name: "Note" })).toBeVisible();
+        await expect(page.getByRole("textbox", { name: "Add a task, a note, a meal, anything" })).toBeVisible();
         await page.getByRole("main").locator("header").first().getByRole("button", { name: /^Northwind Studio/ }).tap();
         await expect(page.getByRole("dialog", { name: "Switch workspace" }).getByRole("button", { name: "Mark and Jo's household" })).toBeVisible();
         return;
@@ -196,7 +196,7 @@ const SHOTS: Shot[] = [
       } else {
         await expect(page).toHaveURL(new RegExp(`/workspace/${seed.workspaceId}$`));
         await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
-        await expect(page.getByRole("textbox", { name: "Note" })).toBeVisible();
+        await expect(page.getByRole("textbox", { name: "Add a task, a note, a meal, anything" })).toBeVisible();
       }
     },
   },
@@ -221,7 +221,7 @@ const SHOTS: Shot[] = [
     open: async ({ page, seed }) => {
       await page.goto(home(seed));
       await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
-      await expect(page.getByRole("textbox", { name: "Note" })).toBeVisible();
+      await expect(page.getByRole("textbox", { name: "Add a task, a note, a meal, anything" })).toBeVisible();
       await expect(nav(page).getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
     },
   },
