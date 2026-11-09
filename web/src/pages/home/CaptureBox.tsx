@@ -30,6 +30,7 @@ import { restorePhrase, type DateGuess } from "@/lib/dateGuess";
 import { recordPath } from "@/lib/recordPath";
 import { atLeast } from "@/lib/roles";
 import { valueFor } from "@/record/newProperty";
+import { DateChipPicker, type DatePick } from "./DateChipPicker";
 import { AttachmentChips } from "./AttachmentChips";
 import { CollectionPicker } from "./CollectionPicker";
 import { PropertyChip, type PropertyEntry } from "./PropertyChip";
@@ -51,6 +52,10 @@ const NO_DATE: DateState = { committed: null, dismissed: null };
  */
 const REMOVE_BUTTON =
   "relative -mr-1.5 inline-flex size-6 items-center justify-center rounded-pill text-muted hover:bg-hover hover:text-fg max-md:after:absolute max-md:after:-inset-2.5 pointer-coarse:after:absolute pointer-coarse:after:-inset-2.5";
+
+/** The chip's date as a button: a 44 px target on a phone or a finger, the chip around it staying 36 px. */
+const CHANGE_BUTTON =
+  "relative -ml-1 inline-flex h-full items-center rounded-pill px-1 hover:bg-hover max-md:after:absolute max-md:after:-inset-x-1 max-md:after:-inset-y-1 pointer-coarse:after:absolute pointer-coarse:after:-inset-x-1 pointer-coarse:after:-inset-y-1";
 
 export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
   const qc = useQueryClient();
@@ -295,6 +300,15 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
     area.current?.focus();
   };
 
+  /** The chip's date was changed by hand: the words leave the box as they do when it loses focus, and the new date replaces what they said. */
+  const changeDate = (pick: DatePick) => {
+    const base = date.committed ?? pending;
+    if (!base) return;
+    if (!date.committed) setText(base.rest + tail);
+    setDate({ committed: { ...base, kind: "iso", date: pick.date, time: pick.time === undefined ? base.time : pick.time }, dismissed: null });
+    area.current?.focus();
+  };
+
   const taken = new Set<string>([primary?.id, table?.body_field_id, dateField && chip ? dateField.id : undefined, ...extras.flatMap((x) => (x.kind === "field" ? [x.field.id] : []))].filter((x): x is string => !!x));
 
   return (
@@ -340,7 +354,13 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
         />
         {chip && (
           <CaptureChip static>
-            <span>{chip.label}</span>
+            <DateChipPicker label={chip.label} includeTime={!!dateField?.options.include_time} clock={clock} onPick={changeDate}>
+              {(trigger) => (
+                <button type="button" {...trigger} aria-label={`${chip.label}, change date`} className={CHANGE_BUTTON}>
+                  {chip.label}
+                </button>
+              )}
+            </DateChipPicker>
             <button type="button" aria-label={`Remove ${chip.label}`} onClick={removeDate} className={REMOVE_BUTTON}>
               <Icon icon={X} size="sm" />
             </button>

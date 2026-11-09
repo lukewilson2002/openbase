@@ -456,6 +456,40 @@ describe("date chips (HOME-4)", () => {
     expect(created(api).records[0]!.values).toEqual({ fld_name: "Call Dana by Friday" });
   });
 
+  it("changes the date by tapping its chip: typed in the box's words, or picked on the calendar", async () => {
+    const user = userEvent.setup();
+    const api = routes({ "POST /api/tables/tbl1/records": { records: [makeRecord({}, "rec9")] } });
+    await openHome();
+    await screen.findByRole("button", { name: /Goes to Tasks/ });
+    const text = await box();
+    await user.type(text, "Call Dana tomorrow");
+    await user.click(screen.getByRole("button", { name: "Due tomorrow, change date" }));
+    await user.type(await screen.findByLabelText("Date"), "Fri{Enter}");
+    expect(screen.getByText("Due Fri")).toBeInTheDocument();
+    // The words that were read left the box with the first change, and the box has the keyboard back.
+    expect(text).toHaveValue("Call Dana");
+    expect(text).toHaveFocus();
+
+    await user.click(screen.getByRole("button", { name: "Due Fri, change date" }));
+    fireEvent.change(await screen.findByLabelText("Or pick a day"), { target: { value: "2026-11-20" } });
+    expect(await screen.findByText("Due Nov 20")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(created(api)).toBeDefined());
+    expect(created(api).records[0]!.values).toEqual({ fld_name: "Call Dana", fld_due: "2026-11-20" });
+  });
+
+  it("says why a date that was typed in the chip's picker cannot be used, and keeps the old one", async () => {
+    const user = userEvent.setup();
+    routes({});
+    await openHome();
+    await screen.findByRole("button", { name: /Goes to Tasks/ });
+    await user.type(await box(), "Call Dana tomorrow");
+    await user.click(screen.getByRole("button", { name: "Due tomorrow, change date" }));
+    await user.type(await screen.findByLabelText("Date"), "banana{Enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Type a date");
+    expect(screen.getByText("Due tomorrow")).toBeInTheDocument();
+  });
+
   it("keeps the words when the collection has no Home date", async () => {
     const user = userEvent.setup();
     localStorage.setItem("ob-last-capture", JSON.stringify({ wsp1: { baseId: "app1", tableId: "tbl2" } }));
