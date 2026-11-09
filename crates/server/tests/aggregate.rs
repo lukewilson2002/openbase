@@ -849,3 +849,33 @@ async fn thousands_of_records_aggregate_correctly() {
         approx(&aggs(g)["sum_Amount"], *want);
     }
 }
+
+/// F37: the group comparator walks every sort entry whenever two groups tie, so the list is
+/// bounded (one entry per aggregate and group field), and repeats of a key are dropped.
+#[tokio::test]
+async fn the_sort_list_is_bounded_and_repeats_are_dropped() {
+    let p = people().await;
+    let long = |n: usize| json!((0..n).map(|_| json!({ "by": "count" })).collect::<Vec<_>>());
+    let max = openbase::v1::aggregate::MAX_SORTS;
+    let resp = ok(&p.f, json!({ "group_by": ["Status"], "sort": long(max) })).await;
+    assert_eq!(groups(&resp).len(), 4);
+    let m = bad(
+        &p.f,
+        json!({ "group_by": ["Status"], "sort": long(max + 1) }),
+    )
+    .await;
+    assert!(m.contains("at most") && m.contains("sort"), "{m}");
+    // A repeated key changes nothing: same order as the single entry.
+    let once = ok(
+        &p.f,
+        json!({ "group_by": ["Status"], "sort": [{ "by": "count", "direction": "desc" }] }),
+    )
+    .await;
+    let twice = ok(
+        &p.f,
+        json!({ "group_by": ["Status"], "sort": [
+            { "by": "count", "direction": "desc" }, { "by": "count", "direction": "asc" }] }),
+    )
+    .await;
+    assert_eq!(once["groups"], twice["groups"]);
+}

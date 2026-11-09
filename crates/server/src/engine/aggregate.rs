@@ -46,7 +46,7 @@ pub struct Measure {
 }
 
 /// What orders the groups.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OrderKey {
     /// The n-th group-by field.
     Group(usize),

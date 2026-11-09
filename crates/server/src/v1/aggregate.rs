@@ -39,6 +39,8 @@ pub const DEFAULT_LIMIT: usize = 1000;
 pub const MAX_LIMIT: usize = 10_000;
 /// Aggregates per request.
 pub const MAX_AGGREGATES: usize = 20;
+/// Sort entries per request: one per aggregate and one per group field is every key there is.
+pub const MAX_SORTS: usize = MAX_AGGREGATES + MAX_GROUPS;
 /// Longest alias, in characters.
 const MAX_ALIAS: usize = 100;
 /// Names listed in a "valid fields" hint.
@@ -219,7 +221,15 @@ fn plan(fields: &[Field], req: &AggregateRequest) -> V1Result<Plan> {
         measures.push(Measure { alias, func, field });
     }
 
-    let mut order = Vec::new();
+    // The comparator walks every entry whenever two groups tie, so a long list is a cost per
+    // comparison; the limit is checked before any entry is looked at.
+    if req.sort.len() > MAX_SORTS {
+        return Err(V1Error::invalid(format!(
+            "sort can have at most {MAX_SORTS} entries (got {}); one per aggregate and group_by field is enough",
+            req.sort.len()
+        )));
+    }
+    let mut order: Vec<Order> = Vec::new();
     for s in &req.sort {
         let key = if let Some(i) = measures.iter().position(|m| m.alias == s.by) {
             OrderKey::Measure(i)
@@ -240,6 +250,10 @@ fn plan(fields: &[Field], req: &AggregateRequest) -> V1Result<Plan> {
                 valid.join(", ")
             )));
         };
+        // A second entry for a key can never decide a tie the first left open.
+        if order.iter().any(|o| o.key == key) {
+            continue;
+        }
         order.push(Order {
             key,
             direction: s.direction,

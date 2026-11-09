@@ -150,7 +150,8 @@ pub fn definitions() -> Vec<ToolDef> {
                     "filter_by_formula": string("Optional Airtable formula; only records where it is true are included, e.g. {Status}='Done'."),
                     "sort": {
                         "type": "array",
-                        "description": "Optional order of the groups, most important first (default: by the group_by values).",
+                        "description": "Optional order of the groups, most important first (default: by the group_by values). At most 23 entries; one per aggregate and group_by field is enough.",
+                        "maxItems": 23,
                         "items": {
                             "type": "object",
                             "properties": {
