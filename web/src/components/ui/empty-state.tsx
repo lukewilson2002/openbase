@@ -10,15 +10,17 @@ export interface EmptyStateProps {
   description?: ReactNode;
   /** @deprecated Icons mark actions, not places or states (DL-4); drawn small and muted until the screens that pass one are rebuilt. */
   icon?: ReactNode;
+  /** The heading level, h3 under a page's own heading; a screen that is only this says "h1". */
+  as?: "h1" | "h2" | "h3";
   className?: string;
 }
 
 /** What a place shows when it holds nothing: a sentence and one primary action, no illustration. */
-export function EmptyState({ icon, title, description, action, className }: EmptyStateProps) {
+export function EmptyState({ icon, title, description, action, as: Heading = "h3", className }: EmptyStateProps) {
   return (
     <div className={cn("flex flex-col items-center gap-2 px-4 py-10 text-center", className)}>
       {icon && <div className="text-faint [&>svg]:size-5">{icon}</div>}
-      <h3 className="text-h3">{title}</h3>
+      <Heading className="text-h3">{title}</Heading>
       {description && <p className="max-w-md text-label text-muted">{description}</p>}
       {action && <div className="mt-2">{action}</div>}
     </div>

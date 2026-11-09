@@ -15,6 +15,8 @@ export interface ErrorStateProps {
   happened: string;
   /** One sentence on what to do about it. */
   todo: string;
+  /** The whole screen is this message (not found, a crash): it is the page's one h1 and its main landmark. */
+  fullScreen?: boolean;
   className?: string;
 }
 
@@ -22,9 +24,10 @@ export interface ErrorStateProps {
  * The not-found and error screens (APP-17): an EmptyState whose line says what happened and what to do, and whose one
  * action leads Home, which every signed-in person can open.
  */
-export function ErrorState({ title, happened, todo, className }: ErrorStateProps) {
-  return (
+export function ErrorState({ title, happened, todo, fullScreen, className }: ErrorStateProps) {
+  const state = (
     <EmptyState
+      as={fullScreen ? "h1" : "h3"}
       title={title}
       description={`${asSentence(happened)} ${asSentence(todo)}`}
       action={
@@ -35,4 +38,5 @@ export function ErrorState({ title, happened, todo, className }: ErrorStateProps
       className={className}
     />
   );
+  return fullScreen ? <main>{state}</main> : state;
 }

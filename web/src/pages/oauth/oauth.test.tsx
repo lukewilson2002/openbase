@@ -202,7 +202,7 @@ describe("OAuth consent page", () => {
   it("explains an expired or unknown request instead of showing buttons", async () => {
     mockApi({ "GET /api/auth/me": USER, "GET /api/oauth/requests/oar1": apiError(404, "not_found", "authorization request not found") });
     renderApp({ route: ROUTE });
-    expect(await screen.findByText("This request has expired")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "This request has expired" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open OpenBase" })).toBeInTheDocument();
   });

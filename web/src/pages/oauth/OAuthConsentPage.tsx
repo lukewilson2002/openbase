@@ -45,6 +45,7 @@ function Expired({ detail }: { detail?: string }) {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center px-4 py-10">
       <EmptyState
+        as="h1"
         title="This request has expired"
         description={
           <>

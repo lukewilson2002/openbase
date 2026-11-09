@@ -20,7 +20,7 @@ class Boundary extends Component<{ children: ReactNode; resetKey: string }, { fa
 
   override render() {
     if (this.state.failed) {
-      return <ErrorState title="Something went wrong" happened="This page stopped working." todo="Go to Home, or reload the page to try again." className="min-h-dvh justify-center" />;
+      return <ErrorState title="Something went wrong" happened="This page stopped working." todo="Go to Home, or reload the page to try again." fullScreen className="min-h-dvh justify-center" />;
     }
     return this.props.children;
   }

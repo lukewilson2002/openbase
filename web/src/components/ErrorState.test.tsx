@@ -18,7 +18,9 @@ describe("error screens (APP-17)", () => {
   it("an unknown address says what happened and what to do, and leads Home", async () => {
     mockApi({ "GET /api/auth/me": USER });
     renderApp({ route: "/no/such/page" });
-    expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();
+    // A screen of its own: the one h1, inside the one main landmark (A11Y-3).
+    expect(await screen.findByRole("heading", { level: 1, name: "Page not found" })).toBeInTheDocument();
+    expect(screen.getByRole("main")).toContainElement(screen.getByRole("heading", { level: 1 }));
     expect(screen.getByText("That address does not lead anywhere. Check the link, or go to Home and look from there.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/");
   });
@@ -58,7 +60,8 @@ describe("error screens (APP-17)", () => {
       </Routes>,
       "/broken",
     );
-    expect(await screen.findByRole("heading", { name: "Something went wrong" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Something went wrong" })).toBeInTheDocument();
+    expect(screen.getByRole("main")).toBeInTheDocument();
     expect(screen.getByText("This page stopped working. Go to Home, or reload the page to try again.")).toBeInTheDocument();
     await user.click(screen.getByRole("link", { name: "Go to Home" }));
     expect(await screen.findByText("Home page")).toBeInTheDocument();

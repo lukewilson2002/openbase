@@ -108,7 +108,7 @@ export function AppRoutes() {
             />
             <Route
               path="*"
-              element={<ErrorState title="Page not found" happened="That address does not lead anywhere." todo="Check the link, or go to Home and look from there." className="min-h-dvh justify-center" />}
+              element={<ErrorState title="Page not found" happened="That address does not lead anywhere." todo="Check the link, or go to Home and look from there." fullScreen className="min-h-dvh justify-center" />}
             />
           </Routes>
         </Suspense>
