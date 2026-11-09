@@ -25,6 +25,8 @@ export interface SheetProps {
   dismissOnOutsidePress?: boolean;
   /** Replaces where focus goes when the sheet opens (a `data-autofocus` element, else the first field or button). */
   onOpenAutoFocus?: (event: Event) => void;
+  /** Called as the sheet closes, before focus goes back to what opened it; `preventDefault` keeps focus where the caller put it. */
+  onCloseAutoFocus?: (event: Event) => void;
   className?: string;
 }
 
@@ -50,7 +52,7 @@ interface DragState {
  * how fast the finger was moving. Radix supplies the focus trap, Escape, and the return of focus to
  * whatever opened it. With reduced motion it fades for 120 ms instead of sliding (styles/index.css).
  */
-export function Sheet({ open, onOpenChange, title, description, children, footer, doneLabel = "Done", role, dismissOnOutsidePress = true, onOpenAutoFocus, className }: SheetProps) {
+export function Sheet({ open, onOpenChange, title, description, children, footer, doneLabel = "Done", role, dismissOnOutsidePress = true, onOpenAutoFocus, onCloseAutoFocus, className }: SheetProps) {
   const coarse = useMediaQuery(COARSE_POINTER);
   const visible = useVisualViewport(open);
   const content = useRef<HTMLDivElement>(null);
@@ -150,9 +152,12 @@ export function Sheet({ open, onOpenChange, title, description, children, footer
           onInteractOutside={(e) => {
             if (!dismissOnOutsidePress) e.preventDefault();
           }}
-          onCloseAutoFocus={returnFocus.onCloseAutoFocus}
+          onCloseAutoFocus={(e) => {
+            onCloseAutoFocus?.(e);
+            returnFocus.onCloseAutoFocus(e);
+          }}
           onOpenAutoFocus={(e) => {
-            returnFocus.noteOpener();
+            returnFocus.noteOpener(content.current);
             if (host.inline) return e.preventDefault();
             if (onOpenAutoFocus) return onOpenAutoFocus(e);
             e.preventDefault();

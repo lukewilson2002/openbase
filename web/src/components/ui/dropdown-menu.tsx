@@ -113,7 +113,7 @@ export function DropdownMenuContent({ className, style, sideOffset = 4, align = 
   const menu = useContext(OpenContext);
   if (menu?.sheet) {
     return (
-      <SheetMenu open={menu.open} onOpenChange={menu.setOpen} title={props["aria-label"] ?? menu.title}>
+      <SheetMenu open={menu.open} onOpenChange={menu.setOpen} title={props["aria-label"] ?? menu.title} onCloseAutoFocus={props.onCloseAutoFocus}>
         <SheetModeContext value>
           <ul className="flex flex-col py-1.5">{props.children}</ul>
         </SheetModeContext>
@@ -238,6 +238,6 @@ export function DropdownMenuSubContent({ className, style, sideOffset = 4, colli
 }
 
 export function DropdownMenuSeparator({ className, ...props }: ComponentProps<typeof M.Separator>) {
-  if (useContext(SheetModeContext)) return <li role="separator" className="my-1 h-px bg-line" />;
+  if (useContext(SheetModeContext)) return <li aria-hidden className="my-1 h-px bg-line" />;
   return <M.Separator className={cn("-mx-1.5 my-1.5 h-px bg-line", className)} {...props} />;
 }

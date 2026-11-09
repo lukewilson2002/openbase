@@ -45,7 +45,7 @@ export function PopoverContent({ className, style, sideOffset = 6, align = "star
   const asSheet = useContext(SheetContext);
   if (asSheet) {
     return (
-      <Sheet open={asSheet.open} onOpenChange={asSheet.setOpen} title={props["aria-label"] ?? asSheet.title} onOpenAutoFocus={props.onOpenAutoFocus}>
+      <Sheet open={asSheet.open} onOpenChange={asSheet.setOpen} title={props["aria-label"] ?? asSheet.title} onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus}>
         {/* The content's key handling (Enter applies a one-field form) carries over to the sheet. */}
         <div onKeyDown={props.onKeyDown}>{props.children}</div>
       </Sheet>

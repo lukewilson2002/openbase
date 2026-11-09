@@ -17,15 +17,17 @@ export interface PickerShellProps {
   children: ReactNode;
   /** Wider than the default popover, for a list with two lines to a row. */
   wide?: boolean;
+  /** Called as the choices close, before focus goes back to the chip; `preventDefault` leaves it where the caller put it. */
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
-export function PickerShell({ open, onOpenChange, title, trigger, children, wide }: PickerShellProps) {
+export function PickerShell({ open, onOpenChange, title, trigger, children, wide, onCloseAutoFocus }: PickerShellProps) {
   const desktop = useMediaQuery(DESKTOP_QUERY);
   if (!desktop) {
     return (
       <>
         {trigger({ onClick: () => onOpenChange(true), "aria-haspopup": "dialog", "aria-expanded": open })}
-        <Sheet open={open} onOpenChange={onOpenChange} title={title}>
+        <Sheet open={open} onOpenChange={onOpenChange} title={title} onCloseAutoFocus={onCloseAutoFocus}>
           {children}
         </Sheet>
       </>
@@ -34,7 +36,7 @@ export function PickerShell({ open, onOpenChange, title, trigger, children, wide
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{trigger({ "aria-haspopup": "dialog", "aria-expanded": open })}</PopoverTrigger>
-      <PopoverContent className={wide ? "w-80" : undefined} aria-label={title}>
+      <PopoverContent className={wide ? "w-80" : undefined} aria-label={title} onCloseAutoFocus={onCloseAutoFocus}>
         {children}
       </PopoverContent>
     </Popover>

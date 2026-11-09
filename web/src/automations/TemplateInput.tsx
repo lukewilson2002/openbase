@@ -31,6 +31,7 @@ export function TemplateInput({ value, onChange, ctx, label, multiline, rows = 4
   const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
   const selection = useRef<{ start: number | null; end: number | null }>({ start: null, end: null });
   const [open, setOpen] = useState(false);
+  const inserted = useRef(false);
   const remember = () => {
     const el = ref.current;
     if (el) selection.current = { start: el.selectionStart, end: el.selectionEnd };
@@ -40,6 +41,7 @@ export function TemplateInput({ value, onChange, ctx, label, multiline, rows = 4
     const next = insertToken(value, token, selection.current.start, selection.current.end);
     onChange(next.text);
     selection.current = { start: next.caret, end: next.caret };
+    inserted.current = true;
     setOpen(false);
     requestAnimationFrame(() => {
       const el = ref.current;
@@ -71,7 +73,15 @@ export function TemplateInput({ value, onChange, ctx, label, multiline, rows = 4
             <Braces aria-hidden className="size-4" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="max-h-[min(20rem,var(--ob-avail))] w-80 overflow-y-auto p-1" onCloseAutoFocus={(e) => e.preventDefault()}>
+        <PopoverContent
+          align="end"
+          className="max-h-[min(20rem,var(--ob-avail))] w-80 overflow-y-auto p-1"
+          onCloseAutoFocus={(e) => {
+            // A token goes in and the caret follows it into the field; closing without one returns to the button.
+            if (inserted.current) e.preventDefault();
+            inserted.current = false;
+          }}
+        >
           <TokenMenu ctx={ctx} onPick={insert} />
         </PopoverContent>
       </Popover>

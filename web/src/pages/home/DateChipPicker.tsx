@@ -3,7 +3,7 @@
  * typed in the same words the box reads ("Friday", "Nov 14, 3pm") or picked on the calendar; both end as a date guess, so the
  * chip, the stored value and the words that come back when the chip is removed all follow one path.
  */
-import { useId, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { guessDate } from "@/lib/dateGuess";
 import type { YMD } from "@/lib/cells/dates";
 import { Button } from "@/components/ui/button";
@@ -36,14 +36,28 @@ export interface DateChipPickerProps {
 
 export function DateChipPicker({ label, includeTime, clock, onPick, children }: DateChipPickerProps) {
   const [open, setOpen] = useState(false);
+  // A date picked puts the caret back in the capture box (the caller does that); closing without one returns to the chip.
+  const picked = useRef(false);
   return (
-    <PickerShell open={open} onOpenChange={setOpen} title="Change date" trigger={children}>
+    <PickerShell
+      open={open}
+      onOpenChange={(next) => {
+        if (next) picked.current = false;
+        setOpen(next);
+      }}
+      title="Change date"
+      trigger={children}
+      onCloseAutoFocus={(e) => {
+        if (picked.current) e.preventDefault();
+      }}
+    >
       {open && (
         <Body
           label={label}
           includeTime={includeTime}
           clock={clock}
           onPick={(g) => {
+            picked.current = true;
             setOpen(false);
             onPick(g);
           }}

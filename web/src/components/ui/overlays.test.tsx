@@ -497,6 +497,81 @@ describe("returning focus when the content takes focus itself", () => {
   });
 });
 
+describe("a picker that puts focus elsewhere as it closes (PH-5)", () => {
+  it.each([
+    ["Popover on a desktop", true],
+    ["Popover as a sheet on a phone", false],
+  ])("%s leaves focus where the caller put it", async (_name, desktop) => {
+    if (desktop) stubDesktop();
+    const user = userEvent.setup();
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <textarea aria-label="Message" />
+          <Popover open={open} onOpenChange={setOpen} title="Insert data">
+            <PopoverTrigger asChild>
+              <button>Insert data</button>
+            </PopoverTrigger>
+            <PopoverContent
+              aria-label="Insert data"
+              onCloseAutoFocus={(e) => {
+                e.preventDefault();
+                screen.getByLabelText("Message").focus();
+              }}
+            >
+              <button onClick={() => setOpen(false)}>Trigger type</button>
+            </PopoverContent>
+          </Popover>
+        </>
+      );
+    }
+    render(<Harness />);
+    await user.click(screen.getByRole("button", { name: "Insert data" }));
+    await user.click(await screen.findByRole("button", { name: "Trigger type" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByLabelText("Message")).toHaveFocus();
+  });
+});
+
+describe("returning focus to a menu's button (A11Y-1)", () => {
+  // A dialog opened from a menu item notes the item as its opener, and the item is gone by the time the dialog closes.
+  it.each([
+    ["a dropdown on a desktop", true],
+    ["a sheet menu on a phone", false],
+  ])("a dialog opened from %s gives focus back to the button that opened the menu", async (_name, desktop) => {
+    if (desktop) stubDesktop();
+    const user = userEvent.setup();
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <DropdownMenu title="Options">
+            <DropdownMenuTrigger asChild>
+              <button>Row options</button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onSelect={() => setOpen(true)}>Rename</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Dialog open={open} onOpenChange={setOpen} title="Rename it">
+            <input aria-label="Name" />
+          </Dialog>
+        </>
+      );
+    }
+    render(<Harness />);
+    const opener = screen.getByRole("button", { name: "Row options" });
+    opener.focus();
+    await user.keyboard("{Enter}");
+    await user.click(await screen.findByRole(desktop ? "menuitem" : "button", { name: "Rename" }));
+    expect(await screen.findByRole("dialog", { name: "Rename it" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(opener).toHaveFocus();
+  });
+});
+
 describe("ConfirmDialog", () => {
   function Harness({ onConfirm = () => {} }: { onConfirm?: () => void }) {
     const [open, setOpen] = useState(false);
