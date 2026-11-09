@@ -18,6 +18,19 @@ async fn check(f: &Fixture, table_id: &str, body: Value) -> common::Response {
 }
 
 #[tokio::test]
+async fn check_does_not_leave_the_expression_in_the_parse_cache() {
+    // Distinct formulas posted to the check route used to stay cached for the
+    // life of the process, with no limit on their weight (F39).
+    let f = Fixture::new().await;
+    let t = f.table_id.clone();
+    f.create(&t, json!({ &f.primary_id: "first" })).await;
+    let r = check(&f, &t, json!({ "expression": "1 + 31415926" })).await;
+    r.assert_status(200);
+    assert_eq!(r.body["preview"], 31415927);
+    assert!(!openbase::engine::recompute::parse_cache_holds("31415926"));
+}
+
+#[tokio::test]
 async fn check_reports_type_and_previews_the_first_record() {
     let f = Fixture::new().await;
     let t = f.table_id.clone();

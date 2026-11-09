@@ -113,18 +113,76 @@ pub struct Compiled {
     pub uses_modified_time: bool,
 }
 
-static PARSE_CACHE: LazyLock<Mutex<HashMap<String, Arc<Compiled>>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+/// Parsed formulas by source text, and what they weigh. Bounded in entries
+/// and in bytes: a formula may be 10,000 characters and parse to tens of
+/// bytes of tree per character, so a count alone lets distinct long formulas
+/// pin gigabytes.
+struct ParseCache {
+    map: HashMap<String, Arc<Compiled>>,
+    weight: usize,
+}
 
-/// Parse a stored expression (cached by source text).
+const PARSE_CACHE_ENTRIES: usize = 10_000;
+/// Estimated bytes of source plus tree the cache may hold.
+const PARSE_CACHE_BYTES: usize = 64 << 20;
+/// Parsed tree bytes per source byte, rounded up (a node is at least 56 bytes
+/// and a source character makes at most one node in the worst case).
+const TREE_BYTES_PER_SOURCE_BYTE: usize = 32;
+
+impl ParseCache {
+    /// Remembers `compiled`; starts over when either bound would be passed.
+    fn insert(&mut self, expression: &str, compiled: Arc<Compiled>) {
+        let weight = expression.len() * (1 + TREE_BYTES_PER_SOURCE_BYTE);
+        if self.map.len() >= PARSE_CACHE_ENTRIES || self.weight + weight > PARSE_CACHE_BYTES {
+            self.map.clear();
+            self.weight = 0;
+        }
+        if self.map.insert(expression.to_string(), compiled).is_none() {
+            self.weight += weight;
+        }
+    }
+}
+
+static PARSE_CACHE: LazyLock<Mutex<ParseCache>> = LazyLock::new(|| {
+    Mutex::new(ParseCache {
+        map: HashMap::new(),
+        weight: 0,
+    })
+});
+
+/// Parse a stored expression (cached by source text). Only expressions that
+/// are stored in a field belong here; one that was merely submitted for a
+/// check goes through [`compile_uncached`].
 pub fn compile(expression: &str) -> Arc<Compiled> {
     {
         let cache = PARSE_CACHE.lock().unwrap_or_else(|p| p.into_inner());
-        if let Some(c) = cache.get(expression) {
+        if let Some(c) = cache.map.get(expression) {
             return c.clone();
         }
     }
-    let compiled = Arc::new(match Formula::parse(expression) {
+    let compiled = Arc::new(compile_uncached(expression));
+    PARSE_CACHE
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .insert(expression, compiled.clone());
+    compiled
+}
+
+/// Whether any cached expression contains `needle`. For tests that check an
+/// endpoint leaves nothing behind.
+#[doc(hidden)]
+pub fn parse_cache_holds(needle: &str) -> bool {
+    PARSE_CACHE
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .map
+        .keys()
+        .any(|k| k.contains(needle))
+}
+
+/// Parse an expression without remembering it.
+pub fn compile_uncached(expression: &str) -> Compiled {
+    match Formula::parse(expression) {
         Ok(f) => {
             let mut uses_modified_time = false;
             f.expr.walk(&mut |e| {
@@ -147,13 +205,7 @@ pub fn compile(expression: &str) -> Arc<Compiled> {
             volatile: false,
             uses_modified_time: false,
         },
-    });
-    let mut cache = PARSE_CACHE.lock().unwrap_or_else(|p| p.into_inner());
-    if cache.len() > 10_000 {
-        cache.clear();
     }
-    cache.insert(expression.to_string(), compiled.clone());
-    compiled
 }
 
 /// The stored expression of a formula-like field.
@@ -830,7 +882,9 @@ impl<'a> Session<'a> {
     /// Evaluate a stored formula expression for one record without saving
     /// anything (the formula check preview).
     pub fn preview(&mut self, stored_expression: &str, ty: &ResultType, row: &RecordRow) -> Value {
-        let compiled = compile(stored_expression);
+        // Not `compile`: a previewed formula is not stored anywhere, so it
+        // must not take space in the cache that stored ones share.
+        let compiled = compile_uncached(stored_expression);
         match &compiled.formula {
             Some(f) => {
                 let ctx = RecCtx::new(self, row, Value::Null, None);
@@ -1153,6 +1207,42 @@ mod tests {
             stored_json(&Value::Error("#ERROR: x".into())),
             Some(json!({"error": "#ERROR: x"}))
         );
+    }
+
+    fn cached(expression: &str) -> bool {
+        PARSE_CACHE
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .map
+            .contains_key(expression)
+    }
+
+    #[test]
+    fn a_previewed_formula_is_not_cached() {
+        // The formula check parses whatever an Editor submits; nothing stored
+        // refers to it, so it must not stay in the process-wide cache (F39).
+        let src = "1 + 2 + 424242";
+        assert!(compile_uncached(src).formula.is_some());
+        assert!(!cached(src));
+        compile(src);
+        assert!(cached(src));
+    }
+
+    #[test]
+    fn the_parse_cache_is_bounded_by_size_not_only_by_count() {
+        let long = |n: usize| format!("CONCATENATE({})", vec![n.to_string(); 1_400].join(","));
+        let per_entry = long(0).len() * (1 + TREE_BYTES_PER_SOURCE_BYTE);
+        let fits = PARSE_CACHE_BYTES / per_entry;
+        let mut cache = ParseCache {
+            map: HashMap::new(),
+            weight: 0,
+        };
+        for n in 0..=fits * 2 {
+            let src = long(n);
+            cache.insert(&src, Arc::new(compile_uncached(&src)));
+            assert!(cache.weight <= PARSE_CACHE_BYTES);
+            assert!(cache.map.len() <= fits, "{} entries", cache.map.len());
+        }
     }
 
     #[test]
