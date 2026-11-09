@@ -14,6 +14,7 @@ import { useCallback } from "react";
 import { useLocation, useNavigate, type Location } from "react-router";
 import { recordPath } from "@/lib/recordPath";
 import { isRecordPath } from "@/shell/bottomNav";
+import { markOpenedFrom } from "./scrollMemory";
 
 export interface RecordTrail {
   /** The collection screen the first page of the trail was opened from (path and query). */
@@ -91,10 +92,12 @@ export function useRecordNavigation(): RecordNavigation {
   const open = useCallback<RecordNavigation["open"]>(
     (target, options) => {
       const replace = options?.replace ?? false;
+      // The screen it is opened from takes the keyboard back when the way back lands on it (the grid's shortcuts, Ctrl+Z, need its focus).
+      if (!isRecordPath(pathname)) markOpenedFrom(location.key);
       const trail = nextTrail({ pathname, search, state }, options?.fallbackFrom ?? `/base/${target.baseId}/${target.tableId}`, replace, target.recordId, options?.order);
       void navigate(recordPath(target.baseId, target.tableId, target.recordId, target.viewId), { replace, state: { obRecord: trail } satisfies TrailState });
     },
-    [navigate, pathname, search, state],
+    [navigate, pathname, search, state, location.key],
   );
 
   const close = useCallback<RecordNavigation["close"]>(

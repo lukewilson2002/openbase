@@ -46,6 +46,37 @@ export function rememberScroll(entryKey: string, root: ParentNode): void {
   while (spots.size > KEEP) spots.delete(spots.keys().next().value!);
 }
 
+/** The entries a page was opened from: the screen they are shown at again takes the keyboard back (A11Y-1). */
+const opened = new Set<string>();
+
+/** A page is being opened from the screen at this history entry. */
+export function markOpenedFrom(entryKey: string): void {
+  opened.add(entryKey);
+  while (opened.size > KEEP) opened.delete(opened.values().next().value!);
+}
+
+const cells = new Map<string, { col: number; row: number }>();
+
+/** The grid cell that was selected when a page was opened from it, to select again on the way back. */
+export function rememberOpenedCell(entryKey: string, cell: { col: number; row: number }): void {
+  cells.set(entryKey, cell);
+  while (cells.size > KEEP) cells.delete(cells.keys().next().value!);
+}
+
+export function openedCell(entryKey: string): { col: number; row: number } | undefined {
+  return cells.get(entryKey);
+}
+
+/** Whether a page was opened from the screen at this entry. */
+export function wasOpenedFrom(entryKey: string): boolean {
+  return opened.has(entryKey);
+}
+
+/** The screen has taken the keyboard back: that is done once per visit. */
+export function forgetOpenedFrom(entryKey: string): void {
+  opened.delete(entryKey);
+}
+
 /** What was noted for a history entry (for tests). */
 export function scrollMemoryOf(entryKey: string): ReadonlyMap<string, Spot> | undefined {
   return spots.get(entryKey);

@@ -24,7 +24,9 @@ import { FieldEditor } from "@/components/record/editors/FieldEditor";
 import { uploadFiles } from "@/components/record/editors/AttachmentEditor";
 import { FloatingRecordPeek, linkedTableOf, type FloatingPeekTarget } from "@/components/record/linked/LinkedRecords";
 import { rememberNewRecord } from "@/record/newRecords";
+import { useLocation } from "react-router";
 import { useRecordNavigation } from "@/record/navigation";
+import { forgetOpenedFrom, openedCell, rememberOpenedCell, wasOpenedFrom } from "@/record/scrollMemory";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { IconButton } from "@/components/ui/icon-button";
@@ -96,6 +98,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const me = useMe();
   const { resolved, accent } = useTheme();
   const nav = useRecordNavigation();
+  const entry = useLocation().key;
   const timeZone = me.data?.timezone || browserTimeZone();
   const canEdit = atLeast(role, "editor");
   const canManageFields = atLeast(role, "creator");
@@ -605,6 +608,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     (row: number) => {
       const rec = recordAtRow(row);
       if (!rec) return;
+      rememberOpenedCell(entry, { col: selectionRef.current.cell?.col ?? 0, row });
       const made = fresh.current.get(rec.id);
       if (made) {
         expandedRef.current = rec.id;
@@ -612,7 +616,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       }
       openRecord(rec.id);
     },
-    [recordAtRow, openRecord, stack],
+    [recordAtRow, openRecord, stack, entry],
   );
 
   // A linked record's chip under the pointer: its preview floats over it, with Open (the linked record's page).
@@ -656,6 +660,26 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       selectingBySelf.current = false;
     }
   }, []);
+
+  // Back from a record's page the grid has the keyboard again, on the row that was opened, as it did when the record
+  // opened over it: the arrows and Ctrl+Z work at once.
+  useEffect(() => {
+    if (!wasOpenedFrom(entry)) return;
+    let frame = 0;
+    let tries = 0;
+    const restore = () => {
+      const grid = gridRef.current;
+      grid?.focus();
+      // The grid's canvas may not be there yet (its chunk, its rows): keep asking until it has taken the focus.
+      if (grid && document.activeElement instanceof HTMLCanvasElement) {
+        const at = openedCell(entry);
+        if (at) selectQuietly(() => grid.selectCell(at.col, at.row));
+        forgetOpenedFrom(entry);
+      } else if (++tries < 120) frame = requestAnimationFrame(restore);
+    };
+    frame = requestAnimationFrame(restore);
+    return () => cancelAnimationFrame(frame);
+  }, [entry, selectQuietly]);
 
   /** Add a record (into group `group` of the group headers, when given; the end of the table otherwise) and select it. */
   const addRecord = useCallback(

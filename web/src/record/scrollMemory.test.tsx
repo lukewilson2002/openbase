@@ -1,7 +1,7 @@
 import { act, render, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { describe, expect, it } from "vitest";
-import { RestoredScroll } from "./scrollMemory";
+import { RestoredScroll, forgetOpenedFrom, markOpenedFrom, openedCell, rememberOpenedCell, wasOpenedFrom } from "./scrollMemory";
 
 let go: ReturnType<typeof useNavigate>;
 function Nav() {
@@ -57,5 +57,17 @@ describe("the collection screen's scroll across a record page", () => {
     act(() => void go("/list"));
     await act(frame);
     expect(view.getByTestId("list").scrollTop).toBe(0);
+  });
+});
+
+describe("the screen a page was opened from", () => {
+  it("is remembered with the cell that was selected, until it has taken the keyboard back", () => {
+    markOpenedFrom("entry-1");
+    rememberOpenedCell("entry-1", { col: 2, row: 7 });
+    expect(wasOpenedFrom("entry-1")).toBe(true);
+    expect(openedCell("entry-1")).toEqual({ col: 2, row: 7 });
+    expect(wasOpenedFrom("entry-2")).toBe(false);
+    forgetOpenedFrom("entry-1");
+    expect(wasOpenedFrom("entry-1")).toBe(false);
   });
 });

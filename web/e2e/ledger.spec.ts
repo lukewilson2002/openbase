@@ -698,7 +698,7 @@ const SHOTS: Shot[] = [
     name: "file list while editing the Files property",
     open: async ({ page, seed }) => {
       await openAccount(page, seed);
-      await propertyList(page).getByRole("button", { name: "Edit Files" }).click();
+      await propertyList(page).locator("[data-edit-field]", { has: page.getByRole("button", { name: "Edit Files" }) }).click();
       await expect(page.getByRole("button", { name: "Remove brand-guidelines.docx" })).toBeVisible();
       await picturesLoaded(page.locator("body"));
       await restPointer(page);

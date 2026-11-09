@@ -1,5 +1,5 @@
 import type { APIRequestContext, Cookie, Page } from "@playwright/test";
-import { clickGrid, expect, newClientContext, newRecordButton, openRecordId, openRecordPanel, skipIntro, test } from "./fixtures";
+import { clickGrid, expect, newClientContext, newRecordButton, openRecordId, openRecordPanel, skipIntro, test, typeToEdit, undo } from "./fixtures";
 
 /**
  * The record page as a person uses it (REC-1 to REC-10, FLD-1, ledger 18 to 22), one flow per test against a live
@@ -131,6 +131,8 @@ const recordUrl = (recordId: string, viewId = fx.gridId) => `/base/${fx.baseId}/
 const main = (page: Page) => page.getByRole("main", { name: "Record" });
 const title = (page: Page) => main(page).getByRole("heading", { level: 1 });
 const properties = (page: Page) => main(page).getByRole("region", { name: "Properties" });
+/** The area of a value: it takes the click that starts an edit, and holds the value. The "Edit" button inside it is for the keyboard and is not drawn. */
+const valueArea = (page: Page, property: string) => properties(page).locator("[data-edit-field]", { has: page.getByRole("button", { name: `Edit ${property}` }) });
 const canvas = (page: Page) => page.locator("canvas[data-testid='data-grid-canvas']").first();
 
 async function record(page: Page, recordId: string): Promise<{ values: Record<string, unknown> }> {
@@ -183,6 +185,44 @@ test.describe("on a desktop", () => {
     await expect(dialog).toHaveCount(0);
   });
 
+  test("Escape from a page lands the grid where it was scrolled to (PH-4), and Ctrl+Z still reverts an edit made before the page was opened", async ({ page }) => {
+    // A collection long enough to scroll, of its own so no other test sees its records.
+    const long = await call<TableDto>(page.request, "post", `/api/bases/${fx.baseId}/tables`, { name: "Long list" });
+    try {
+      const made = await call<{ records: { id: string }[] }>(page.request, "post", `/api/tables/${long.id}/records`, {
+        typecast: true,
+        records: Array.from({ length: 120 }, (_, i) => ({ values: { [long.primary_field_id]: `Row ${String(i).padStart(3, "0")}` } })),
+      });
+      // A grid with the fixture's geometry, to click cells by position.
+      const view = await call<{ id: string }>(page.request, "post", `/api/tables/${long.id}/views`, { name: "Grid", type: "grid", config: { field_widths: { [long.primary_field_id]: NAME_W } } });
+      await page.goto(`/base/${fx.baseId}/${long.id}/${view.id}`);
+      const scroller = page.locator(".dvn-scroller").first();
+      await expect(canvas(page)).toBeVisible();
+      const box = await canvas(page).boundingBox();
+      // An edit first, so there is something to undo after the round trip: the second row, by typing into its cell.
+      await clickGrid(page, box!.x + MARKER_W + 100, box!.y + HEADER_H + 20);
+      await typeToEdit(page, "Edited");
+      await page.keyboard.press("Enter");
+      await expect.poll(async () => (await call<{ values: Record<string, unknown> }>(page.request, "get", `/api/tables/${long.id}/records/${made.records[0]!.id}`)).values[long.primary_field_id]).toBe("Edited");
+      await scroller.evaluate((el) => void (el.scrollTop = 1800));
+      await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(1500);
+      const left = await scroller.evaluate((el) => el.scrollTop);
+      await clickGrid(page, box!.x + MARKER_W + 100, box!.y + HEADER_H + 20);
+      await page.keyboard.press("Shift+Space");
+      await expect(page).toHaveURL(/\/r\/rec/);
+      await expect(title(page)).toHaveText(/^Row \d{3}$/);
+      await page.keyboard.press("Escape");
+      await expect(canvas(page)).toBeVisible();
+      await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(left - 5);
+      expect(await scroller.evaluate((el) => el.scrollTop)).toBeLessThan(left + 5);
+      // The history survived the page: Ctrl+Z puts the first row's name back.
+      await undo(page);
+      await expect.poll(async () => (await call<{ values: Record<string, unknown> }>(page.request, "get", `/api/tables/${long.id}/records/${made.records[0]!.id}`)).values[long.primary_field_id]).toBe("Row 000");
+    } finally {
+      await page.request.delete(`/api/tables/${long.id}`, { headers: CSRF });
+    }
+  });
+
   test("Alt+Down and Alt+Up step through the records of the view the page was opened from", async ({ page }) => {
     await page.goto(recordUrl(fx.records[0]!));
     await expect(title(page)).toHaveText("Harper & Co");
@@ -212,12 +252,12 @@ test.describe("on a desktop", () => {
     await expect(title(page)).toHaveText("Juniper Labs");
     // A value is text until it is clicked, then its editor, and Enter keeps it.
     await expect(properties(page).locator("dt")).toHaveText(["Status", "Retainer"]);
-    await properties(page).getByRole("button", { name: "Edit Retainer" }).click();
+    await valueArea(page, "Retainer").click();
     const retainer = properties(page).getByRole("textbox", { name: "Retainer" });
     await retainer.fill("4500");
     await retainer.press("Enter");
     await expect.poll(() => value(page, fx.records[2]!, fx.retainerField)).toBe(4500);
-    await expect(properties(page).getByRole("button", { name: "Edit Retainer" })).toContainText("4500");
+    await expect(valueArea(page, "Retainer")).toContainText("4500");
     // The title is the h1, edited in place: Enter saves it and moves on to the page.
     const name = main(page).getByRole("textbox", { name: "Name" });
     await name.fill("Juniper Labs Ltd");
@@ -228,7 +268,7 @@ test.describe("on a desktop", () => {
     // And it is what a reload shows.
     await page.reload();
     await expect(title(page)).toHaveText("Juniper Labs Ltd");
-    await expect(properties(page).getByRole("button", { name: "Edit Retainer" })).toContainText("4500");
+    await expect(valueArea(page, "Retainer")).toContainText("4500");
   });
 
   test("Add property takes a name and a value, guesses the type from the value and sets this record's value", async ({ page }) => {
