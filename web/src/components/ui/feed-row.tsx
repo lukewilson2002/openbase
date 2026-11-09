@@ -48,7 +48,8 @@ export function FeedRow({ leading, title, meta, metaHue, metaMarkName, wrapMeta,
       className={cn("relative flex min-h-row-feed items-center gap-3 px-2 max-md:min-h-row-feed-phone", wrapMeta && "py-2", openable && "hover:bg-hover", className)}
       {...props}
     >
-      {leading != null && <div className="relative z-10 flex shrink-0 items-center">{leading}</div>}
+      {/* A 44 px column on a phone (PH-6), so a 16 px checkbox in it is still a target. */}
+      {leading != null && <div className="relative z-10 flex shrink-0 items-center max-md:min-w-control-touch max-md:justify-center max-md:self-stretch">{leading}</div>}
       {href ? (
         <a
           href={href}

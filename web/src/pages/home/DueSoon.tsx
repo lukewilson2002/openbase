@@ -91,7 +91,7 @@ export function DueSoon({ workspaceId, home }: { workspaceId: string; home: Home
                   leading={
                     <span className="flex size-8 items-center justify-center max-md:size-control-touch">
                       {row.has_done ? (
-                        <Checkbox checked={false} disabled={!row.can_edit} onCheckedChange={() => check(row)} label={<span className="sr-only">Mark {row.title || "this record"} done</span>} className="max-md:size-full max-md:justify-center" />
+                        <Checkbox checked={false} disabled={!row.can_edit} onCheckedChange={() => check(row)} label={<span className="sr-only">Mark {row.title || "this record"} done</span>} className="max-md:size-full max-md:justify-center max-md:gap-0" />
                       ) : (
                         <Icon icon={CalendarDays} className="text-muted" />
                       )}

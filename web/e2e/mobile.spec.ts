@@ -381,3 +381,116 @@ test("on a phone a hold on a card opens its action sheet, a selection is a count
     await expect(alpha).toBeVisible();
   });
 });
+
+/**
+ * PH-4: Back from a record page lands each layout at the place it was left. A collection long enough to scroll, shown as a
+ * list, a gallery and a board; each is scrolled, a card in view is opened, and the way back (the header's link) finds the same
+ * scroll and the same card on screen.
+ */
+test("on a phone Back from a record lands the list, the gallery and the board where they were left (PH-4)", async ({ page }) => {
+  test.setTimeout(120_000);
+  const email = `e2e-mobile-ph4-${randomBytes(4).toString("hex")}@example.com`;
+  const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
+  expect(signup.ok(), await signup.text()).toBeTruthy();
+  await skipIntro(page.request);
+  const ws = await (await page.request.post("/api/workspaces", { data: { name: "Back workspace" }, headers: CSRF })).json();
+  const base = await (await page.request.post(`/api/workspaces/${ws.id}/bases`, { data: { name: "Back base" }, headers: CSRF })).json();
+  const table = base.tables[0] as { id: string; primary_field_id: string; name: string };
+  const status = await (
+    await page.request.post(`/api/tables/${table.id}/fields`, { data: { name: "Status", type: "single_select", options: { choices: [{ id: "", name: "Todo", color: "gray" }, { id: "", name: "Done", color: "green" }] } }, headers: CSRF })
+  ).json();
+  const choices = status.options.choices as { id: string; name: string }[];
+  const records = Array.from({ length: 60 }, (_, i) => ({ values: { [table.primary_field_id]: `Item ${String(i + 1).padStart(2, "0")}`, [status.id]: choices[i % 2]!.id } }));
+  for (let i = 0; i < records.length; i += 10) {
+    const res = await page.request.post(`/api/tables/${table.id}/records`, { data: { records: records.slice(i, i + 10) }, headers: CSRF });
+    expect(res.ok(), await res.text()).toBeTruthy();
+  }
+  const sorts = [{ field_id: table.primary_field_id, direction: "asc" }];
+  const views: Record<string, string> = {};
+  for (const [name, type, config] of [
+    ["Outline", "list", { sorts }],
+    ["Cards", "gallery", { sorts }],
+    ["Board", "kanban", { sorts, kanban_stack_field_id: status.id }],
+  ] as const) {
+    const made = await page.request.post(`/api/tables/${table.id}/views`, { data: { name, type, personal: false, config }, headers: CSRF });
+    expect(made.ok(), await made.text()).toBeTruthy();
+    views[name] = ((await made.json()) as { id: string }).id;
+  }
+
+  // The scroller that holds the records: the first of these that has somewhere to scroll.
+  const SCROLLERS = '[data-scroll-restore="list"], [data-scroll-restore="frame"], [data-scroll-restore^="stack:"], [data-scroll-root]';
+  const spot = () =>
+    page.evaluate((sel) => {
+      const el = [...document.querySelectorAll<HTMLElement>(sel)].find((e) => e.scrollHeight - e.clientHeight > 150);
+      return el ? { top: Math.round(el.scrollTop), name: el.getAttribute("data-scroll-restore") ?? "page" } : null;
+    }, SCROLLERS);
+  const scrollDown = () =>
+    page.evaluate((sel) => {
+      const el = [...document.querySelectorAll<HTMLElement>(sel)].find((e) => e.scrollHeight - e.clientHeight > 150)!;
+      el.scrollTop = 700;
+    }, SCROLLERS);
+
+  for (const name of ["Outline", "Cards", "Board"]) {
+    await test.step(`${name}: scroll, open a record, go Back`, async () => {
+      await page.goto(`/base/${base.id}/${table.id}/${views[name]}`);
+      await expect(page.getByText("Item 01").first()).toBeVisible();
+      await expect.poll(spot, "the layout has to scroll for this test").not.toBeNull();
+      await scrollDown();
+      await expect.poll(async () => (await spot())?.top ?? 0).toBeGreaterThan(300);
+      const left = (await spot())!;
+      // A record in view that is not under the header: the first whose top edge is clear of it.
+      const title = await page.evaluate(() => {
+        const cards = [...document.querySelectorAll<HTMLElement>("[data-record-id], [role=treeitem]")];
+        const card = cards.find((c) => c.getBoundingClientRect().top > 160 && c.getBoundingClientRect().bottom < innerHeight - 100 && /Item \d\d/.test(c.textContent ?? ""));
+        return card ? /Item \d\d/.exec(card.textContent ?? "")![0] : null;
+      });
+      expect(title, "a record in view").not.toBeNull();
+      await page.getByText(title!, { exact: true }).first().tap();
+      await expect(page).toHaveURL(/\/r\/rec/);
+      await expect(page.getByRole("heading", { level: 1, name: title! })).toBeVisible();
+      await page.getByRole("main").locator("header").getByRole("link", { name: new RegExp(`^Back to ${table.name}`) }).tap();
+      await expect(page).toHaveURL(new RegExp(`/${views[name]}$`));
+      await expect.poll(async () => Math.abs(((await spot())?.top ?? 0) - left.top), `${name} is back where it was`).toBeLessThanOrEqual(6);
+      await expect(page.getByText(title!, { exact: true }).first()).toBeVisible();
+    });
+  }
+});
+
+/**
+ * PH-3: what was a pop-over is a bottom sheet on a phone. A property's choices (a record page), the type of a new property,
+ * a dropdown menu (a view's "More" in the form builder, here the record page's More) and a filter's suggestions.
+ */
+test("on a phone a property's choices and the record's More menu open as bottom sheets, never as pop-overs (PH-3)", async ({ page }) => {
+  const email = `e2e-mobile-ph3-${randomBytes(4).toString("hex")}@example.com`;
+  const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
+  expect(signup.ok(), await signup.text()).toBeTruthy();
+  await skipIntro(page.request);
+  const ws = await (await page.request.post("/api/workspaces", { data: { name: "Sheet workspace" }, headers: CSRF })).json();
+  const base = await (await page.request.post(`/api/workspaces/${ws.id}/bases`, { data: { name: "Sheet base" }, headers: CSRF })).json();
+  const table = base.tables[0] as { id: string; primary_field_id: string };
+  const status = await (
+    await page.request.post(`/api/tables/${table.id}/fields`, { data: { name: "Status", type: "single_select", options: { choices: [{ id: "", name: "Todo", color: "gray" }, { id: "", name: "Done", color: "green" }] } }, headers: CSRF })
+  ).json();
+  const made = await (await page.request.post(`/api/tables/${table.id}/records`, { data: { records: [{ values: { [table.primary_field_id]: "Pick me" } }] }, headers: CSRF })).json();
+  await page.goto(`/base/${base.id}/${table.id}/r/${made.records[0].id}`);
+  await expect(page.getByRole("heading", { level: 1, name: "Pick me" })).toBeVisible();
+
+  await test.step("the choices of a property are a sheet, and picking one saves it", async () => {
+    // The label opens the property's own menu and the value opens its choices: the value is the second of the two.
+    await page.getByRole("button", { name: "Status", exact: true }).last().tap();
+    const sheet = page.getByRole("dialog", { name: "Status" });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByRole("button", { name: "Todo" })).toBeVisible();
+    // A sheet rests on the bottom of the screen and is as wide as it, with a grab handle: not a floating panel.
+    const box = (await sheet.boundingBox())!;
+    expect(box.x).toBeLessThanOrEqual(1);
+    expect(box.y + box.height).toBeGreaterThan(viewport.height - 2);
+    await sheet.getByRole("button", { name: "Todo" }).tap();
+    await expect(sheet).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Status", exact: true }).last()).toContainText("Todo");
+  });
+
+  await test.step("nothing on the screen is a pop-over while a sheet is open", async () => {
+    await expect(page.locator("[data-radix-popper-content-wrapper]")).toHaveCount(0);
+  });
+});

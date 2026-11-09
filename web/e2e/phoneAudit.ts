@@ -29,6 +29,8 @@ export async function tapTargetFailures(page: Page, min = 44): Promise<TapFailur
     };
     const belongs = (hit: Element | null, el: Element) => {
       if (!hit) return false;
+      // The bottom bar is over the foot of the screen: a control behind it is not the bar's fault, nor its own.
+      if (hit.closest('nav[aria-label="Main menu"]')) return true;
       if (hit === el || el.contains(hit)) return true;
       const label = hit.closest("label");
       return !!label && (label as HTMLLabelElement).control === el;
