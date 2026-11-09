@@ -91,6 +91,9 @@ const HEADER_MENU_WIDTH = 30;
 /** The primary field's pin button, just left of the header menu button. */
 const PIN_BUTTON_SIZE = 32;
 const PIN_BUTTON_GAP = 4;
+/** The pin button is drawn 32 px square and pressed in 44: 12 px more to its left, 6 px more above and below. */
+const PIN_TOUCH_REACH = 12;
+const PIN_TOUCH_SIZE = 44;
 
 /** Glide draws overlay editors into #portal; the app shell has none, so create it once. */
 function ensurePortal(): void {
@@ -694,12 +697,15 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
           aria-label={pin.pinned ? `Unpin the ${primary.title} column` : `Pin the ${primary.title} column so it stays on screen`}
           title={pin.pinned ? `Unpin the ${primary.title} column` : `Pin the ${primary.title} column`}
           className={cn(
-            "pointer-events-auto absolute flex items-center justify-center rounded-lg hover:bg-hover focus-visible:outline-2 focus-visible:outline-ring",
+            "group/pin pointer-events-auto absolute flex items-center justify-end focus-visible:outline-2 focus-visible:outline-ring",
             pin.pinned ? "text-primary-text" : "text-muted",
           )}
-          style={{ left: pinLeft, top: (headerHeight - PIN_BUTTON_SIZE) / 2, width: PIN_BUTTON_SIZE, height: PIN_BUTTON_SIZE }}
+          // A 44 px target (PH-6): the 32 px square that is drawn sits at its right, and the rest reaches into the title.
+          style={{ left: pinLeft - PIN_TOUCH_REACH, top: (headerHeight - PIN_TOUCH_SIZE) / 2, width: PIN_BUTTON_SIZE + PIN_TOUCH_REACH, height: PIN_TOUCH_SIZE }}
         >
-          <Pin aria-hidden className="size-4" fill={pin.pinned ? "currentColor" : "none"} />
+          <span className="flex items-center justify-center rounded-lg group-hover/pin:bg-hover" style={{ width: PIN_BUTTON_SIZE, height: PIN_BUTTON_SIZE }}>
+            <Pin aria-hidden className="size-4" fill={pin.pinned ? "currentColor" : "none"} />
+          </span>
         </button>
       </div>
     )}

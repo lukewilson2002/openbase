@@ -193,7 +193,7 @@ export function FilterBar({ chips, onRemoveChip, text, onTextChange, suggestions
             if (e.currentTarget.contains(e.target as Node) && !(e.target as HTMLElement).closest("button")) input.current?.focus();
           }}
           className={cn(
-            "flex min-h-control-md min-w-0 flex-1 cursor-text flex-wrap items-center gap-1.5 rounded-md border border-line-strong bg-surface py-1 pl-2.5 pr-2 max-md:min-h-control-touch",
+            "flex min-h-control-md min-w-0 flex-1 cursor-text flex-wrap items-center gap-1.5 rounded-md border border-line-strong bg-surface py-1 pl-2.5 pr-2 max-md:min-h-control-touch max-md:py-0",
             // 2 px in all: the 1 px border plus an inset ring of 1 px, so the field does not change size.
             "focus-within:border-primary focus-within:ring-1 focus-within:ring-inset focus-within:ring-primary",
             className,
@@ -268,7 +268,7 @@ export function FilterBar({ chips, onRemoveChip, text, onTextChange, suggestions
             }}
             onKeyDown={onKeyDown}
             // 16 px on touch: anything smaller makes iOS zoom the page on focus.
-            className="h-7 min-w-24 flex-1 bg-transparent text-ui outline-none placeholder:text-faint max-md:text-read-phone"
+            className="h-7 min-w-24 flex-1 bg-transparent text-ui outline-none placeholder:text-faint max-md:h-control-touch max-md:text-read-phone"
           />
           <span role="status" aria-live="polite" className="sr-only">
             {status}

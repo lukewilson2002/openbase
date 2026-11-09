@@ -29,7 +29,8 @@ export function CaptureChip({ children, dashed = false, static: fixed = false, h
     <button
       type={type}
       className={cn(
-        "inline-flex h-control-sm shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border px-3 text-label font-medium transition-colors max-md:h-9",
+        // 36 px on a phone, with the press area widened to 44 (PH-6) by the layer over it: the gap between chips is wider than what it takes.
+        "relative inline-flex h-control-sm shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border px-3 text-label font-medium transition-colors max-md:h-9 max-md:after:absolute max-md:after:-inset-y-1 max-md:after:inset-x-0",
         dashed ? "border-dashed border-line-strong bg-transparent text-muted hover:bg-hover hover:text-fg" : "border-line bg-subtle text-fg hover:bg-hover",
         "disabled:pointer-events-none disabled:opacity-50",
         className,

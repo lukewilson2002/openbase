@@ -142,7 +142,7 @@ function ExternalDocLink({ href, children }: { href: string; children: ReactNode
 function TokenDisclosure({ children }: { children: ReactNode }) {
   return (
     <Collapsible.Root className="group/token">
-      <Collapsible.Trigger className="inline-flex items-center gap-1 rounded text-meta font-medium text-muted hover:text-fg">
+      <Collapsible.Trigger className="relative inline-flex items-center gap-1 rounded text-meta font-medium text-muted hover:text-fg max-md:after:absolute max-md:after:-inset-y-3.5 max-md:after:inset-x-0">
         <ChevronDown aria-hidden className="size-3.5 -rotate-90 transition-transform group-data-[state=open]/token:rotate-0" />
         Use a token instead
       </Collapsible.Trigger>

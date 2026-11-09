@@ -150,7 +150,7 @@ function TitleInput({ field, record, format, save, autoFocus, onEnter, onEscapeW
             }
           }}
           // The heading carries the title's size and weight; the box takes them over so the caret and the text agree.
-          className="m-0 block w-full resize-none overflow-hidden border-0 bg-transparent p-0 font-[inherit] leading-[inherit] tracking-[inherit] text-fg placeholder:text-faint"
+          className="m-0 block w-full resize-none overflow-hidden border-0 bg-transparent p-0 max-md:-my-2 max-md:py-2 font-[inherit] leading-[inherit] tracking-[inherit] text-fg placeholder:text-faint"
         />
       </h1>
       {error && (

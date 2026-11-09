@@ -38,13 +38,13 @@ export function ActivityCard({ group, fields, format, now, topLevel }: ActivityC
   return (
     <Card padded={false} className="overflow-hidden">
       <article aria-label={`Activity on ${name}`}>
-        <header className="min-w-0 border-b border-line px-4 py-3">
+        <header className="min-w-0 border-b border-line px-4 py-3 max-md:py-1">
           {record.deleted ? (
             <p className="min-w-0 break-words text-ui font-semibold text-muted">
               <span className="line-through">{name}</span> <span className="text-label font-normal">(deleted)</span>
             </p>
           ) : (
-            <Link to={`/base/${encodeURIComponent(place.base_id)}/${encodeURIComponent(place.table_id)}/r/${encodeURIComponent(record.id)}`} className="block min-w-0 break-words text-ui font-semibold text-fg hover:underline">
+            <Link to={`/base/${encodeURIComponent(place.base_id)}/${encodeURIComponent(place.table_id)}/r/${encodeURIComponent(record.id)}`} className="block min-w-0 break-words text-ui font-semibold text-fg hover:underline max-md:py-3">
               {name}
             </Link>
           )}

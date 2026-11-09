@@ -340,7 +340,7 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
           setFocused(false);
           settle();
         }}
-        className="block max-h-60 w-full resize-none bg-transparent text-capture text-fg outline-none placeholder:text-faint max-md:text-capture-phone"
+        className="block max-h-60 w-full resize-none bg-transparent max-md:-my-2.5 max-md:py-2.5 text-capture text-fg outline-none placeholder:text-faint max-md:text-capture-phone"
       />
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <CollectionPicker

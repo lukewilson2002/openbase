@@ -94,7 +94,7 @@ export function TrashPage() {
           {KIND_CHIPS.map((c) => {
             const on = c.kind === kind;
             return (
-              <Button key={c.label} size="sm" variant={on ? "soft" : "secondary"} aria-pressed={on} onClick={() => update({ kind: c.kind })} className="rounded-pill">
+              <Button key={c.label} size="sm" variant={on ? "soft" : "secondary"} aria-pressed={on} onClick={() => update({ kind: c.kind })} className="rounded-pill max-md:min-w-control-touch">
                 {c.label}
               </Button>
             );

@@ -58,7 +58,8 @@ export function Switch({ checked, onCheckedChange, label, disabled, className }:
         checked={checked}
         disabled={disabled}
         onCheckedChange={onCheckedChange}
-        className="relative h-5 w-9 shrink-0 rounded-full bg-line-strong transition-colors data-[state=checked]:bg-primary disabled:opacity-50"
+        // On a phone the layer over it makes the press area 48 x 44 even when the label is only for screen readers (PH-6).
+        className="relative h-5 w-9 shrink-0 rounded-full bg-line-strong transition-colors data-[state=checked]:bg-primary disabled:opacity-50 max-md:after:absolute max-md:after:-inset-x-1.5 max-md:after:-inset-y-3"
       >
         <S.Thumb className="block size-4 translate-x-0.5 rounded-full bg-paper shadow transition-transform data-[state=checked]:translate-x-[18px]" />
       </S.Root>

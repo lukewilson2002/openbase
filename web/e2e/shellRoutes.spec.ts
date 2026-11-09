@@ -1,6 +1,7 @@
 import type { APIRequestContext, Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { expect, newClientContext, skipIntro, test } from "./fixtures";
+import { pageOverflow, tapTargetFailures } from "./phoneAudit";
 
 /**
  * Every route of the spec's Routes table that exists so far opens inside the new shell, in a real browser at both
@@ -184,10 +185,19 @@ for (const [sizeName, viewport, phone] of SIZES) {
         await test.step("no error screen, and no horizontal scroll on a phone", async () => {
           await expect(page.getByText(/Page not found|Something went wrong/)).toHaveCount(0);
           if (phone) {
-            const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-            expect(overflow, "the page is wider than the screen").toBeLessThanOrEqual(0);
+            const overflow = await pageOverflow(page);
+            expect(overflow.page, "the page is wider than the screen").toBeLessThanOrEqual(0);
+            // PH-7: only a table, a board or a timeline scrolls sideways, inside its own box.
+            expect(overflow.elements, "something pokes past the screen with no scroller of its own").toEqual([]);
           }
         });
+
+        if (phone) {
+          await test.step("every control is a 44 px target (PH-6)", async () => {
+            await page.waitForLoadState("networkidle");
+            expect(await tapTargetFailures(page), "controls smaller than 44 x 44 px that nothing widens").toEqual([]);
+          });
+        }
         await context.close();
       });
     }
