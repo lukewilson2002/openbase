@@ -83,7 +83,8 @@ export function useMentionPicker(editor: TiptapEditor | null, people: readonly M
     if (!editor?.isInitialized || editor.isDestroyed || !people) return;
     const dom = editor.view.dom;
     dom.setAttribute("aria-autocomplete", "list");
-    dom.setAttribute("aria-expanded", String(open));
+    // Not `aria-expanded`: a textbox may not carry it. The list is said by the popup the editor controls and its active option.
+    dom.setAttribute("aria-haspopup", "listbox");
     if (open) {
       dom.setAttribute("aria-controls", listId);
       dom.setAttribute("aria-activedescendant", `${listId}-${active}`);

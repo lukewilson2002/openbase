@@ -51,7 +51,7 @@ export function openTargetOf(m: RecordCellModel): string | null {
   }
 }
 
-function drawRating(args: DrawArgs<ObCell>, m: RecordCellModel, active: boolean): void {
+function drawRating(args: DrawArgs<ObCell>, m: RecordCellModel, active: boolean, dark: boolean): void {
   const { ctx, rect, theme } = args;
   if (m.field.type !== "rating") return;
   const value = typeof m.value === "number" ? m.value : 0;
@@ -59,7 +59,7 @@ function drawRating(args: DrawArgs<ObCell>, m: RecordCellModel, active: boolean)
   const r = 7;
   const step = 17;
   const cy = rect.y + rect.height / 2;
-  const tint = ratingColor(color);
+  const tint = ratingColor(color, dark);
   let hover = -1;
   if (active && args.hoverX !== undefined) hover = Math.min(max, Math.max(1, Math.floor((args.hoverX - theme.cellHorizontalPadding) / step) + 1));
   const shown = hover > 0 ? hover : value;
@@ -205,7 +205,7 @@ function drawRecordCell(args: DrawArgs<ObCell>, m: RecordCellModel, rc: Renderer
       drawAttachments(args, m);
       break;
     case "rating":
-      drawRating(args, m, args.highlighted && !m.readOnly);
+      drawRating(args, m, args.highlighted && !m.readOnly, rc.dark);
       break;
     case "button": {
       if (!m.display) break;

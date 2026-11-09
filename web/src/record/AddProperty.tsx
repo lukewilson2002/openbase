@@ -129,7 +129,7 @@ export function AddProperty({ schema, table, env, save, onSetup, openRequest = 0
 
   if (!open) {
     return (
-      <Button ref={opener} variant="ghost" size="sm" className="mt-2 -ml-2 self-start text-muted hover:text-fg" onClick={() => setOpen(true)}>
+      <Button ref={opener} id="add-property" variant="ghost" size="sm" className="mt-2 -ml-2 self-start text-muted hover:text-fg" onClick={() => setOpen(true)}>
         <Icon icon={Plus} /> Add property
       </Button>
     );

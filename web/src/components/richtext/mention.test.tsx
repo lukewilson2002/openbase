@@ -63,7 +63,10 @@ describe("mentions in the rich text editor", () => {
     expect(picker()).not.toBeInTheDocument();
     type(" @");
     expect(optionNames()).toEqual([expect.stringContaining("Ada Lovelace"), expect.stringContaining("Grace Hopper"), expect.stringContaining("Alan Turing")]);
-    expect(box).toHaveAttribute("aria-expanded", "true");
+    // A textbox may not carry aria-expanded (axe: aria-allowed-attr); the open list is its popup and active option.
+    expect(box).not.toHaveAttribute("aria-expanded");
+    expect(box).toHaveAttribute("aria-controls", picker()!.id);
+    expect(box).toHaveAttribute("aria-haspopup", "listbox");
     type("a");
     // Names containing "a", emails starting with it.
     expect(optionNames()).toEqual([expect.stringContaining("Ada Lovelace"), expect.stringContaining("Grace Hopper"), expect.stringContaining("Alan Turing")]);
@@ -71,7 +74,8 @@ describe("mentions in the rich text editor", () => {
     expect(optionNames()).toEqual([expect.stringContaining("Alan Turing")]);
     await userEvent.keyboard("{Enter}");
     expect(picker()).not.toBeInTheDocument();
-    expect(box).toHaveAttribute("aria-expanded", "false");
+    expect(box).not.toHaveAttribute("aria-expanded");
+    expect(box).not.toHaveAttribute("aria-controls");
     expect(onMarkdown).toHaveBeenLastCalledWith("Hello @[Alan Turing](usr3)");
     // Typing goes on after the chip and its space.
     type("thanks");

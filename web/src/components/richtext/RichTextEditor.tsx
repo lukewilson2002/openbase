@@ -153,7 +153,7 @@ export function RichTextEditor({ value, onChange, onBlur, autoFocus, fullScreen,
             title="Open full screen"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => setExpanded(true)}
-            className="pointer-events-auto absolute bottom-2 right-2 inline-flex size-8 pointer-coarse:size-10 items-center justify-center rounded-md border border-line bg-surface text-muted shadow-pop hover:bg-hover hover:text-fg"
+            className="pointer-events-auto absolute bottom-2 right-2 inline-flex size-8 max-md:size-control-touch pointer-coarse:size-control-touch items-center justify-center rounded-md border border-line bg-surface text-muted shadow-pop hover:bg-hover hover:text-fg"
           >
             <Maximize2 aria-hidden className="size-4" />
           </button>

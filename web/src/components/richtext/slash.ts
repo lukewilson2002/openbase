@@ -101,13 +101,15 @@ export const SlashSuggest = Extension.create<SlashSuggestOptions>({
 
 export interface LinkShortcutOptions {
   onLink: () => void;
+  /** Alt+F10 (the toolbar convention): moves into the selection bubble. Answers whether there was one to move into. */
+  onToolbar: () => boolean;
 }
 
 export const LinkShortcut = Extension.create<LinkShortcutOptions>({
   name: "linkShortcut",
 
   addOptions() {
-    return { onLink: () => {} };
+    return { onLink: () => {}, onToolbar: () => false };
   },
 
   addKeyboardShortcuts() {
@@ -116,6 +118,6 @@ export const LinkShortcut = Extension.create<LinkShortcutOptions>({
       return true;
     };
     // Both work on every keyboard, as they do for the palette (people switch machines).
-    return { "Ctrl-k": run, "Meta-k": run };
+    return { "Ctrl-k": run, "Meta-k": run, "Alt-F10": () => this.options.onToolbar() };
   },
 });

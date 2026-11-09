@@ -73,7 +73,15 @@ export function PageEditor({ value, onChange, onBlur, autoFocus, upload, people,
       // The selection stays drawn while the link address is typed outside the text.
       Selection,
       SlashSuggest.configure({ onKeyDown: (e) => cb.current.slashKey(e) }),
-      LinkShortcut.configure({ onLink: () => setLinkOpen(true) }),
+      LinkShortcut.configure({
+        onLink: () => setLinkOpen(true),
+        // Where the keyboard goes to reach the selection bubble's buttons (A11Y-1).
+        onToolbar: () => {
+          const first = box.current?.querySelector<HTMLElement>('[role="toolbar"] button');
+          first?.focus();
+          return !!first;
+        },
+      }),
     ],
     [canMention],
   );

@@ -154,7 +154,7 @@ describe("adding", () => {
     const b = await open();
     await userEvent.type(b.getByRole("textbox", { name: "Name" }), "Stage");
     await userEvent.type(b.getByRole("textbox", { name: "Value" }), "Harper{Enter}");
-    expect(await screen.findByRole("button", { name: "Edit Stage" })).toHaveTextContent("Harper");
+    expect((await screen.findByRole("button", { name: "Edit Stage" })).closest("[data-edit-field]")).toHaveTextContent("Harper");
     await waitFor(() => expect(screen.getByRole("button", { name: "Add property" })).toHaveFocus());
   });
 });

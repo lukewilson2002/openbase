@@ -4,7 +4,7 @@
  * can move it, so the selection and the on-screen keyboard stay where they are. The link address is the one thing
  * typed outside the text, in a small form that appears in the bubble (desktop) or on top of the bar (phone).
  */
-import { useId, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import type { Editor } from "@tiptap/core";
 import { NodeSelection } from "@tiptap/pm/state";
 import { useEditorState } from "@tiptap/react";
@@ -157,6 +157,12 @@ const LINK_WIDTH = 360;
 /** Bold, italic, strike, code and link over the selected text. With Ctrl+K and no selection only the link form shows, at the caret. */
 export function SelectionBubble({ editor, box, linkOpen, onLinkOpenChange }: SelectionBubbleProps) {
   const marks = useMarks(editor);
+  // The keyboard can move into the bubble (Alt+F10), which takes the focus from the text; it stays while it has it.
+  const [inside, setInside] = useState(false);
+  // The link form's input goes away without a blur when it is done with: whatever had the focus in here is over.
+  useEffect(() => {
+    if (!linkOpen) setInside(false);
+  }, [linkOpen]);
   const sel = useEditorState({
     editor,
     selector: ({ editor: e }) => {
@@ -165,7 +171,7 @@ export function SelectionBubble({ editor, box, linkOpen, onLinkOpenChange }: Sel
       return { from: selection.from, to: selection.to, selectable, focused: e.isFocused };
     },
   });
-  if (!box.current || !(linkOpen || (sel.focused && sel.selectable))) return null;
+  if (!box.current || !(linkOpen || ((sel.focused || inside) && sel.selectable))) return null;
 
   const width = linkOpen ? LINK_WIDTH : BUBBLE_WIDTH;
   const rect = box.current.getBoundingClientRect();
@@ -193,6 +199,28 @@ export function SelectionBubble({ editor, box, linkOpen, onLinkOpenChange }: Sel
       // A press on the bubble's own padding is not a press on the text either.
       onMouseDown={(e) => {
         if (!(e.target instanceof HTMLInputElement)) e.preventDefault();
+      }}
+      onFocus={() => setInside(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setInside(false);
+      }}
+      onKeyDown={(e) => {
+        if (linkOpen) return;
+        if (e.key === "Escape") {
+          // Back to the text, with the selection as it was.
+          e.preventDefault();
+          e.stopPropagation();
+          editor.commands.focus();
+          return;
+        }
+        // The arrows walk along the buttons, as in any toolbar.
+        const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        if (!step) return;
+        const buttons = Array.from(e.currentTarget.querySelectorAll<HTMLElement>("button"));
+        const at = buttons.indexOf(document.activeElement as HTMLElement);
+        if (at < 0) return;
+        e.preventDefault();
+        buttons[(at + step + buttons.length) % buttons.length]?.focus();
       }}
       className="absolute z-30 max-w-[calc(100%-0.5rem)] rounded-lg border border-line bg-surface p-1 shadow-pop"
     >

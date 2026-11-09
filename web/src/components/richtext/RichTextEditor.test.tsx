@@ -42,6 +42,12 @@ describe("RichTextEditor", () => {
     expect(names).toEqual(["Text style", "Bold", "Italic", "Strikethrough", "Code", "Link", "Bulleted list", "Numbered list", "Task list", "Indent", "Outdent", "Quote", "Callout", "Code block", "Table", "Horizontal rule"]);
   });
 
+  it("has buttons of 44 px on a phone (the comment box in its full-screen sheet), as the page's formatting bar has", async () => {
+    render(<Host onMarkdown={vi.fn()} />);
+    const bar = await screen.findByRole("toolbar", { name: "Formatting" });
+    for (const b of within(bar).getAllByRole("button")) expect(b, b.getAttribute("aria-label") ?? "").toHaveClass("max-md:size-control-touch", "pointer-coarse:size-control-touch");
+  });
+
   it("reports Markdown from toolbar buttons and keeps the editor focused", async () => {
     const onMarkdown = vi.fn();
     render(<Host initial="word" onMarkdown={onMarkdown} />);

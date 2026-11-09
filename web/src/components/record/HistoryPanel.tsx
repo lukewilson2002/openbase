@@ -108,7 +108,8 @@ export function HistoryPanel({ tableId, recordId, fields, format }: HistoryPanel
   const entries = (history.data ?? []).slice().sort((a, b) => b.created_at - a.created_at || b.id - a.id);
   if (entries.length === 0) return <EmptyState title="No changes recorded yet." />;
   return (
-    <ul aria-label="Revision history" className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+    // A scroll box with nothing to focus in it cannot be scrolled from the keyboard: it takes the focus itself.
+    <ul aria-label="Revision history" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto overscroll-contain focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring">
       {entries.map((e) => (
         <Entry key={e.id} entry={e} fields={fields} format={format} />
       ))}

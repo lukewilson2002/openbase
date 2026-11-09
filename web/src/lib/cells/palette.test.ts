@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { COLORS } from "@/lib/colors";
-import { PALETTE, mixColors, paletteColor, ratingColor, swatchColor } from "./palette";
+import { PALETTE, contrastRatio, mixColors, paletteColor, ratingColor, ratingTint, swatchColor } from "./palette";
 
 describe("canvas palette", () => {
   it("matches the .choice-* classes in the stylesheet for every colour", () => {
@@ -33,6 +33,22 @@ describe("canvas palette", () => {
     }
     expect(swatchColor("red_dark")).toBe(PALETTE.red_dark!.bg);
     expect(swatchColor(undefined)).toBe(swatchColor("gray"));
+  });
+
+  it("draws a rating icon that stands out from the surface in both themes", () => {
+    // 3:1 is the bar for the parts of a control that carry its meaning (WCAG 1.4.11). The dark theme once got the
+    // light theme's dark brown for yellow, 1.6:1 against its surface.
+    for (const c of COLORS) {
+      for (const surface of ["#232833", "#1a1e26", "#12151b"]) expect(contrastRatio(ratingColor(c, true), surface), `${c} on ${surface}`).toBeGreaterThanOrEqual(3);
+    }
+    expect(contrastRatio(ratingColor("yellow", true), "#1a1e26")).toBeGreaterThan(contrastRatio(ratingColor("yellow"), "#1a1e26"));
+    // The pale pill colours are what shows on a dark surface; the saturated ones are only lifted as far as they must be.
+    expect(ratingColor("yellow", true)).toBe(PALETTE.yellow!.bg);
+    expect(ratingColor("red_dark", true)).not.toBe(PALETTE.red_dark!.bg);
+  });
+
+  it("gives the DOM both tints at once, for the page's theme to pick", () => {
+    expect(ratingTint("yellow")).toBe(`light-dark(${ratingColor("yellow")}, ${ratingColor("yellow", true)})`);
   });
 
   it("mixes colours and picks a readable rating tint", () => {

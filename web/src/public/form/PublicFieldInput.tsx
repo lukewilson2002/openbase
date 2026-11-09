@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
-import { ratingColor } from "@/lib/cells/palette";
+import { ratingTint } from "@/lib/cells/palette";
 import { choicesOfInput, controlKindOf, dateOptionsOfInput, ratingMaxOfInput, type FormInput } from "@/lib/forms/publicValues";
 
 /** Largest file a public form accepts (`PUBLIC_UPLOAD_MAX`; the server may allow less). */
@@ -170,7 +170,7 @@ function PublicRating({ field, value, disabled, onChange }: { field: PublicFormF
   const max = ratingMaxOfInput(field);
   const opts = field.options as { icon?: string; color?: string } | null;
   const Icon = opts?.icon === "heart" ? Heart : Star;
-  const tint = ratingColor(opts?.color ?? "yellow");
+  const tint = ratingTint(opts?.color ?? "yellow");
   return (
     <div role="radiogroup" aria-label={field.label} className="flex items-center gap-1">
       {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
@@ -183,9 +183,9 @@ function PublicRating({ field, value, disabled, onChange }: { field: PublicFormF
           aria-label={`${n} of ${max}`}
           // Choosing the current rating again clears it.
           onClick={() => onChange(n === value ? 0 : n)}
-          className="rounded p-1 hover:bg-hover"
+          className="inline-flex size-8 items-center justify-center rounded hover:bg-hover max-md:size-control-touch"
         >
-          <Icon aria-hidden className="size-6" style={{ color: tint }} fill={n <= value ? tint : "none"} />
+          <Icon aria-hidden className="size-6" style={{ color: tint }} fill={n <= value ? "currentColor" : "none"} />
         </button>
       ))}
     </div>

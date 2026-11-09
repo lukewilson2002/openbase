@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Heart, Star } from "lucide-react";
 import type { Field } from "@/api/types";
 import { cn } from "@/lib/cn";
-import { ratingColor } from "@/lib/cells/palette";
+import { ratingTint } from "@/lib/cells/palette";
 import type { FieldEditorCallbacks } from "./env";
 
 export interface RatingEditorProps extends FieldEditorCallbacks {
@@ -31,7 +31,7 @@ export function RatingEditor({ field, value, variant, bare, initialText, onChang
   if (field.type !== "rating") return null;
   const { icon, color } = field.options;
   const current = draft ?? (typeof value === "number" ? value : 0);
-  const tint = ratingColor(color);
+  const tint = ratingTint(color);
   const Icon = icon === "heart" ? Heart : Star;
   /** A click on a star: the one that is the rating already clears it. */
   const set = (n: number) => onCommit({ json: n === current ? null : n });
@@ -73,8 +73,8 @@ export function RatingEditor({ field, value, variant, bare, initialText, onChang
       className={cn("flex items-center gap-1 rounded-sm bg-surface px-2 py-1", variant === "cell" ? "border-2 border-primary shadow-pop" : bare ? "min-h-8 rounded-md border border-transparent bg-transparent pointer-coarse:min-h-11" : "min-h-8 border border-line-strong rounded-md")}
     >
       {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
-        <button key={n} type="button" role="radio" aria-checked={n === current} aria-label={`${n} of ${max}`} onClick={() => set(n)} className="rounded p-0.5 hover:bg-hover">
-          <Icon aria-hidden className="size-5" style={{ color: tint }} fill={n <= current ? tint : "none"} />
+        <button key={n} type="button" role="radio" aria-checked={n === current} aria-label={`${n} of ${max}`} onClick={() => set(n)} className="inline-flex size-6 items-center justify-center rounded hover:bg-hover pointer-coarse:size-control-touch max-md:size-control-touch">
+          <Icon aria-hidden className="size-5" style={{ color: tint }} fill={n <= current ? "currentColor" : "none"} />
         </button>
       ))}
     </div>

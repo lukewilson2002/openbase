@@ -96,7 +96,8 @@ describe("on a desktop", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Comments (2)" }));
     await userEvent.click(screen.getByRole("button", { name: "History" }));
     const panel = await screen.findByRole("complementary", { name: "History" });
-    expect(await within(panel).findByRole("list", { name: "Revision history" })).toBeInTheDocument();
+    // The list scrolls and has nothing to focus in it, so it takes the focus itself (axe: scrollable-region-focusable).
+    expect(await within(panel).findByRole("list", { name: "Revision history" })).toHaveAttribute("tabindex", "0");
     expect(stored()).toBe("history");
     await userEvent.click(screen.getByRole("button", { name: "Close history" }));
     await waitFor(() => expect(screen.queryByRole("complementary")).not.toBeInTheDocument());
@@ -146,6 +147,18 @@ describe("on a phone", () => {
     await userEvent.click(await screen.findByRole("button", { name: "History" }));
     const sheet = await screen.findByRole("dialog", { name: "History" });
     expect(await within(sheet).findByRole("list", { name: "Revision history" })).toBeInTheDocument();
+  });
+
+  it("gives the focus back to More when the History sheet it opened is closed (the row that opened it is gone)", async () => {
+    renderRecordPage({ table, record, routes, phone: true });
+    await ready();
+    const more = screen.getByRole("button", { name: "More" });
+    await userEvent.click(more);
+    await userEvent.click(await screen.findByRole("button", { name: "History" }));
+    await screen.findByRole("dialog", { name: "History" });
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "History" })).not.toBeInTheDocument());
+    await waitFor(() => expect(more).toHaveFocus());
   });
 
   it("does not remember a sheet, so a page never opens covered", async () => {

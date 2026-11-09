@@ -41,7 +41,7 @@ import { applyLink, currentLink, linkAddress, removeLink } from "./links";
 const KEEP_GRID_EDITOR = "click-outside-ignore";
 
 const btn =
-  "inline-flex size-8 pointer-coarse:size-10 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-hover hover:text-fg " +
+  "inline-flex size-8 max-md:size-control-touch pointer-coarse:size-control-touch shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-hover hover:text-fg " +
   "disabled:pointer-events-none disabled:opacity-40 aria-pressed:bg-primary aria-pressed:text-primary-fg data-[state=open]:bg-hover";
 
 /** Keeps the editor's selection and keyboard when a toolbar control is pressed. */

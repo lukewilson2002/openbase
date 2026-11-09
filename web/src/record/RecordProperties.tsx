@@ -200,6 +200,15 @@ export interface RecordPropertiesProps {
   addPropertyRequest?: number;
 }
 
+/**
+ * Puts the keyboard back on a property's name once the dialog or the question opened from its menu is gone (A11Y-1).
+ * The menu item that opened it left with the menu, so nothing else remembers the place; the dialog's own focus
+ * hand-back runs in a timeout of its own, hence the wait.
+ */
+function focusLabelLater(fieldId: string | undefined) {
+  setTimeout(() => requestAnimationFrame(() => document.getElementById(fieldId ? `property-${fieldId}` : "add-property")?.focus()), 0);
+}
+
 export function RecordProperties({ schema, table, record, view, role, env, emails, save, layout, titleMode, justCreated, addPropertyRequest }: RecordPropertiesProps) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -276,10 +285,27 @@ export function RecordProperties({ schema, table, record, view, role, env, email
         </>
       )}
       {atLeast(role, "creator") && <AddProperty schema={schema} table={table} env={env} save={save} openRequest={addPropertyRequest} onSetup={(name, type) => setDialog({ mode: "create", name, type })} />}
-      {dialog && <FieldDialog state={dialog} schema={schema} table={table} onOpenChange={(open) => !open && setDialog(null)} />}
+      {dialog && (
+        <FieldDialog
+          state={dialog}
+          schema={schema}
+          table={table}
+          onOpenChange={(open) => {
+            if (open) return;
+            const field = dialog.mode === "edit" ? dialog.field : undefined;
+            setDialog(null);
+            focusLabelLater(field?.id);
+          }}
+        />
+      )}
       <ConfirmDialog
         open={!!deleting}
-        onOpenChange={(o) => !o && setDeleting(null)}
+        onOpenChange={(o) => {
+          if (o) return;
+          const field = deleting;
+          setDeleting(null);
+          if (field) focusLabelLater(field.id);
+        }}
         title={`Delete property “${deleting?.name ?? ""}”?`}
         description="The property and its values are removed from every view and every record. You can bring it back from the trash."
         confirmLabel="Delete property"

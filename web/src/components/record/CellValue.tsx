@@ -9,7 +9,7 @@ import { cn } from "@/lib/cn";
 import { attachmentRefs, displayShapeOf } from "@/lib/cells/kinds";
 import { chipItems, displayText, isFormulaError, type FormatCtx } from "@/lib/cells/format";
 import { hrefFor, isSafeLink } from "@/lib/cells/text";
-import { ratingColor } from "@/lib/cells/palette";
+import { ratingTint } from "@/lib/cells/palette";
 import { Markdown } from "./Markdown";
 import { AttachmentThumb } from "./editors/AttachmentEditor";
 import { Pill } from "./editors/ChoiceEditor";
@@ -62,11 +62,11 @@ export function CellValue({ field, value, format, emails, className, markdown = 
     case "rating": {
       if (field.type !== "rating" || typeof value !== "number" || value <= 0) return wrap(empty);
       const Icon = field.options.icon === "heart" ? Heart : Star;
-      const tint = ratingColor(field.options.color);
+      const tint = ratingTint(field.options.color);
       return wrap(
         <span className="inline-flex gap-0.5" role="img" aria-label={`${value} of ${field.options.max}`}>
           {Array.from({ length: value }, (_, i) => (
-            <Icon key={i} aria-hidden className="size-4" style={{ color: tint }} fill={tint} />
+            <Icon key={i} aria-hidden className="size-4" style={{ color: tint }} fill="currentColor" />
           ))}
         </span>,
       );
@@ -121,7 +121,7 @@ export function CellValue({ field, value, format, emails, className, markdown = 
       if (!text) return wrap(empty);
       return wrap(
         href ? (
-          <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 break-all">
+          <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-6 items-center gap-1 break-all max-md:min-h-control-touch">
             {text}
             <ExternalLink aria-hidden className="size-3 shrink-0" />
           </a>

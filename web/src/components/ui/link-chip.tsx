@@ -33,6 +33,9 @@ export function LinkChip({ name, hue, markName, onOpen, href, onRemove, classNam
     </>
   );
   const part = "inline-flex min-w-0 items-center gap-1.5 truncate";
+  // What opens something is at least 24 px tall on a desktop and 44 on a phone (A11Y-6, PH-6), inside the 1 px
+  // border; a chip that only shows a name stays a line of text.
+  const target = "min-h-6 max-md:min-h-control-touch";
   return (
     <span className={cn("inline-flex max-w-full items-center rounded-sm border border-line bg-bg text-meta font-medium text-fg", className)}>
       {href ? (
@@ -49,19 +52,19 @@ export function LinkChip({ name, hue, markName, onOpen, href, onRemove, classNam
                 }
               : undefined
           }
-          className={cn(part, "rounded-sm px-1.5 py-px hover:bg-hover")}
+          className={cn(part, target, "rounded-sm px-1.5 hover:bg-hover")}
         >
           {body}
         </a>
       ) : onOpen ? (
-        <button type="button" onClick={onOpen} className={cn(part, "rounded-sm px-1.5 py-px hover:bg-hover")}>
+        <button type="button" onClick={onOpen} className={cn(part, target, "rounded-sm px-1.5 hover:bg-hover")}>
           {body}
         </button>
       ) : (
         <span className={cn(part, "px-1.5 py-px")}>{body}</span>
       )}
       {onRemove && (
-        <button type="button" aria-label={`Remove ${label}`} onClick={onRemove} className="relative mr-1 shrink-0 rounded-xs text-muted hover:bg-hover hover:text-fg after:absolute after:-inset-1.5 max-md:after:-inset-3">
+        <button type="button" aria-label={`Remove ${label}`} onClick={onRemove} className="inline-flex size-6 shrink-0 items-center justify-center rounded-xs text-muted hover:bg-hover hover:text-fg max-md:size-control-touch">
           <Icon icon={X} size="sm" />
         </button>
       )}

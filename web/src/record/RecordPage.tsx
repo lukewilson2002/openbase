@@ -30,7 +30,6 @@ import { displayText, linkedColorIn, type FormatCtx } from "@/lib/cells/format";
 import { personColors } from "@/lib/colors";
 import { recordPath } from "@/lib/recordPath";
 import { atLeast } from "@/lib/roles";
-import { useUndoScope } from "@/lib/undo/registry";
 import { copyToClipboard } from "@/lib/format";
 import { SheetModeContext } from "@/shell/menuItems";
 import { PhoneBackLink, PhoneHeader, type PhoneAction } from "@/shell/PhoneHeader";
@@ -89,8 +88,6 @@ function escapeIsTaken(e: KeyboardEvent): boolean {
 
 export function RecordPage({ schema, table, role, recordId, layoutView = null, prevId = null, nextId = null, onNavigate, onClose, collectionHref, back, onOpenLinked, emails, timeZone, currentUserId, collaborators }: RecordPageProps) {
   const desktop = useMediaQuery(DESKTOP_QUERY);
-  // The collection's undo history waits while a page is open from it.
-  useUndoScope(schema.id);
   const qc = useQueryClient();
   const toast = useToast();
   const panelId = useId();
@@ -269,7 +266,7 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
       setTimeout(wait, 50);
       return;
     }
-    const target = root?.querySelector<HTMLElement>("[data-edit-field][tabindex='0']");
+    const target = root?.querySelector<HTMLElement>("[data-edit-trigger]");
     if (target) target.focus();
     else if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   }, []);
@@ -347,7 +344,18 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
       </div>
       {!desktop && (
         <>
-          <Dialog open={panel !== null} onOpenChange={(o) => !o && setPanel(null)} title={panelTitle} flush>
+          <Dialog
+            open={panel !== null}
+            onOpenChange={(o) => {
+              if (o) return;
+              const wasHistory = panel === "history";
+              setPanel(null);
+              // History is opened from a row of the More sheet, which is gone by now: the keyboard picks up at the button that opened that.
+              if (wasHistory) setTimeout(() => requestAnimationFrame(() => document.querySelector<HTMLElement>("header button[aria-label='More']")?.focus()), 0);
+            }}
+            title={panelTitle}
+            flush
+          >
             {panelContent}
           </Dialog>
           <SheetMenu open={moreOpen} onOpenChange={setMoreOpen} title="Record" doneLabel={null}>

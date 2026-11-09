@@ -191,14 +191,15 @@ export function useSlashMenu(editor: Editor | null, ctx: SlashContext, box: RefO
     const dom = editor.view.dom;
     if (open) {
       dom.setAttribute("aria-autocomplete", "list");
-      dom.setAttribute("aria-expanded", "true");
+      // `aria-expanded` is not allowed on a textbox: that the list is up is said by the popup it controls and its active option.
+      dom.setAttribute("aria-haspopup", "listbox");
       dom.setAttribute("aria-controls", listId);
       if (nav.index >= 0) dom.setAttribute("aria-activedescendant", `${listId}-${nav.index}`);
     } else if (dom.getAttribute("aria-controls") === listId) {
       // Only undo what this list set: the mention list uses the same attributes while it is the one showing.
       dom.removeAttribute("aria-controls");
       dom.removeAttribute("aria-activedescendant");
-      dom.setAttribute("aria-expanded", "false");
+      dom.removeAttribute("aria-haspopup");
     }
   }, [editor, open, listId, nav.index]);
 

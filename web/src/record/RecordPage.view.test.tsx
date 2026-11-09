@@ -68,7 +68,10 @@ function setup(over: Partial<RecordPageProps> = {}, routes: Record<string, unkno
   return { api, props };
 }
 
-const area = (field: string) => screen.findByRole("button", { name: `Edit ${field}` });
+/** The button a keyboard or screen reader uses to edit a value. */
+const trigger = (field: string) => screen.findByRole("button", { name: `Edit ${field}` });
+/** The value area itself: it tints, takes the click, and holds the value and the links in it (not inside the button). */
+const area = async (field: string) => (await trigger(field)).closest("[data-edit-field]") as HTMLElement;
 const row = (name: string) => within(screen.getByRole("region", { name: "Properties" })).getByText(name, { selector: "dt *" }).closest("dt")!.parentElement as HTMLElement;
 
 describe("RecordPage: view mode", () => {
@@ -93,8 +96,13 @@ describe("RecordPage: view mode", () => {
     setup();
     const name = await area("Company");
     expect(name).toHaveClass("hover:bg-hover", "cursor-text", "min-h-8", "pointer-coarse:min-h-11");
-    expect(name).toHaveAttribute("tabindex", "0");
-    expect(screen.getByRole("button", { name: "Edit Status" })).toHaveClass("cursor-pointer");
+    // A real button for the keyboard, beside the value and not around it, so links in a value stay controls of their own.
+    const button = await trigger("Company");
+    expect(button.tagName).toBe("BUTTON");
+    expect(button).toHaveAttribute("type", "button");
+    expect(name).not.toHaveAttribute("role");
+    expect(name).not.toHaveAttribute("tabindex");
+    expect(await area("Status")).toHaveClass("cursor-pointer");
     // A computed field has no button, no tint.
     expect(within(row("Created")).queryByRole("button", { name: /^Edit / })).not.toBeInTheDocument();
     expect(row("Created").querySelector("dd")!.innerHTML).not.toContain("hover:bg-hover");
@@ -112,11 +120,11 @@ describe("RecordPage: view mode", () => {
 
   it("enters the edit from the keyboard with Enter or Space", async () => {
     setup();
-    (await area("Company")).focus();
+    (await trigger("Company")).focus();
     await userEvent.keyboard("{Enter}");
     expect(await screen.findByRole("textbox", { name: "Company" })).toHaveFocus();
     await userEvent.keyboard("{Escape}");
-    const back = await area("Company");
+    const back = await trigger("Company");
     expect(back).toHaveFocus();
     await userEvent.keyboard(" ");
     expect(await screen.findByRole("textbox", { name: "Company" })).toHaveFocus();
@@ -167,7 +175,7 @@ describe("RecordPage: view mode", () => {
     await userEvent.click(await area("Company"));
     await userEvent.type(await screen.findByRole("textbox", { name: "Company" }), " changed");
     await userEvent.keyboard("{Escape}");
-    expect(await area("Company")).toHaveFocus();
+    expect(await trigger("Company")).toHaveFocus();
     expect(within(row("Company")).getByText("Acme")).toBeInTheDocument();
     expect(props.onClose).not.toHaveBeenCalled();
     await new Promise((r) => setTimeout(r, 50));
@@ -235,13 +243,13 @@ describe("RecordPage: view mode", () => {
     await waitFor(() => expect(row("Notes").querySelector(".ProseMirror")).toHaveFocus());
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(within(row("Notes")).queryByRole("toolbar", { name: "Formatting" })).not.toBeInTheDocument());
-    expect(await area("Notes")).toHaveFocus();
+    expect(await trigger("Notes")).toHaveFocus();
     expect(within(row("Notes")).getByRole("link", { name: "docs" })).toBeInTheDocument();
     // Multiline text: the same, and what was typed stays.
     await userEvent.click(await area("Plain notes"));
     await userEvent.type(await screen.findByRole("textbox", { name: "Plain notes" }), " and two");
     await userEvent.keyboard("{Escape}");
-    expect(await area("Plain notes")).toHaveFocus();
+    expect(await trigger("Plain notes")).toHaveFocus();
     expect(within(row("Plain notes")).getByText(/line one and two/)).toBeInTheDocument();
     expect(props.onClose).not.toHaveBeenCalled();
   });
@@ -275,7 +283,7 @@ describe("RecordPage: view mode", () => {
     await userEvent.click(await area("Status"));
     await screen.findByRole("listbox", { name: "Status" });
     await userEvent.keyboard("{Escape}");
-    expect(await area("Status")).toHaveFocus();
+    expect(await trigger("Status")).toHaveFocus();
     expect(props.onClose).not.toHaveBeenCalled();
     expect(api.callsTo(PATCH)).toHaveLength(0);
   });

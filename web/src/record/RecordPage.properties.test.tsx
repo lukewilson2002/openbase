@@ -61,7 +61,7 @@ describe("the empty properties fold", () => {
     await userEvent.click(fold);
     expect(screen.getByRole("button", { name: "Hide 2 empty properties" })).toHaveAttribute("aria-expanded", "true");
     expect(labels()).toEqual(["Status", "Company", "Phone", "Notes"]);
-    expect(within(screen.getByRole("button", { name: "Edit Phone" })).getByText("Empty")).toBeInTheDocument();
+    expect(within(screen.getByRole("button", { name: "Edit Phone" }).closest("[data-edit-field]") as HTMLElement).getByText("Empty")).toBeInTheDocument();
   });
 
   it("is kept on this device: a page opened later has it open, and closing it is remembered too", async () => {
@@ -125,7 +125,7 @@ describe("the hidden properties fold", () => {
     expect(screen.queryByText("hush")).not.toBeInTheDocument();
     await userEvent.click(fold);
     expect(labels()).toEqual(["Status", "Company", "Secret", "Internal"]);
-    expect(within(screen.getByRole("button", { name: "Edit Secret" })).getByText("hush")).toBeInTheDocument();
+    expect(within(screen.getByRole("button", { name: "Edit Secret" }).closest("[data-edit-field]") as HTMLElement).getByText("hush")).toBeInTheDocument();
     // The Page is never one of them.
     expect(screen.queryByText("Page")).not.toBeInTheDocument();
   });
@@ -232,6 +232,30 @@ describe("a property's name", () => {
     expect(items[2]).toHaveAttribute("aria-disabled", "true");
     expect(items[3]).toHaveAttribute("aria-disabled", "true");
     expect(screen.queryByRole("menuitem", { name: /Hide from pages/ })).not.toBeInTheDocument();
+  });
+
+  it("hands the focus back to the property's name when the dialog opened from its menu closes with Escape", async () => {
+    renderRecordPage({ table, record, layout });
+    await ready();
+    const name = screen.getByRole("button", { name: "Company" });
+    await userEvent.click(name);
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Edit property" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(name).toHaveFocus());
+  });
+
+  it("does the same when the question to delete it is answered No", async () => {
+    renderRecordPage({ table, record, layout });
+    await ready();
+    const name = screen.getByRole("button", { name: "Company" });
+    await userEvent.click(name);
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Delete property" }));
+    await screen.findByRole("alertdialog");
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(name).toHaveFocus());
   });
 
   it("Use as title makes it the primary property, and the record's head then shows its value", async () => {

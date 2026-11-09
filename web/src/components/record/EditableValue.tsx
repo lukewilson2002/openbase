@@ -2,9 +2,10 @@
  * One field's value in the expanded record: shown rendered (the grid's read renderer, `CellValue`)
  * until it is clicked, then replaced by the field's form editor, focused and ready.
  *
- * - Where the field is editable the value area is a button (`role="button"`, "Edit Notes", the value
- *   as its description): hovering it tints it, a click, Enter or Space starts the edit. Clicks on links,
- *   buttons, players and files inside the rendered value do their own thing and start nothing.
+ * - Where the field is editable the value area tints on hover and a click on it starts the edit; for the keyboard
+ *   and screen readers it holds a real button ("Edit Notes", the value as its description) beside the value, not
+ *   around it, so the links, chips and players inside the value stay controls of their own. Clicks on those do
+ *   their own thing and start nothing.
  * - Pop-over editors (selects, links, people, files) open their pop-over at once (see session.ts).
  * - A checkbox and a rating are edited where they are: they are the control, not a picture of one.
  * - The edit ends when the editor commits (Enter, a pick, Done), is cancelled (Escape), or when focus
@@ -16,7 +17,7 @@
  * - What was just saved stays on screen until the record catches up, and what could not be saved stays
  *   too (with the field's error under it), so the typed text is not lost.
  */
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import type { Field } from "@/api/types";
 import { cn } from "@/lib/cn";
 import type { FormatCtx } from "@/lib/cells/format";
@@ -93,7 +94,7 @@ export function EditableValue({ field, value, failed, labelId, format, emails, e
   const direct = shape === "checkbox" || shape === "rating";
   const long = isMultilineText(field);
   const [editing, setEditing] = useState(startEditing && !direct);
-  const viewRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<HTMLButtonElement>(null);
   const editRef = useRef<HTMLDivElement>(null);
   const restoreFocus = useRef(false);
   const describedBy = useId();
@@ -208,31 +209,27 @@ export function EditableValue({ field, value, failed, labelId, format, emails, e
     if (sel && !sel.isCollapsed && sel.anchorNode && e.currentTarget.contains(sel.anchorNode)) return;
     start();
   };
-  // Enter starts at once; Space on release, like a button, so the release does not land on the editor's first button.
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.target !== e.currentTarget) return;
-    if (e.key === "Enter") {
-      e.preventDefault();
-      start();
-    } else if (e.key === " ") e.preventDefault();
-  };
-  const onKeyUp = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget && e.key === " ") start();
-  };
 
   return (
+    // The area is not a control (a control cannot hold the links inside it): a click on it edits, and the button
+    // inside is the same thing for the keyboard and for screen readers. Its focus ring is the area's border.
     <div
-      ref={viewRef}
       data-edit-field=""
-      role="button"
-      tabIndex={0}
-      aria-label={`Edit ${field.name}`}
-      aria-describedby={describedBy}
       onClick={onClick}
-      onKeyDown={onKeyDown}
-      onKeyUp={onKeyUp}
-      className={cn(box, "outline-none hover:bg-hover focus-visible:border-ring", PICKERS.has(shape) ? "cursor-pointer" : "cursor-text", CARDS.has(shape) && !isEmpty(shown) && "pb-3")}
+      className={cn(box, "relative hover:bg-hover has-[[data-edit-trigger]:focus-visible]:border-ring", PICKERS.has(shape) ? "cursor-pointer" : "cursor-text", CARDS.has(shape) && !isEmpty(shown) && "pb-3")}
     >
+      <button
+        ref={viewRef}
+        type="button"
+        data-edit-trigger=""
+        aria-label={`Edit ${field.name}`}
+        aria-describedby={describedBy}
+        onClick={(e) => {
+          e.stopPropagation();
+          start();
+        }}
+        className="sr-only"
+      />
       <div id={describedBy} className="min-w-0">
         {isEmpty(shown) ? (
           <span className="text-faint">Empty</span>

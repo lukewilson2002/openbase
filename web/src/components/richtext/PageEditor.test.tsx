@@ -111,9 +111,16 @@ describe("PageEditor", () => {
         expect.arrayContaining([expect.stringContaining("Heading 1"), expect.stringContaining("Callout"), expect.stringContaining("Image or file"), expect.stringContaining("Property")]),
       );
       expect(optionNames().map((n) => n!.replace(/[#\-[\]!A-Z.0-9` ]+$/, ""))).toHaveLength(15);
-      expect(screen.getByRole("textbox", { name: "Page" })).toHaveAttribute("aria-expanded", "true");
+      const box = screen.getByRole("textbox", { name: "Page" });
+      // A textbox may not carry aria-expanded (axe: aria-allowed-attr, at open and after close): the list is its popup.
+      expect(box).not.toHaveAttribute("aria-expanded");
+      expect(box).toHaveAttribute("aria-controls", menu()!.id);
+      expect(box).toHaveAttribute("aria-haspopup", "listbox");
       act(() => void editor.commands.deleteRange({ from: 1, to: 2 }));
       expect(menu()).not.toBeInTheDocument();
+      expect(box).not.toHaveAttribute("aria-expanded");
+      expect(box).not.toHaveAttribute("aria-controls");
+      expect(box).not.toHaveAttribute("aria-haspopup");
     });
 
     it("opens after a space but not inside a word or an address", async () => {
@@ -346,6 +353,30 @@ describe("PageEditor", () => {
       await userEvent.click(within(bar).getByRole("button", { name: "Code" }));
       expect(md()).toBe("`word`");
       expect(box).toHaveFocus();
+    });
+
+    it("can be reached from the keyboard: Alt+F10 moves into it, the arrows walk along it, Escape goes back to the text", async () => {
+      const { editor, box, md } = await open({}, { initial: "word" });
+      act(() => void editor.commands.setTextSelection({ from: 1, to: 5 }));
+      const bar = await screen.findByRole("toolbar", { name: "Format selection" });
+      act(() => void box.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", altKey: true, bubbles: true, cancelable: true })));
+      const bold = within(bar).getByRole("button", { name: "Bold" });
+      await waitFor(() => expect(bold).toHaveFocus());
+      // Leaving the text for the bubble does not take the bubble away.
+      expect(screen.getByRole("toolbar", { name: "Format selection" })).toBeInTheDocument();
+      await userEvent.keyboard("{ArrowRight}");
+      expect(within(bar).getByRole("button", { name: "Italic" })).toHaveFocus();
+      await userEvent.keyboard("{ArrowLeft}{ArrowLeft}");
+      expect(within(bar).getByRole("button", { name: "Link" })).toHaveFocus();
+      await userEvent.keyboard("{Escape}");
+      await waitFor(() => expect(box).toHaveFocus());
+      expect(md()).toBe("word");
+      // From the bubble a button does its work with Enter, and the focus is back in the text.
+      act(() => void box.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", altKey: true, bubbles: true, cancelable: true })));
+      await waitFor(() => expect(within(bar).getByRole("button", { name: "Bold" })).toHaveFocus());
+      await userEvent.keyboard("{Enter}");
+      expect(md()).toBe("**word**");
+      await waitFor(() => expect(box).toHaveFocus());
     });
 
     it("adds a link from the bubble: the address is taken as typed and the selection becomes the link", async () => {
