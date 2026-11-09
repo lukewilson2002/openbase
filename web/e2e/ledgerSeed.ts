@@ -1,5 +1,5 @@
 import type { APIRequestContext, Browser, TestInfo } from "@playwright/test";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { crc32, deflateSync } from "node:zlib";
 import { expect, newClientContext, skipIntro } from "./fixtures";
 
@@ -15,6 +15,9 @@ import { expect, newClientContext, skipIntro } from "./fixtures";
  *  - A record page in the Side projects workspace, which the other shots do not show: Accounts and Bills, with an
  *    account whose page has a heading, a list and both embeds (REC-5, REC-6), a Files property holding a picture, a PDF
  *    and a Word file (REC-3), two linked bills and a thread of comments.
+ *  - What Phase 6's screens show: an inbox draft, an automation with runs and a second one that is off, a public form and
+ *    a shared board, notifications, history, trash items of each kind, a pending invite, API tokens, a connected app, and
+ *    the people who see the sign-in pages' other states (no workspace yet, an intro not yet seen, the instance's administrator).
  */
 
 const PASSWORD = "correct horse battery staple 42";
@@ -26,6 +29,12 @@ export type SignIn = Awaited<ReturnType<import("@playwright/test").BrowserContex
 export interface LedgerSeed {
   owner: SignIn;
   limited: SignIn;
+  /** The instance's administrator (the journey's), who sees /admin. */
+  admin: SignIn;
+  /** Signed up with nothing made yet: the first-run screen. */
+  fresh: SignIn;
+  /** Has a workspace and has not seen the intro. */
+  newcomer: SignIn;
   workspaceId: string;
   /** The other workspaces the owner belongs to. */
   otherWorkspaceIds: string[];
@@ -52,12 +61,47 @@ export interface LedgerSeed {
    * of its cards drags it; with one link the same hold opens the peek, which is what a phone's shot needs.
    */
   soloLink: { recordId: string; billId: string; billTitle: string };
+  /** The token of an open invite to the workspace (the invite page), and the address of the form and shared-view links. */
+  inviteToken: string;
+  links: { form: string; view: string };
+  /** The two automations of the top level: one on with runs, one off. */
+  automations: { research: string; welcome: string };
+  /** The name of the app that is connected to the owner's account. */
+  connectedApp: string;
 }
 
-async function call<T>(request: APIRequestContext, method: "post" | "patch", path: string, data: unknown): Promise<T> {
+const REDIRECT = "http://127.0.0.1:53682/callback";
+
+/**
+ * An app asking for access: registers a client and opens its authorization request as the signed-in person of `request`,
+ * which leads to the consent page. Returns the page's address and what is needed to finish the flow.
+ */
+export async function startConsent(request: APIRequestContext, baseURL: string, appName: string): Promise<{ path: string; requestId: string; clientId: string; verifier: string }> {
+  const registered = await request.post("/oauth/register", { data: { client_name: appName, redirect_uris: [REDIRECT], token_endpoint_auth_method: "none" } });
+  expect(registered.status(), await registered.text()).toBe(201);
+  const clientId = ((await registered.json()) as { client_id: string }).client_id;
+  const verifier = randomBytes(48).toString("base64url");
+  const query = new URLSearchParams({
+    response_type: "code",
+    client_id: clientId,
+    redirect_uri: REDIRECT,
+    code_challenge: createHash("sha256").update(verifier).digest("base64url"),
+    code_challenge_method: "S256",
+    state: randomBytes(8).toString("hex"),
+    resource: `${baseURL}/mcp`,
+    scope: "openbase:read openbase:write",
+  });
+  const res = await request.get(`/oauth/authorize?${query}`, { maxRedirects: 0, failOnStatusCode: false });
+  const location = res.headers()["location"] ?? "";
+  expect(location, `authorize answered ${res.status()} ${await res.text()}`).toContain("/oauth/consent?request=");
+  const path = new URL(location, baseURL).pathname + new URL(location, baseURL).search;
+  return { path, requestId: new URL(location, baseURL).searchParams.get("request")!, clientId, verifier };
+}
+
+async function call<T>(request: APIRequestContext, method: "post" | "patch" | "delete", path: string, data?: unknown): Promise<T> {
   const res = await request[method](path, { data, headers: CSRF });
   expect(res.ok(), `${method.toUpperCase()} ${path}: ${res.status()} ${await res.text()}`).toBeTruthy();
-  return (await res.json()) as T;
+  return (res.status() === 204 ? undefined : await res.json()) as T;
 }
 
 /** Midday UTC `days` from today as `YYYY-MM-DD`: a date that reads the same in every time zone the machine may be in. */
@@ -189,11 +233,12 @@ async function upload(request: APIRequestContext, baseId: string, name: string, 
   return (await res.json()) as UploadedFile;
 }
 
-async function signUp(request: APIRequestContext, name: string): Promise<void> {
+/** A new account; it has seen the intro unless `intro` says the screen is to meet it. */
+async function signUp(request: APIRequestContext, name: string, intro = false): Promise<void> {
   const email = `e2e-ledger-${randomBytes(4).toString("hex")}@example.com`;
   const res = await request.post("/api/auth/signup", { data: { email, name, password: PASSWORD }, headers: CSRF });
   expect(res.ok(), await res.text()).toBeTruthy();
-  await skipIntro(request);
+  if (!intro) await skipIntro(request);
 }
 
 export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<LedgerSeed> {
@@ -535,16 +580,110 @@ export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<
   await call(r, "post", `/api/records/${fernwood}/comments`, { body: "Sent the revised quote. They want the annual price before the 12th." });
   await call(r, "post", `/api/records/${fernwood}/comments`, { body: `I will move the hosting plan to annual **today**.\n\n![The shopfront](/api/attachments/${storefront.id}/${storefront.filename})` });
 
+  // ---- What Phase 6's screens show --------------------------------------------------------------
+  const me = (await (await r.get("/api/auth/me")).json()) as { id: string };
+  const rootSchema = (await (await r.get(`/api/bases/${rootId}`)).json()) as { tables: { id: string; primary_field_id: string }[] };
+  const primary = (name: string) => rootSchema.tables.find((x) => x.id === t[name])!.primary_field_id;
+  const viewRows = async (viewId: string) =>
+    ((await (await r.post(`/api/views/${viewId}/query`, { data: { limit: 50 }, headers: CSRF })).json()) as { records: { id: string; values: Record<string, unknown> }[] }).records;
+
+  // Drafts for the Inbox card, and API tokens of two kinds.
+  await call(r, "post", "/api/inbox", { title: "Ask Dana about the annual hosting price", body: "Check October's invoice first." });
+  await call(r, "post", "/api/inbox", { title: "Gift idea for the housewarming" });
+  await call(r, "post", "/api/tokens", { name: "Nightly backup script", write: false, manage: false });
+  await call(r, "post", "/api/tokens", { name: "Zapier sync", write: true, manage: false, expires_in_days: 90 });
+
+  // An automation that runs (and tells the owner), and one that is off.
+  const research = await call<{ id: string }>(r, "post", `/api/bases/${rootId}/automations`, {
+    name: "Tell me about new research",
+    enabled: true,
+    trigger: { type: "record_created", table_id: t["Market research"] },
+    actions: [{ type: "notify", user_ids: [me.id], message: "New research was added: {{trigger.record.fields.Name}}" }],
+  });
+  const welcome = await call<{ id: string }>(r, "post", `/api/bases/${rootId}/automations`, {
+    name: "Add a hello task for each new client",
+    enabled: false,
+    trigger: { type: "record_created", table_id: t["Clients"] },
+    actions: [{ type: "create_record", table_id: t["Tasks"], values: { [primary("Tasks")]: "Say hello to {{trigger.record.fields.Name}}" } }],
+  });
+  await call(r, "post", `/api/tables/${t["Market research"]}/records`, {
+    records: [{ values: { [primary("Market research")]: "Tool pricing across five agencies" } }, { values: { [primary("Market research")]: "What clients ask in the first call" } }],
+    typecast: true,
+  });
+  await expect
+    .poll(async () => ((await (await r.get(`/api/automations/${research.id}/runs?limit=10`)).json()) as { runs: unknown[] }).runs.length, { message: "the automation's runs" })
+    .toBeGreaterThanOrEqual(2);
+
+  // A public form and a shared board.
+  const formLink = await call<{ path: string }>(r, "post", `/api/views/${savedViews["Clients / Intake"]}/shares`, { kind: "form" });
+  const viewLink = await call<{ path: string }>(r, "post", `/api/views/${savedViews["Clients / Pipeline"]}/shares`, { kind: "view" });
+
+  // Open invites: one to the workspace for the invite page, one to a person for a folder (the member list shows it as pending).
+  const open = await call<{ url: string }>(r, "post", `/api/workspaces/${ws.id}/invites`, { role: "editor", email: null, all_bases: true });
+  await call(r, "post", `/api/workspaces/${ws.id}/invites`, { role: "editor", email: "priya.nair@example.com", all_bases: false, base_ids: [marketing.id] });
+
+  // Edits for History, then things of each kind in the Trash.
+  const marketingSchema = (await (await r.get(`/api/bases/${marketing.id}`)).json()) as { tables: { id: string; fields: { id: string; name: string }[] }[] };
+  const press = marketingSchema.tables.find((x) => x.id === t["Press contacts"])!;
+  const outlet = press.fields.find((f) => f.name === "Outlet")!.id;
+  const contacts = await viewRows(defaultViews["Press contacts"]!);
+  await call(r, "patch", `/api/tables/${press.id}/records`, {
+    records: [
+      { id: contacts[0]!.id, values: { [outlet]: "Regional Business Daily" } },
+      { id: contacts[1]!.id, values: { [outlet]: "The Design Ledger, weekend desk" } },
+    ],
+  });
+  await call(r, "delete", `/api/tables/${press.id}/records`, { ids: [contacts[3]!.id] });
+  const fax = await call<{ id: string }>(r, "post", `/api/tables/${press.id}/fields`, { name: "Fax", type: "text", options: {} });
+  await call(r, "delete", `/api/fields/${fax.id}`);
+  const drafts = await call<{ id: string }>(r, "post", `/api/bases/${marketing.id}/tables`, { name: "Old drafts", color: "gray" });
+  await call(r, "delete", `/api/tables/${drafts.id}`);
+  const oldCampaigns = await call<{ id: string }>(r, "post", `/api/workspaces/${ws.id}/bases`, { name: "Old campaigns", color: "pink", empty: true });
+  await call(r, "delete", `/api/bases/${oldCampaigns.id}`);
+  const scratch = await call<{ id: string }>(r, "post", "/api/workspaces", { name: "Scratch notes", color: "gray" });
+  await call(r, "delete", `/api/workspaces/${scratch.id}`);
+
   // A person limited to the Operations folder.
   const invite = await call<{ url: string }>(r, "post", `/api/bases/${operations.id}/invites`, { role: "editor", email: null });
   const limitedContext = await newClientContext(browser, testInfo, { baseURL, storageState: { cookies: [], origins: [] } }, "ledger-limited");
   await signUp(limitedContext.request, "Jonas Berg");
   const accept = await limitedContext.request.post(`/api/invites/by-token/${invite.url.split("/invite/")[1]}/accept`, { data: {}, headers: CSRF });
   expect(accept.ok(), await accept.text()).toBeTruthy();
+  // Jonas asks the owner a question on an invoice: the owner's notifications get a mention besides the automation's.
+  const invoice = (await viewRows(defaultViews["Invoices"]!))[1]!;
+  await call(limitedContext.request, "post", `/api/records/${invoice.id}/comments`, { body: `@[Mara Okafor](${me.id}) the reminder went out and this invoice is still unpaid. Should I send a second one?` });
+
+  // Apps connected to the owner's account (Account, AI assistants).
+  const apps = [
+    ["Claude Code", "write"],
+    ["Cursor", "read"],
+  ] as const;
+  for (const [appName, access] of apps) {
+    const consent = await startConsent(r, baseURL!, appName);
+    const outcome = await call<{ redirect_to: string }>(r, "post", `/api/oauth/requests/${consent.requestId}/decision`, { decision: "approve", access });
+    const code = new URL(outcome.redirect_to).searchParams.get("code")!;
+    const exchanged = await r.post("/oauth/token", {
+      form: { grant_type: "authorization_code", client_id: consent.clientId, code, redirect_uri: REDIRECT, code_verifier: consent.verifier, resource: `${baseURL}/mcp` },
+    });
+    expect(exchanged.ok(), await exchanged.text()).toBeTruthy();
+  }
+
+  // The people the sign-in pages' other states need: the administrator, one with nothing made yet, one who has not seen the intro.
+  const adminContext = await newClientContext(browser, testInfo, { baseURL }, "ledger-admin");
+  const login = await adminContext.request.post("/api/auth/login", { data: { email: "journey-admin@example.com", password: PASSWORD }, headers: CSRF });
+  expect(login.ok(), `signing in as the journey's administrator: ${login.status()} ${await login.text()}`).toBeTruthy();
+  const freshContext = await newClientContext(browser, testInfo, { baseURL }, "ledger-fresh");
+  await signUp(freshContext.request, "Priya Nair");
+  const newcomerContext = await newClientContext(browser, testInfo, { baseURL }, "ledger-newcomer");
+  await signUp(newcomerContext.request, "Sam Whitlow", true);
+  await call(newcomerContext.request, "post", "/api/workspaces", { name: "Harbor Studio", color: "teal" });
 
   const seed: LedgerSeed = {
     owner: await ownerContext.storageState(),
     limited: await limitedContext.storageState(),
+    admin: await adminContext.storageState(),
+    fresh: await freshContext.storageState(),
+    newcomer: await newcomerContext.storageState(),
     workspaceId: ws.id,
     otherWorkspaceIds: others.map((o) => o.id),
     rootId,
@@ -558,8 +697,11 @@ export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<
     pageFields: { status: accountField("Status"), perYear: perYear.id, bills: billsLink.id, files: accountField("Files") },
     peekedBill: billRows[1]!.id,
     soloLink: { recordId: accountRows[1]!.id, billId: billRows[2]!.id, billTitle: "Design software" },
+    inviteToken: open.url.split("/invite/")[1]!,
+    links: { form: formLink.path, view: viewLink.path },
+    automations: { research: research.id, welcome: welcome.id },
+    connectedApp: "Claude Code",
   };
-  await ownerContext.close();
-  await limitedContext.close();
+  await Promise.all([ownerContext, limitedContext, adminContext, freshContext, newcomerContext].map((c) => c.close()));
   return seed;
 }

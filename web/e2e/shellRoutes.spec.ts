@@ -8,10 +8,10 @@ import { expect, newClientContext, skipIntro, test } from "./fixtures";
  * phone, one `main` with its own header and one `h1`, no bar across the app, no error screen, and on a phone no
  * horizontal page scroll. The console, uncaught exceptions and failed requests are watched by the fixture, so a
  * route that logs an error fails here. What each screen shows has its own specs; this one is about where a route
- * leads. A route is added to {@link ROUTES} in the phase that creates it (the Home rebuild in Phase 6).
+ * leads. A route is added to {@link ROUTES} in the phase that creates it; Phase 6 added `/inbox` and `?record=`, which redirect, and the automation editor.
  *
  * Not in the list, on purpose: the design reference (`/__dev/design`), sign-in, sign-up, invite, public form and
- * share pages and the OAuth consent page are outside the shell; `/inbox` redirects to Home.
+ * share pages and the OAuth consent page are outside the shell (the ledger and the journey open them).
  *
  * Signs up its own user, and signs in as the journey's administrator for /admin. Runs only with OPENBASE_E2E=1.
  */
@@ -31,6 +31,7 @@ interface Fixture {
   recordId: string;
   folderId: string;
   emptyFolderId: string;
+  automationId: string;
 }
 
 interface Route {
@@ -51,11 +52,15 @@ interface Route {
 const ROUTES: Route[] = [
   { name: "/ leads to Home", path: () => "/", heading: "Home", lands: (f) => new RegExp(`/workspace/${f.workspaceId}$`) },
   { name: "Home", path: (f) => `/workspace/${f.workspaceId}`, heading: "Home" },
+  // The Inbox page is gone (Phase 6): its old address lands on Home.
+  { name: "/inbox leads to Home", path: () => "/inbox", heading: "Home", lands: (f) => new RegExp(`/workspace/${f.workspaceId}$`) },
   { name: "Collection", path: (f) => `/base/${f.rootId}/${f.tableId}`, heading: "Tasks", lands: (f) => new RegExp(`/base/${f.rootId}/${f.tableId}/viw`) },
   // The ledger's `/base/:baseId/:tableId/:viewId`: a view named in the address, which is not redirected.
   { name: "Collection view", path: (f) => `/base/${f.rootId}/${f.tableId}/${f.viewId}`, heading: "Tasks" },
   // The record page (Phase 5): previous and next follow the view in the address, else the last used or the default.
   { name: "Record page", path: (f) => `/base/${f.rootId}/${f.tableId}/${f.viewId}/r/${f.recordId}`, heading: "Send the quote", fullScreen: "Tasks" },
+  // The old `?record=` address is a record page now.
+  { name: "?record= leads to the record page", path: (f) => `/base/${f.rootId}/${f.tableId}?record=${f.recordId}`, heading: "Send the quote", lands: (f) => new RegExp(`/base/${f.rootId}/${f.tableId}/(viw\\w+/)?r/${f.recordId}$`), fullScreen: "Tasks" },
   { name: "Record page without a view", path: (f) => `/base/${f.rootId}/${f.tableId}/r/${f.recordId}`, heading: "Send the quote", fullScreen: "Tasks" },
   { name: "Collection in a folder", path: (f) => `/base/${f.folderId}`, heading: "Plants", lands: (f) => new RegExp(`/base/${f.folderId}/tbl[^/]+/viw`) },
   { name: "Empty folder", path: (f) => `/base/${f.emptyFolderId}`, heading: "Archive" },
@@ -68,6 +73,7 @@ const ROUTES: Route[] = [
   { name: "Notifications", path: () => "/notifications", heading: "Notifications" },
   { name: "Workspace automations", path: (f) => `/workspace/${f.workspaceId}/automations`, heading: "Automations" },
   { name: "Folder automations", path: (f) => `/base/${f.rootId}/automations`, heading: "Automations" },
+  { name: "Folder automation", path: (f) => `/base/${f.rootId}/automations/${f.automationId}`, heading: "Automations" },
   { name: "Members", path: (f) => `/workspace/${f.workspaceId}/members`, heading: "Members" },
   { name: "Workspace settings", path: (f) => `/workspace/${f.workspaceId}/settings`, heading: "Workspace settings" },
   { name: "History", path: () => "/history", heading: "History" },
@@ -101,7 +107,9 @@ async function seed(request: APIRequestContext): Promise<Fixture> {
   const garden = await post<{ id: string }>(request, `/api/workspaces/${ws.id}/bases`, { name: "Garden", empty: true });
   await post(request, `/api/bases/${garden.id}/tables`, { name: "Plants" });
   const archive = await post<{ id: string }>(request, `/api/workspaces/${ws.id}/bases`, { name: "Archive", empty: true });
-  return { workspaceId: ws.id, rootId, tableId: tasks.id, viewId: tasks.views[0]!.id, recordId: made.records[0]!.id, folderId: garden.id, emptyFolderId: archive.id };
+  // The editor's address: an automation of the top level, which is the folder Tasks is in.
+  const automation = await post<{ id: string }>(request, `/api/bases/${rootId}/automations`, { name: "Welcome email", enabled: false, trigger: { type: "record_created", table_id: tasks.id }, actions: [] });
+  return { workspaceId: ws.id, rootId, tableId: tasks.id, viewId: tasks.views[0]!.id, recordId: made.records[0]!.id, folderId: garden.id, emptyFolderId: archive.id, automationId: automation.id };
 }
 
 const menu = (page: Page) => page.getByRole("navigation", { name: "Main menu" });

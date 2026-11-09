@@ -116,6 +116,21 @@ test("Home lists what is due, captures into a collection with a date chip, and c
     await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
     await expect(page.getByRole("region", { name: "Inbox" })).toHaveCount(0);
   });
+
+  await test.step("File puts a draft into a collection through the target form, and the draft leaves the card", async () => {
+    await page.getByRole("button", { name: /Goes to/ }).click();
+    await page.getByRole("option", { name: /^Inbox/ }).click();
+    await box(page).fill("Pick up the dry cleaning");
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    const card = page.getByRole("region", { name: "Inbox" });
+    await card.getByRole("button", { name: "File Pick up the dry cleaning" }).click();
+    const dialog = page.getByRole("dialog", { name: "File this draft" });
+    await expect(dialog.getByLabel("Name")).toHaveValue("Pick up the dry cleaning");
+    await dialog.getByRole("button", { name: "File", exact: true }).click();
+    await expect(toasts(page).getByText("Filed to Tasks")).toBeVisible();
+    await expect(page.getByRole("region", { name: "Inbox" })).toHaveCount(0);
+    await expect.poll(async () => (await fx.records()).some((r) => r.values[fx.nameId] === "Pick up the dry cleaning")).toBe(true);
+  });
 });
 
 test("Home on a phone: the capture box, Inbox and lists stack, the Add button is 44 px, and nothing scrolls sideways", async ({ browser }, testInfo) => {

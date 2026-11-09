@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, newClientContext, test } from "./fixtures";
-import { seedLedger, type LedgerSeed } from "./ledgerSeed";
+import { seedLedger, startConsent, type LedgerSeed } from "./ledgerSeed";
 
 /**
  * The screen ledger's screenshots (DONE-2): every screen of the spec's Appendix, in light and dark at 1440 px and
@@ -38,6 +38,7 @@ interface ShotContext {
   seed: LedgerSeed;
   /** Below the desktop breakpoint: the phone layout. */
   phone: boolean;
+  baseURL: string;
 }
 
 /** One image set (light and dark at both widths) of one ledger row. */
@@ -48,8 +49,11 @@ interface Shot {
   slug: string;
   /** For the test title. */
   name: string;
-  /** Who is signed in; the owner of the seeded workspace by default. */
-  as?: "owner" | "limited";
+  /**
+   * Who is signed in; the owner of the seeded workspace by default. "anonymous" is nobody (the sign-in and public pages),
+   * "admin" the instance's administrator, "fresh" a person with no workspace yet and "newcomer" one who has not seen the intro.
+   */
+  as?: "owner" | "limited" | "anonymous" | "admin" | "fresh" | "newcomer";
   /** The widths this shot exists at; both by default. */
   sizes?: readonly Size[];
   /** Get the screen to the state to shoot, and return once it is settled. */
@@ -665,6 +669,440 @@ const SHOTS: Shot[] = [
     },
   },
 
+  // 23 · Home (HOME-1 to HOME-11): the lists, the Inbox card of two drafts and the capture box; then a capture whose date phrase
+  // became a chip, and the Goes to picker.
+  {
+    row: 23,
+    slug: "home",
+    name: "Home",
+    open: async ({ page, seed }) => {
+      await page.goto(home(seed));
+      await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+      await expect(page.getByRole("region", { name: "Due soon" }).getByRole("link").first()).toBeVisible();
+      await expect(page.getByRole("region", { name: "Recently changed" }).getByRole("link").first()).toBeVisible();
+      await expect(page.getByRole("region", { name: "Inbox" }).getByText("Ask Dana about the annual hosting price")).toBeVisible();
+      await rest(page);
+    },
+  },
+  {
+    row: 23,
+    slug: "home-capture",
+    name: "capture with a date chip",
+    open: async ({ page, seed }) => {
+      await page.goto(home(seed));
+      const box = page.getByRole("textbox", { name: "Add a task, a note, a meal, anything" });
+      await expect(box).toBeVisible();
+      await page.getByRole("button", { name: /^Goes to/ }).click();
+      await page.getByRole("option", { name: /^Tasks/ }).click();
+      await box.fill("Call Fernwood about the new quote tomorrow");
+      await expect(page.getByText(/^Due tomorrow/)).toBeVisible();
+      await restPointer(page);
+    },
+  },
+  {
+    row: 23,
+    slug: "home-picker",
+    name: "Goes to picker",
+    open: async ({ page, seed }) => {
+      await page.goto(home(seed));
+      await expect(page.getByRole("textbox", { name: "Add a task, a note, a meal, anything" })).toBeVisible();
+      await page.getByRole("button", { name: /^Goes to/ }).click();
+      await expect(page.getByRole("option", { name: /^Inbox/ })).toBeVisible();
+      await expect(page.getByRole("option", { name: /^Tasks/ })).toBeVisible();
+    },
+  },
+
+  // 24 to 28 · The pages before anyone is signed in (APP-1): nobody is signed in on any of them.
+  {
+    row: 24,
+    slug: "sign-in",
+    name: "sign in",
+    as: "anonymous",
+    open: async ({ page }) => {
+      await page.goto("/login");
+      await expect(page.getByRole("heading", { name: "Log in" })).toBeVisible();
+    },
+  },
+  {
+    row: 25,
+    slug: "two-factor",
+    name: "two-factor sign-in",
+    as: "anonymous",
+    open: async ({ page }) => {
+      await page.goto("/login/2fa");
+      await expect(page.getByRole("heading", { name: "Two-factor authentication" })).toBeVisible();
+    },
+  },
+  {
+    row: 26,
+    slug: "setup",
+    name: "first administrator",
+    as: "anonymous",
+    open: async ({ page }) => {
+      // The instance already has people, so /setup would send a visitor to the sign-in page: the screen is shown the way a new instance answers.
+      await page.route("**/api/setup", async (route) => {
+        const response = await route.fetch();
+        await route.fulfill({ response, json: { ...(await response.json()), needs_setup: true } });
+      });
+      await page.goto("/setup");
+      await expect(page.getByRole("heading", { name: "Welcome to your OpenBase" })).toBeVisible();
+    },
+  },
+  {
+    row: 27,
+    slug: "sign-up",
+    name: "sign up",
+    as: "anonymous",
+    open: async ({ page }) => {
+      await page.goto("/signup");
+      await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
+    },
+  },
+  {
+    row: 27,
+    slug: "invite",
+    name: "invitation to a workspace",
+    as: "anonymous",
+    open: async ({ page, seed }) => {
+      await page.goto(`/invite/${seed.inviteToken}`);
+      await expect(page.getByRole("heading", { name: "Join Northwind Studio" })).toBeVisible();
+    },
+  },
+  {
+    row: 28,
+    slug: "forgot-password",
+    name: "forgot password",
+    as: "anonymous",
+    open: async ({ page }) => {
+      await page.goto("/forgot-password");
+      await expect(page.getByRole("heading", { name: "Reset your password" })).toBeVisible();
+    },
+  },
+  {
+    row: 28,
+    slug: "reset-password",
+    name: "choose a new password",
+    as: "anonymous",
+    open: async ({ page }) => {
+      await page.goto("/reset-password?token=ledger-example-token");
+      await expect(page.getByRole("heading", { name: "Choose a new password" })).toBeVisible();
+    },
+  },
+
+  // 29 · First run (APP-2): a person with no workspace yet.
+  {
+    row: 29,
+    slug: "first-run",
+    name: "first workspace",
+    as: "fresh",
+    open: async ({ page }) => {
+      await page.goto("/");
+      await expect(page.locator("#first-workspace-title")).toBeVisible();
+    },
+  },
+
+  // 30 · Intro (APP-3): the first of its five steps, over the Home of a person who has not seen it.
+  {
+    row: 30,
+    slug: "intro",
+    name: "intro",
+    as: "newcomer",
+    open: async ({ page }) => {
+      await page.goto("/");
+      await expect(page.getByRole("dialog", { name: "Home catches your ideas" })).toBeVisible();
+    },
+  },
+  {
+    row: 30,
+    slug: "intro-views",
+    name: "intro, a later step",
+    as: "newcomer",
+    open: async ({ page }) => {
+      await page.goto("/");
+      await expect(page.getByRole("dialog", { name: "Home catches your ideas" })).toBeVisible();
+      // The dialog is named by its step, so it is found by its role from the second step on.
+      for (let step = 0; step < 2; step++) await page.getByRole("dialog").getByRole("button", { name: "Next" }).click();
+      await expect(page.getByRole("dialog", { name: "Home catches your ideas" })).toHaveCount(0);
+      await expect(page.getByRole("dialog")).toBeVisible();
+    },
+  },
+
+  // 31 · Notifications (APP-4): the sidebar's popover on a desktop, the tab's screen on a phone; and the screen on a desktop.
+  {
+    row: 31,
+    slug: "notifications",
+    name: "notifications",
+    open: async ({ page, seed, phone }) => {
+      if (phone) {
+        await page.goto("/notifications");
+        await expect(page.getByRole("heading", { level: 1, name: "Notifications" })).toBeVisible();
+      } else {
+        await page.goto(home(seed));
+        await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+        await nav(page).getByRole("button", { name: /^Notifications/ }).click();
+      }
+      await expect(page.getByRole("list", { name: "Notifications" }).getByRole("listitem").first()).toBeVisible();
+    },
+  },
+  {
+    row: 31,
+    slug: "notifications-page",
+    name: "notifications screen",
+    sizes: ["1440"],
+    open: async ({ page }) => {
+      await page.goto("/notifications");
+      await expect(page.getByRole("heading", { level: 1, name: "Notifications" })).toBeVisible();
+      await expect(page.getByRole("list", { name: "Notifications" }).getByRole("listitem").first()).toBeVisible();
+    },
+  },
+
+  // 32 · Automations (APP-5): the workspace's list, a folder's automation in the editor, and its runs.
+  {
+    row: 32,
+    slug: "automations",
+    name: "workspace automations",
+    open: async ({ page, seed }) => {
+      await page.goto(`/workspace/${seed.workspaceId}/automations`);
+      await expect(page.getByRole("heading", { level: 1, name: "Automations" })).toBeVisible();
+      await expect(page.getByText("Tell me about new research")).toBeVisible();
+    },
+  },
+  {
+    row: 32,
+    slug: "automation-editor",
+    name: "automation editor",
+    open: async ({ page, seed }) => {
+      await page.goto(`/base/${seed.rootId}/automations/${seed.automations.research}`);
+      await expect(page.getByRole("tablist", { name: "Automation sections" })).toBeVisible();
+      await expect(page.getByRole("switch", { name: "On", exact: true })).toBeChecked();
+      await rest(page);
+    },
+  },
+  {
+    row: 32,
+    slug: "automation-runs",
+    name: "automation runs",
+    open: async ({ page, seed }) => {
+      await page.goto(`/base/${seed.rootId}/automations/${seed.automations.research}/runs`);
+      await expect(page.getByRole("list", { name: "Runs" }).getByRole("listitem").first()).toBeVisible();
+      await rest(page);
+    },
+  },
+
+  // 33 and 34 · The public pages (APP-6, APP-7): no one is signed in. The form is shown with its first check failing.
+  {
+    row: 33,
+    slug: "public-form",
+    name: "public form",
+    as: "anonymous",
+    open: async ({ page, seed }) => {
+      await page.goto(seed.links.form);
+      await expect(page.getByRole("heading", { level: 1, name: "Tell us about your studio" })).toBeVisible();
+    },
+  },
+  {
+    row: 33,
+    slug: "public-form-check",
+    name: "public form with a missing answer",
+    as: "anonymous",
+    open: async ({ page, seed }) => {
+      await page.goto(seed.links.form);
+      await page.getByRole("button", { name: "Send" }).click();
+      await expect(page.getByText("This question is required.")).toBeVisible();
+    },
+  },
+  {
+    row: 34,
+    slug: "public-view",
+    name: "public shared view",
+    as: "anonymous",
+    open: async ({ page, seed }) => {
+      await page.goto(seed.links.view);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await expect(page.getByText("Fernwood Dental").first()).toBeVisible();
+      await rest(page);
+    },
+  },
+
+  // 35 · Share (APP-8): inviting people over folders, and a view's links.
+  {
+    row: 35,
+    slug: "share",
+    name: "share dialog, invite people",
+    open: async ({ page, seed }) => {
+      await openCollection(page, seed, seed.rootId, "Clients");
+      await page.getByRole("main").locator("header").getByRole("button", { name: "Share" }).click();
+      await expect(page.getByRole("dialog", { name: /^Share / })).toBeVisible();
+    },
+  },
+  {
+    row: 35,
+    slug: "share-view",
+    name: "share dialog, links of a view",
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Clients", "Pipeline");
+      await page.getByRole("main").locator("header").getByRole("button", { name: "Share" }).click();
+      const dialog = page.getByRole("dialog", { name: /^Share / });
+      await dialog.getByRole("tab", { name: "Share a view" }).click();
+      await expect(dialog.getByRole("switch").first()).toBeVisible();
+    },
+  },
+
+  // 36 and 37 · History and Trash (APP-9, APP-10).
+  {
+    row: 36,
+    slug: "history",
+    name: "history",
+    open: async ({ page }) => {
+      await page.goto("/history");
+      await expect(page.getByRole("heading", { level: 1, name: "History" })).toBeVisible();
+      await expect(page.getByRole("article").first()).toBeVisible();
+      await rest(page);
+    },
+  },
+  {
+    row: 37,
+    slug: "trash",
+    name: "trash",
+    open: async ({ page }) => {
+      await page.goto("/trash");
+      await expect(page.getByRole("heading", { level: 1, name: "Trash" })).toBeVisible();
+      await expect(page.getByRole("list", { name: "Deleted items" }).getByRole("listitem").first()).toBeVisible();
+      await rest(page);
+    },
+  },
+
+  // 38 · CSV (APP-11): a new collection from a file, and a file imported into a collection.
+  {
+    row: 38,
+    slug: "csv-new-collection",
+    name: "new collection from CSV",
+    open: async ({ page, seed }) => {
+      await page.goto(`/base/${seed.folders.archive}`);
+      await page.getByRole("button", { name: "Import CSV" }).click();
+      const dialog = page.getByRole("dialog", { name: "New collection from CSV" });
+      await dialog.getByLabel("CSV file").setInputFiles({ name: "Customers 2026.csv", mimeType: "text/csv", buffer: Buffer.from("Name,Age,Joined,Active\nAnn,30,2024-01-05,yes\nBob,41,2023-12-31,no\nCyd,29,2022-06-30,yes\n") });
+      await expect(dialog.getByRole("region", { name: "Preview" }).getByText("Bob")).toBeVisible();
+    },
+  },
+  {
+    row: 38,
+    slug: "csv-import",
+    name: "import CSV into a collection",
+    open: async ({ page, seed, phone }) => {
+      // The collection's menu is in the sidebar, which a phone has as its Collections tab.
+      if (phone) await page.goto(`/workspace/${seed.workspaceId}/collections`);
+      else await openCollection(page, seed, seed.rootId, "Clients");
+      await page.getByRole("button", { name: "Collection options for Clients" }).click();
+      await page.getByRole("menuitem", { name: /Import CSV/ }).or(page.getByRole("button", { name: /Import CSV/ })).first().click();
+      const dialog = page.getByRole("dialog", { name: "Import CSV into Clients" });
+      await dialog.getByLabel("CSV file").setInputFiles({ name: "more-clients.csv", mimeType: "text/csv", buffer: Buffer.from("Name;Status;Retainer;Comment\nDelta Dental;Lead;1200;hi\nEcho Cycles;Active;800;there\n") });
+      await expect(dialog.getByRole("region", { name: "Column mapping" })).toBeVisible();
+    },
+  },
+
+  // 39 and 40 · Workspace settings and Members (APP-12, APP-13).
+  {
+    row: 39,
+    slug: "workspace-settings",
+    name: "workspace settings",
+    open: async ({ page, seed }) => {
+      await page.goto(`/workspace/${seed.workspaceId}/settings`);
+      await expect(page.getByRole("heading", { level: 1, name: "Workspace settings" })).toBeVisible();
+      await expect(page.getByText("Top level now")).toBeVisible();
+    },
+  },
+  {
+    row: 40,
+    slug: "members",
+    name: "members and folder access",
+    open: async ({ page, seed }) => {
+      await page.goto(`/workspace/${seed.workspaceId}/members`);
+      await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeVisible();
+      await expect(page.getByRole("list", { name: "Members" })).toContainText("Jonas Berg");
+      await rest(page);
+    },
+  },
+
+  // 41 · Account and the OAuth consent page (APP-14, AGT-2, AGT-5).
+  {
+    row: 41,
+    slug: "account",
+    name: "account profile",
+    open: async ({ page }) => {
+      await page.goto("/account");
+      await expect(page.getByRole("heading", { level: 1, name: "Account settings" })).toBeVisible();
+    },
+  },
+  {
+    row: 41,
+    slug: "account-tokens",
+    name: "API tokens",
+    open: async ({ page }) => {
+      await page.goto("/account?tab=tokens");
+      await expect(page.getByText("Nightly backup script")).toBeVisible();
+      await rest(page);
+    },
+  },
+  {
+    row: 41,
+    slug: "account-assistants",
+    name: "connected apps",
+    open: async ({ page, seed }) => {
+      await page.goto("/account?tab=assistants");
+      await expect(page.getByRole("list", { name: "Connected apps" }).getByRole("listitem").filter({ hasText: seed.connectedApp })).toBeVisible();
+      await rest(page);
+    },
+  },
+  {
+    row: 41,
+    slug: "oauth-consent",
+    name: "OAuth consent",
+    open: async ({ page, baseURL }) => {
+      const consent = await startConsent(page.request, baseURL, "Notion Agent");
+      await page.goto(consent.path);
+      await expect(page.getByRole("heading", { name: "Allow Notion Agent to use your OpenBase?" })).toBeVisible();
+      await rest(page);
+    },
+  },
+
+  // 42 · Admin (APP-15): the instance's administrator.
+  {
+    row: 42,
+    slug: "admin",
+    name: "admin users",
+    as: "admin",
+    open: async ({ page }) => {
+      await page.goto("/admin");
+      await expect(page.getByRole("heading", { level: 1, name: "Administration" })).toBeVisible();
+      await expect(page.getByText("Mara Okafor").first()).toBeVisible();
+      await rest(page);
+    },
+  },
+  {
+    row: 42,
+    slug: "admin-apps",
+    name: "admin connected apps",
+    as: "admin",
+    open: async ({ page }) => {
+      await page.goto("/admin?tab=apps");
+      await expect(page.getByText("Claude Code").first()).toBeVisible();
+      await rest(page);
+    },
+  },
+  {
+    row: 42,
+    slug: "admin-audit",
+    name: "admin audit",
+    as: "admin",
+    open: async ({ page }) => {
+      await page.goto("/admin?tab=audit");
+      await expect(page.getByRole("heading", { level: 1, name: "Administration" })).toBeVisible();
+      await expect(page.getByRole("row").nth(1)).toBeVisible();
+      await rest(page);
+    },
+  },
+
   // 43 · Empty folder (Navigation routes)
   {
     row: 43,
@@ -702,6 +1140,25 @@ const SHOTS: Shot[] = [
       await expect(page.getByRole("button", { name: "Remove brand-guidelines.docx" })).toBeVisible();
       await picturesLoaded(page.locator("body"));
       await restPointer(page);
+    },
+  },
+  // 45 · Not found and error screens (APP-16, APP-17): each says what happened and offers Go to Home.
+  {
+    row: 45,
+    slug: "not-found",
+    name: "page not found",
+    open: async ({ page }) => {
+      await page.goto("/there/is/nothing/here");
+      await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
+    },
+  },
+  {
+    row: 45,
+    slug: "folder-not-found",
+    name: "a folder that is gone",
+    open: async ({ page }) => {
+      await page.goto("/base/appGoneForGood");
+      await expect(page.getByRole("link", { name: "Go to Home" })).toBeVisible();
     },
   },
 ];
@@ -748,7 +1205,7 @@ for (const shot of SHOTS) {
           testInfo,
           {
             baseURL: testInfo.project.use.baseURL,
-            storageState: shot.as === "limited" ? seed.limited : seed.owner,
+            storageState: shot.as === "anonymous" ? { cookies: [], origins: [] } : seed[shot.as ?? "owner"],
             viewport,
             deviceScaleFactor: 1,
             isMobile: phone,
@@ -760,7 +1217,7 @@ for (const shot of SHOTS) {
         // The theme is a per-device choice (theme-init.js reads it before the first paint).
         await context.addInitScript((mode) => localStorage.setItem("ob-theme", mode), theme);
         const page = await context.newPage();
-        await shot.open({ page, seed, phone });
+        await shot.open({ page, seed, phone, baseURL: testInfo.project.use.baseURL! });
         await settle(page);
         // The phone must not scroll sideways on any shot (PH-7): a screenshot of a page wider than the screen hides it.
         if (phone) expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), "the page is wider than the phone").toBeLessThanOrEqual(0);

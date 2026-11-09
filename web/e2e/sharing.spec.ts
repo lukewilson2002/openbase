@@ -452,3 +452,50 @@ test("a viewer can filter and sort a board for themselves; the view stays as it 
   await expect(g.getByRole("status").filter({ hasText: "These changes are only for now" })).toHaveCount(0);
   await guest.close();
 });
+
+test("a stranger fills in a public form on a phone and the answer becomes a record", async ({ page, browser, baseURL }, testInfo) => {
+  // A form made through the API with its settings, shared by a form link.
+  const form = await call<{ id: string }>(page.request, "post", `/api/tables/${fx.tableId}/views`, {
+    name: "Phone form",
+    type: "form",
+    personal: false,
+    config: {
+      form: {
+        title: "Visit us",
+        description: "Tell us when you are coming.",
+        fields: [
+          { field_id: fx.fields.name, required: true, label: "Your name" },
+          { field_id: fx.fields.qty, required: false, label: "How many of you?" },
+        ],
+        submit_label: "Book a visit",
+        success_message: "See you soon!",
+      },
+    },
+  });
+  const link = await call<{ path: string }>(page.request, "post", `/api/views/${form.id}/shares`, { kind: "form" });
+
+  const context = await newClientContext(
+    browser,
+    testInfo,
+    { baseURL, storageState: { cookies: [], origins: [] }, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
+    "phone-stranger",
+  );
+  const v = await context.newPage();
+  await v.goto(link.path);
+  await expect(v.getByRole("heading", { level: 1, name: "Visit us" })).toBeVisible();
+  expect((await v.getByLabel(/Your name/).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect(await v.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await v.getByRole("button", { name: "Book a visit" }).tap();
+  await expect(v.getByText("This question is required.")).toBeVisible();
+  await v.getByLabel(/Your name/).fill("Pia Phone");
+  await v.getByLabel("How many of you?").fill("3");
+  await v.getByRole("button", { name: "Book a visit" }).tap();
+  await expect(v.getByText("See you soon!")).toBeVisible();
+  expect(await v.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  const found = await records(page.request, fx.viewId, "Pia Phone");
+  expect(found.total).toBe(1);
+  expect(found.records[0]!.values).toMatchObject({ [fx.fields.name]: "Pia Phone", [fx.fields.qty]: 3 });
+  await context.close();
+});
