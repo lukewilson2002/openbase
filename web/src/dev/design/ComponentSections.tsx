@@ -20,7 +20,7 @@ import { PropertyList, PropertyRow } from "@/components/ui/property-list";
 import { Skeleton, SkeletonLines } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { StatusChip } from "@/components/ui/status-chip";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TemporaryChangesBar } from "@/components/ui/temporary-changes-bar";
 import { DESIGN_SECTIONS } from "../designSections";
 import { Gallery, Group, noop, Section, State } from "./layout";
@@ -550,6 +550,16 @@ export function TabsSection() {
               Timeline
             </TabsTrigger>
           </TabsList>
+          {/* A tab names the panel it controls, so every tab that can be selected has one. */}
+          <TabsContent value="grid" className="pt-2 text-label text-muted">
+            Records as rows.
+          </TabsContent>
+          <TabsContent value="board" className="pt-2 text-label text-muted">
+            Records as cards in stacks.
+          </TabsContent>
+          <TabsContent value="calendar" className="pt-2 text-label text-muted">
+            Records on the days they fall on.
+          </TabsContent>
         </Tabs>
       </State>
       <State label="Without icons" className="w-full">
@@ -558,6 +568,12 @@ export function TabsSection() {
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="mine">Assigned to me</TabsTrigger>
           </TabsList>
+          <TabsContent value="all" className="pt-2 text-label text-muted">
+            Every record.
+          </TabsContent>
+          <TabsContent value="mine" className="pt-2 text-label text-muted">
+            Records with your name on them.
+          </TabsContent>
         </Tabs>
       </State>
     </Section>

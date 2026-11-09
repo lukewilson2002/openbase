@@ -60,7 +60,7 @@ export default function DesignPage() {
             <p key={group} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="font-semibold text-muted">{group}</span>
               {DESIGN_SECTIONS.filter((s) => s.group === group).map((s) => (
-                <a key={s.id} href={`#${s.id}`}>
+                <a key={s.id} href={`#${s.id}`} className="inline-flex min-h-6 items-center">
                   {s.title}
                 </a>
               ))}

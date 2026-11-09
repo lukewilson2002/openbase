@@ -122,6 +122,19 @@ async function restPointer(page: Page): Promise<void> {
  * The ledger. Add a screen by adding one entry; keep the rows in order.
  */
 export const SHOTS: Shot[] = [
+  // 1 · Design reference (DL-2): every token and core component in both themes. Compiled into the e2e build only (VITE_DESIGN_PAGE=1)
+  // and needs no account.
+  {
+    row: 1,
+    slug: "design-reference",
+    name: "design reference",
+    as: "anonymous",
+    open: async ({ page }) => {
+      await page.goto("/__dev/design");
+      await expect(page.getByRole("heading", { level: 1, name: "Design reference" })).toBeVisible();
+    },
+  },
+
   // 2 · Desktop sidebar and workspace switcher (NAV-1 to NAV-6). The phone has no sidebar: its counterpart is the
   // switcher sheet that Home's header opens.
   {
