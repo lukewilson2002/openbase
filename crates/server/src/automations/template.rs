@@ -19,6 +19,11 @@ use serde_json::{Map, Value as Json};
 /// Longest rendered string; protects the runner from template blow-up.
 pub const MAX_RENDERED_LEN: usize = 1_000_000;
 
+/// Largest total a single [`RenderCtx::render_json`] may produce. [`MAX_RENDERED_LEN`] caps one
+/// string; this caps the sum, since a saved array of a hundred thousand placeholders for one
+/// body would otherwise hold a hundred thousand copies of it.
+pub const MAX_RENDERED_JSON_LEN: usize = 4_000_000;
+
 /// A placeholder variable.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Var {
@@ -246,6 +251,15 @@ pub struct RenderCtx<'a> {
 }
 
 impl RenderCtx<'_> {
+    /// The webhook-body or step value a variable names, without copying it.
+    fn resolve_ref(&self, var: &Var) -> Option<&Json> {
+        match var {
+            Var::Body(path) => self.body.and_then(|b| walk(b, path)),
+            Var::Step(n, path) => self.steps.get(n - 1).and_then(|o| walk(o, path)),
+            _ => None,
+        }
+    }
+
     /// The value of a variable as JSON (record fields as display text).
     pub fn resolve(&self, var: &Var) -> Json {
         match var {
@@ -293,7 +307,17 @@ impl RenderCtx<'_> {
                     match escape {
                         Escape::None => out.push_str(&text),
                         Escape::Json => out.push_str(&json_escape(&text)),
-                        Escape::Url => out.push_str(&url_escape(&text)),
+                        Escape::Url => {
+                            // Percent-encoding cannot save a bare dot segment: URL parsing
+                            // reads %2e as a dot too, and removes the segment (and the one
+                            // before it) from the path, which moves the request elsewhere.
+                            if !text.is_empty() && text.bytes().all(|b| b == b'.') {
+                                return Err(format!(
+                                    "the value \"{text}\" cannot be placed in a URL: it would be read as a path step"
+                                ));
+                            }
+                            out.push_str(&url_escape(&text))
+                        }
                     }
                 }
             }
@@ -313,30 +337,69 @@ impl RenderCtx<'_> {
     /// placeholder for a webhook-body or step value keeps that value's JSON
     /// type (numbers, arrays); everything else becomes text.
     pub fn render_json(&self, v: &Json) -> Result<Json, String> {
+        self.render_json_within(v, &mut MAX_RENDERED_JSON_LEN.clone())
+    }
+
+    /// [`Self::render_json`] with what is left of the output budget: every substituted value is
+    /// measured before it is copied, so the copies stop at the budget instead of after it.
+    fn render_json_within(&self, v: &Json, left: &mut usize) -> Result<Json, String> {
+        const TOO_LARGE: &str = "the rendered values are too large";
         Ok(match v {
             Json::String(s) => {
                 let t = Template::parse(s)?;
                 match t.single_var() {
-                    Some(var @ (Var::Body(_) | Var::Step(..))) => match self.resolve(var) {
-                        Json::Null => Json::String(String::new()),
-                        other => other,
+                    Some(var @ (Var::Body(_) | Var::Step(..))) => match self.resolve_ref(var) {
+                        None | Some(Json::Null) => Json::String(String::new()),
+                        Some(found) => {
+                            *left = left
+                                .checked_sub(json_len_within(found, *left).ok_or(TOO_LARGE)?)
+                                .ok_or(TOO_LARGE)?;
+                            found.clone()
+                        }
                     },
-                    _ => Json::String(self.render(&t, Escape::None)?),
+                    _ => {
+                        let text = self.render(&t, Escape::None)?;
+                        *left = left.checked_sub(text.len()).ok_or(TOO_LARGE)?;
+                        Json::String(text)
+                    }
                 }
             }
             Json::Array(a) => Json::Array(
                 a.iter()
-                    .map(|x| self.render_json(x))
+                    .map(|x| self.render_json_within(x, left))
                     .collect::<Result<_, _>>()?,
             ),
             Json::Object(o) => Json::Object(
                 o.iter()
-                    .map(|(k, x)| Ok((k.clone(), self.render_json(x)?)))
+                    .map(|(k, x)| Ok((k.clone(), self.render_json_within(x, left)?)))
                     .collect::<Result<Map<_, _>, String>>()?,
             ),
             other => other.clone(),
         })
     }
+}
+
+/// Serialized length of `v`, or None as soon as it passes `limit` (nothing is allocated).
+fn json_len_within(v: &Json, limit: usize) -> Option<usize> {
+    struct Count {
+        n: usize,
+        limit: usize,
+    }
+    impl std::io::Write for Count {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.n += buf.len();
+            if self.n > self.limit {
+                return Err(std::io::Error::other("over the limit"));
+            }
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut c = Count { n: 0, limit };
+    serde_json::to_writer(&mut c, v).ok()?;
+    Some(c.n)
 }
 
 /// Parse every string inside a JSON value as a template and check it.
@@ -603,6 +666,50 @@ mod tests {
             )
             .unwrap();
         assert_eq!(url, "https://x.test/..%2Fevil%40host%2F%3F%23");
+    }
+
+    #[test]
+    fn a_dot_only_value_is_refused_in_a_url() {
+        let f = fields();
+        for dots in [".", "..", "..."] {
+            let mut d = data();
+            d.insert("fldName".into(), json!(dots));
+            let c = ctx(&f, &d, None, &[]);
+            let err = c
+                .render_str(
+                    "https://x.test/a/{{trigger.record.fields.fldName}}/b",
+                    Escape::Url,
+                )
+                .unwrap_err();
+            assert!(err.contains("path step"), "{err}");
+        }
+        // Dots inside a longer value stay: they are not a path step.
+        let mut d = data();
+        d.insert("fldName".into(), json!("v1.2"));
+        let c = ctx(&f, &d, None, &[]);
+        assert_eq!(
+            c.render_str(
+                "https://x.test/{{trigger.record.fields.fldName}}",
+                Escape::Url
+            )
+            .unwrap(),
+            "https://x.test/v1.2"
+        );
+    }
+
+    #[test]
+    fn many_placeholders_for_one_large_value_hit_the_total_budget() {
+        let f = fields();
+        let d = data();
+        let body = json!({ "big": "x".repeat(100_000) });
+        let c = ctx(&f, &d, Some(&body), &[]);
+        let many = |n: usize| Json::Array(vec![json!("{{trigger.body.big}}"); n]);
+        assert!(c.render_json(&many(10)).is_ok());
+        let err = c.render_json(&many(100_000)).unwrap_err();
+        assert!(err.contains("too large"), "{err}");
+        // Text placeholders count too.
+        let texts = Json::Array(vec![json!("{{trigger.body.big}} a"); 100_000]);
+        assert!(c.render_json(&texts).unwrap_err().contains("too large"));
     }
 
     #[test]
