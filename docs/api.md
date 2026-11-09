@@ -203,7 +203,7 @@ the two sign-in calls are session-only.
 | `POST /api/auth/passkey-login/finish` | Anonymous. Body `{challenge_id, credential}`. Answers like a password login (`{user, two_factor_required: false}`) and sets the session cookie; passkey sign-in never asks for the TOTP code. `401 invalid_passkey` for any refusal, `401 passkey_expired` for an unknown or used challenge, `403` for a deactivated user, `429` over the per-address limit. |
 | `DELETE /api/admin/users/{id}/passkeys` | Administrators, signed in. Removes all of the user's passkeys; answers `{removed}`. |
 
-`GET /api/setup` reports `passkeys_enabled` (false when `OPENBASE_PUBLIC_URL` is an IP address).
+`GET /api/setup` reports `passkeys_enabled` (false when `OPENBASE_PUBLIC_URL` is an IP address) and `trash_days` (`OPENBASE_TRASH_DAYS`: how long deleted things stay restorable; the delete confirmations quote it).
 How passkeys are protected: [security.md](security.md#passkeys).
 
 ### Connected apps (internal API)

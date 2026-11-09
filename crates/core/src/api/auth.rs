@@ -39,6 +39,14 @@ pub struct SetupStatus {
     /// work for an IP address).
     #[serde(default)]
     pub passkeys_enabled: bool,
+    /// Days a deleted record, property, collection, view, folder or workspace stays in the trash
+    /// before the daily purge erases it (`OPENBASE_TRASH_DAYS`). The delete confirmations quote it.
+    #[serde(default = "default_trash_days")]
+    pub trash_days: u32,
+}
+
+fn default_trash_days() -> u32 {
+    30
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -15,4 +15,9 @@ public_url: string,
  * Passkey sign-in is available: the public URL's host is a domain name (WebAuthn does not
  * work for an IP address).
  */
-passkeys_enabled: boolean, };
+passkeys_enabled: boolean, 
+/**
+ * Days a deleted record, property, collection, view, folder or workspace stays in the trash
+ * before the daily purge erases it (`OPENBASE_TRASH_DAYS`). The delete confirmations quote it.
+ */
+trash_days: number, };

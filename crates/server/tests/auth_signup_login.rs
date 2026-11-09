@@ -17,7 +17,7 @@ async fn setup_reports_needs_setup_until_first_user() {
     res.assert_status(200);
     assert_eq!(
         res.body,
-        json!({"needs_setup": true, "open_signup": false, "email_enabled": false, "public_url": "http://localhost:8080", "passkeys_enabled": true})
+        json!({"needs_setup": true, "open_signup": false, "email_enabled": false, "public_url": "http://localhost:8080", "passkeys_enabled": true, "trash_days": 30})
     );
     app.signup("first@example.com", PW, None)
         .await
@@ -36,6 +36,14 @@ async fn setup_reflects_config() {
     let res = app.get(&app.anon(), "/api/setup").await;
     assert_eq!(res.body["open_signup"], true);
     assert_eq!(res.body["email_enabled"], true);
+}
+
+#[tokio::test]
+async fn setup_reports_how_long_the_trash_keeps_things() {
+    // The delete confirmations say "moves to the trash for N days" with the real setting.
+    let app = TestApp::with_config(|c| c.trash_days = 14);
+    let res = app.get(&app.anon(), "/api/setup").await;
+    assert_eq!(res.body["trash_days"], 14);
 }
 
 #[tokio::test]

@@ -1258,7 +1258,9 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
   const clientId = String(req.headers["x-client-id"] ?? "");
   let g: RegExpExecArray | null;
 
-  if (p === "/api/setup") return send(res, 200, { needs_setup: false, open_signup: false, email_enabled: false, public_url: "https://openbase.example.com" }), true;
+  if (p === "/api/setup") return send(res, 200, { needs_setup: false, open_signup: false, email_enabled: false, public_url: "https://openbase.example.com", passkeys_enabled: false, trash_days: 30 }), true;
+  // The invite page (a signed-out visitor's first sight of the workspace, by its color).
+  if (m === "GET" && /^\/api\/invites\/by-token\/[^/]+$/.test(p)) return send(res, 200, { target_name: "Acme Studio", target_color: "purple", target_kind: "workspace", role: "editor", invited_by: "Grace Hopper" }), true;
   if (p === "/api/auth/me") {
     if (m === "PATCH" && typeof body.intro_seen === "boolean") introSeen = body.intro_seen;
     if (m === "PATCH" && typeof body.accent === "string") accent = body.accent || null;

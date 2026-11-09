@@ -133,6 +133,7 @@ async fn setup(State(state): State<AppState>) -> AppResult<Json<SetupStatus>> {
         email_enabled: state.email.enabled(),
         public_url: state.config.public_url.trim_end_matches('/').to_string(),
         passkeys_enabled: state.passkeys.enabled(),
+        trash_days: state.config.trash_days,
     }))
 }
 
