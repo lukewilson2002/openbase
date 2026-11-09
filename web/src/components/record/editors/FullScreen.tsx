@@ -17,7 +17,7 @@ export function FullScreenTextarea({ value, onChange, label }: { value: string; 
       value={value}
       onChange={(e) => onChange(e.target.value)}
       spellCheck
-      className="min-h-0 w-full flex-1 resize-none bg-transparent px-4 py-3 text-[0.8125rem] outline-none"
+      className="min-h-0 w-full flex-1 resize-none bg-transparent px-4 py-3 text-label outline-none"
     />
   );
 }

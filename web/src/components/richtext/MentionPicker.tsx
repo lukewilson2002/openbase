@@ -31,7 +31,7 @@ export function MentionPicker({ id, matches, people, active, onChoose, style }: 
       {matches.map((p, i) => (
         <li key={p.id} id={`${id}-${i}`} role="option" aria-selected={i === active}>
           {/* The mouse picks without taking the focus from the text. */}
-          <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => onChoose(p)} className={cn("flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[0.8125rem]", i === active && "bg-hover")}>
+          <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => onChoose(p)} className={cn("flex w-full items-center gap-2 rounded px-2 py-1 text-left text-label", i === active && "bg-hover")}>
             <Avatar name={p.name} email={p.email} color={colors.get(p.id)} size="sm" />
             <span className="min-w-0">
               <span className="block truncate">{p.name}</span>

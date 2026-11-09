@@ -154,6 +154,10 @@
   --text-meta: 0.75rem; /* 12 / 16, 400: counts, timestamps, a row's collection name */
   --text-meta--line-height: 1rem;
   --text-meta--font-weight: 400;
+  --text-initial: 0.625rem; /* 10 / 12, 500: the initials in a 20 to 24 px avatar, the one place text is smaller than meta */
+  --text-initial--line-height: 0.75rem;
+  --text-initial-xs: 0.5625rem; /* 9 / 11: the initials in a 16 to 20 px avatar */
+  --text-initial-xs--line-height: 0.6875rem;
   --text-label: 0.8125rem; /* 13 / 18, 400 or 600: property labels, section labels, secondary buttons */
   --text-label--line-height: 1.125rem;
   --text-ui: 0.875rem; /* 14 / 20, 400 / 500 / 600: default UI text, table cells, nav rows */

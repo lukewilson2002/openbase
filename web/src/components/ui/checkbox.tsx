@@ -17,7 +17,7 @@ export interface CheckboxProps {
  * a 16 px box or a 20 px switch still lands on the control the row belongs to.
  */
 const rowClass = "flex items-center gap-2 max-md:relative max-md:min-h-control-touch";
-const labelClass = "text-[0.8125rem] max-md:after:absolute max-md:after:inset-0";
+const labelClass = "text-label max-md:after:absolute max-md:after:inset-0";
 
 export function Checkbox({ checked, onCheckedChange, label, disabled, className }: CheckboxProps) {
   const id = useId();

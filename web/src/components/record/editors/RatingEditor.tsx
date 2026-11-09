@@ -89,7 +89,7 @@ export interface CheckboxEditorProps extends FieldEditorCallbacks {
 export function CheckboxEditor({ field, value, onCommit }: CheckboxEditorProps) {
   const on = value === true;
   return (
-    <label className="flex min-h-8 w-full items-center gap-2 text-[0.8125rem] pointer-coarse:min-h-11">
+    <label className="flex min-h-8 w-full items-center gap-2 text-label pointer-coarse:min-h-11">
       <input type="checkbox" checked={on} onChange={(e) => onCommit({ json: e.target.checked ? true : null })} className="size-4 accent-[var(--primary)]" />
       <span className="text-muted">{on ? "Checked" : "Unchecked"}</span>
       <span className="sr-only">{field.name}</span>

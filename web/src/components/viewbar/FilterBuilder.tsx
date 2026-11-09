@@ -98,7 +98,7 @@ export function FilterBuilder({ value, onChange, fields, collaborators, tables, 
       <ul className="flex flex-col gap-2">
         {group.items.map((item, i) => (
           <li key={i} className="flex flex-wrap items-start gap-1.5">
-            <span className="w-[4.5rem] shrink-0 pt-1.5 text-[0.8125rem] text-muted">
+            <span className="w-[4.5rem] shrink-0 pt-1.5 text-label text-muted">
               {i === 0 ? (
                 "Where"
               ) : i === 1 ? (
@@ -162,7 +162,7 @@ export function FilterBuilder({ value, onChange, fields, collaborators, tables, 
 
   return (
     <div>
-      {root.items.length === 0 ? <p className="mb-2 text-[0.8125rem] text-muted">{emptyText}</p> : null}
+      {root.items.length === 0 ? <p className="mb-2 text-label text-muted">{emptyText}</p> : null}
       {render(root, [], 1)}
     </div>
   );

@@ -26,7 +26,7 @@ export interface AvatarProps {
   className?: string;
 }
 
-const sizes = { sm: "size-6 text-[0.625rem]", md: "size-8 text-xs", lg: "size-12 text-base" };
+const sizes = { sm: "size-6 text-initial", md: "size-8 text-xs", lg: "size-12 text-base" };
 
 /**
  * A person's face: white initials on a solid circle of their colour, in the accent shades the

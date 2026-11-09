@@ -645,7 +645,8 @@ stack or lane, the bar of a coloured row) use `swatchColor`, because the pale ch
 
 `src/styles/index.css` also holds the Notebook tokens of the UX overhaul spec (`docs/plans/2026-11-07-ux-overhaul.md`, "Design
 language"): the type scale (`text-meta`, `text-label`, `text-ui`, `text-read`, `text-h3`, `text-sheet`, `text-h2`, `text-title`,
-`text-home`, `text-record`, `text-capture`, with `-phone` variants where the spec has them; each sets size, line height, weight and
+`text-home`, `text-record`, `text-capture`, with `-phone` variants where the spec has them, and `text-initial` / `text-initial-xs`, the
+initials in a 20 to 24 px / 16 to 20 px avatar, the only text under 12 px; each sets size, line height, weight and
 letter spacing), the radii (`rounded-xs` to `rounded-xl` and `rounded-pill`, which replace Tailwind's own steps of the same names),
 control and row heights (`h-control-md`, `h-row-table`), layout widths (`w-sidebar`, `max-w-record`, `max-w-home`, `px-gutter`), the
 ColorMark sizes (`--mark-14`, `--mark-14-radius`), the spacing steps (`--space-8`), the durations (`duration-fast`, `duration-base`,
@@ -653,7 +654,7 @@ ColorMark sizes (`--mark-14`, `--mark-14-radius`), the spacing steps (`--space-8
 `prefers-reduced-motion` rule makes every transition an opacity fade. `src/lib/cn.ts` teaches tailwind-merge the new names; add a name
 there whenever you add a token class. `src/styles/tokens.test.ts` pins the values.
 
-`scripts/check-tokens.sh` (part of `scripts/check.sh`, so CI) fails on a raw hex colour, `rgb()` or px font size in `src/` outside
+`scripts/check-tokens.sh` (part of `scripts/check.sh`, so CI) fails on a raw hex colour, `rgb()`, px font size or rem/em font size (`text-[0.8125rem]`, `fontSize: "1.2em"`) in `src/` outside
 `styles/*.css`, `theme/accents.ts`, `lib/colors.ts`, `lib/cells/palette.ts`, `views/grid/glide/`, `components/brandMarks.ts`,
 `pages/account/AssistantMarks.tsx` and test files. There is no list of files that are allowed to fail for now: every file
 outside those uses tokens. The detector's tests are `src/styles/checkTokens.test.mjs`.

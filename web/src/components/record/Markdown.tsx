@@ -282,7 +282,7 @@ export function Markdown({ source, className }: { source: string; className?: st
       <div
         ref={ref}
         onClick={protectedShare ? (e) => protectedDownload(e, share) : undefined}
-        className={cn("ob-markdown ob-prose text-[0.8125rem] leading-relaxed", className)}
+        className={cn("ob-markdown ob-prose text-label leading-relaxed", className)}
         // Sanitized by DOMPurify in renderMarkdown.
         dangerouslySetInnerHTML={{ __html: html }}
       />

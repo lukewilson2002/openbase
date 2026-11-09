@@ -43,7 +43,7 @@ export function CellValue({ field, value, format, emails, className, markdown = 
   const share = useShareOrNull();
   const text = displayText(field, value, format);
   const empty = <span className="text-faint">—</span>;
-  const wrap = (children: React.ReactNode) => <div className={cn("min-w-0 text-[0.8125rem]", className)}>{children}</div>;
+  const wrap = (children: React.ReactNode) => <div className={cn("min-w-0 text-label", className)}>{children}</div>;
   // Chips are taller than a line of text, so a line clamp or `truncate` on their box cuts the tops
   // and bottoms off the pills and faces (WebKit clamps a flex row by text lines, not by its height).
   // They get the same limit counted in whole chip rows instead.
@@ -52,7 +52,7 @@ export function CellValue({ field, value, format, emails, className, markdown = 
     const oneLine = /\btruncate\b/.test(className ?? "");
     const rest = (className ?? "").replace(/\b(line-clamp-\d|truncate)\b/g, "");
     return (
-      <div className={cn("min-w-0 text-[0.8125rem]", rest)}>
+      <div className={cn("min-w-0 text-label", rest)}>
         <span className={cn("flex gap-1", oneLine ? "flex-nowrap overflow-hidden" : "flex-wrap", lines > 0 && "overflow-hidden")} style={lines > 0 ? { maxHeight: `${lines * CHIP_ROW_PX + (lines - 1) * 4}px` } : undefined}>
           {children}
         </span>

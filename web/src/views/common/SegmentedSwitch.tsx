@@ -25,8 +25,8 @@ export function SegmentedSwitch<T extends string>({ label, value, options, onCha
             onClick={() => onChange(o.value)}
             className={cn(
               "rounded-md border transition-colors pointer-coarse:h-control-touch",
-              size === "sm" && "h-7 px-3 text-[0.8125rem]",
-              size === "md" && "h-[30px] px-3.5 text-[0.875rem]",
+              size === "sm" && "h-7 px-3 text-label",
+              size === "md" && "h-[30px] px-3.5 text-ui",
               // Four choices share the panel's width, and each is a 44 px target on a phone.
               size === "lg" && "h-control-sm min-w-0 flex-1 px-1 text-label max-md:h-control-touch pointer-coarse:h-control-touch",
               on ? "border-line bg-surface font-semibold text-fg" : "border-transparent font-medium text-muted hover:text-fg",

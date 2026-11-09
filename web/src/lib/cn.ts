@@ -10,6 +10,8 @@ const twMerge = extendTailwindMerge({
   extend: {
     theme: {
       text: [
+        "initial-xs",
+        "initial",
         "meta",
         "label",
         "ui",

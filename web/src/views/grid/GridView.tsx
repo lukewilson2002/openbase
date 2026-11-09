@@ -1087,7 +1087,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         <div className={viewHugAreaClass}>
         <div ref={cardRef} className={viewHugCardClass} style={{ height: gridHeight }}>
           {data.error && !data.loading && total === 0 ? (
-            <div role="alert" className="flex h-full flex-col items-center justify-center gap-2 text-center text-[0.8125rem] text-muted">
+            <div role="alert" className="flex h-full flex-col items-center justify-center gap-2 text-center text-label text-muted">
               <p>Could not load records: {data.error.message}</p>
               <div className="flex gap-2">
                 <Button size="sm" onClick={() => dataRef.current.refresh()}>

@@ -35,7 +35,7 @@ export function PendingFace({ email, size = "sm", className, style }: { email?: 
       style={style}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-full border border-dashed border-faint bg-subtle font-semibold text-muted",
-        size === "sm" ? "size-6 text-[0.625rem]" : "size-8 text-xs",
+        size === "sm" ? "size-6 text-initial" : "size-8 text-xs",
         className,
       )}
     >
@@ -103,7 +103,7 @@ export function BaseAvatars({ people, viewers = [], max = MAX_FACES, size = "sm"
             data-away
             title={away.length > 0 ? `Can open this project, not viewing now: ${peopleLabel(away, meId)}` : undefined}
             // A count as plain text beside the faces, not a face of its own.
-            className={cn("relative z-0 inline-flex shrink-0 items-center pl-2 font-medium text-muted", size === "md" ? "h-8 text-xs" : "h-6 text-[0.6875rem]")}
+            className={cn("relative z-0 inline-flex shrink-0 items-center pl-2 font-medium text-muted", size === "md" ? "h-8 text-xs" : "h-6 text-meta")}
           >
             +{rest}
           </span>

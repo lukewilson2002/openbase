@@ -78,6 +78,8 @@ describe("semantic colours (kept exactly)", () => {
 describe("type scale", () => {
   // token: [size, line height, weight or undefined, letter spacing or undefined]
   const SCALE: Record<string, [number, number, number?, string?]> = {
+    "initial-xs": [9, 11],
+    initial: [10, 12],
     meta: [12, 16, 400],
     label: [13, 18],
     ui: [14, 20],

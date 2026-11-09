@@ -24,7 +24,7 @@ export function InviteLinkResult({ created, emailEnabled }: { created: CreatedIn
     : "Anyone with this link can join. Send it to the person you are inviting:";
   return (
     <div role="status" className="flex flex-col gap-1.5 rounded-md border border-line bg-subtle p-3">
-      <p className="text-[0.8125rem]">{message}</p>
+      <p className="text-label">{message}</p>
       <CopyField label="Invite link" value={absoluteUrl(created.url)} />
       <p className="text-xs text-muted">The link is shown only now.</p>
     </div>

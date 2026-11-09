@@ -158,7 +158,7 @@ export function EditableValue({ field, value, failed, labelId, format, emails, e
     if (!long && !direct) stop(true);
   };
 
-  const box = "flex w-full min-w-0 min-h-8 flex-col justify-center rounded-md border border-transparent px-2 py-1 text-left text-[0.8125rem] pointer-coarse:min-h-11";
+  const box = "flex w-full min-w-0 min-h-8 flex-col justify-center rounded-md border border-transparent px-2 py-1 text-left text-label pointer-coarse:min-h-11";
 
   if (direct) {
     return (

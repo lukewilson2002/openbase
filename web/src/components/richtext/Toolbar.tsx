@@ -169,7 +169,7 @@ function LinkButton({ editor, active }: { editor: Editor; active: boolean }) {
           }
         }}
       >
-        <label htmlFor={inputId} className="text-[0.8125rem] font-medium">
+        <label htmlFor={inputId} className="text-label font-medium">
           Link address
         </label>
         <input
@@ -276,7 +276,7 @@ export function Toolbar({ editor, canUpload }: { editor: Editor; canUpload?: boo
   // the text would show above it); a page scrolling as a whole has no bar above it, so it stays 0.
   return (
     <div role="toolbar" aria-label="Formatting" aria-orientation="horizontal" ref={ref} onKeyDown={moveAlong} className="sticky top-[var(--ob-sticky-top,0px)] z-10 flex w-full min-w-0 max-w-full shrink-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain rounded-t-md border-b border-line bg-surface px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <ToolMenu editor={editor} label="Text style" current={s.heading ? `Heading ${s.heading}` : "Paragraph"} trigger={<span className="flex items-center gap-1 px-1.5 text-[0.8125rem] text-fg">{s.heading ? `Heading ${s.heading}` : "Paragraph"}<ChevronDown aria-hidden className="size-3.5 text-muted" /></span>} className="w-auto min-w-24 justify-between">
+      <ToolMenu editor={editor} label="Text style" current={s.heading ? `Heading ${s.heading}` : "Paragraph"} trigger={<span className="flex items-center gap-1 px-1.5 text-label text-fg">{s.heading ? `Heading ${s.heading}` : "Paragraph"}<ChevronDown aria-hidden className="size-3.5 text-muted" /></span>} className="w-auto min-w-24 justify-between">
         <DropdownMenuItem onSelect={() => run().setParagraph().run()}>Paragraph</DropdownMenuItem>
         {HEADINGS.map((level) => (
           <DropdownMenuItem key={level} onSelect={() => run().setHeading({ level }).run()}>

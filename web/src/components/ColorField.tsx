@@ -10,7 +10,7 @@ import { cn } from "@/lib/cn";
 export function ColorField({ value, onChange, label = "Color", hint, className }: { value: string | null | undefined; onChange: (color: ChoiceColor) => void; label?: string; hint?: string; className?: string }) {
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
-      <span aria-hidden className="text-[0.8125rem] font-medium text-fg">
+      <span aria-hidden className="text-label font-medium text-fg">
         {label}
       </span>
       <ColorSwatchPicker value={value} onChange={onChange} label={label} className="pointer-coarse:grid-cols-7" />

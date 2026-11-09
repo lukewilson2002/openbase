@@ -742,7 +742,7 @@ function RenameStack({ stack, onClose, onSave }: { stack: Stack; onClose: () => 
       <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-3">
         <Input autoFocus aria-label="Stack name" value={name} maxLength={255} onChange={(e) => setName(e.target.value)} onFocus={(e) => e.currentTarget.select()} />
         {error && (
-          <p role="alert" className="text-[0.8125rem] text-danger">
+          <p role="alert" className="text-label text-danger">
             {error}
           </p>
         )}
@@ -775,7 +775,7 @@ function ColourStack({ stack, onClose, onPick }: { stack: Stack; onClose: () => 
     <Dialog open onOpenChange={(open) => !open && onClose()} title={`Colour of ${stack.label}`} description="This colours the option in the property, so it changes everywhere the property is used." size="sm">
       <ColorSwatchPicker value={stack.color} onChange={(c) => void pick(c)} label={`Colour of ${stack.label}`} />
       {error && (
-        <p role="alert" className="mt-3 text-[0.8125rem] text-danger">
+        <p role="alert" className="mt-3 text-label text-danger">
           {error}
         </p>
       )}

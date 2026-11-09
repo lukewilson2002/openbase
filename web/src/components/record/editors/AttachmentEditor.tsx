@@ -71,7 +71,7 @@ function FileRow({ file, sortable, onRemove }: { file: AttachmentRef; sortable: 
         </button>
       )}
       <AttachmentThumb file={file} />
-      <a href={attachmentsApi.downloadUrl(file.id, file.filename)} target="_blank" rel="noopener noreferrer" draggable={false} className="min-w-0 flex-1 truncate text-[0.8125rem]">
+      <a href={attachmentsApi.downloadUrl(file.id, file.filename)} target="_blank" rel="noopener noreferrer" draggable={false} className="min-w-0 flex-1 truncate text-label">
         {file.filename}
         <span className="ml-2 text-xs text-muted">{formatBytes(file.size)}</span>
       </a>
@@ -175,9 +175,9 @@ export function AttachmentEditor({ field, value, variant, target, onChange, onCo
                   {files.map((f) => (
                     <FileRow key={f.id} file={f} sortable={files.length > 1} onRemove={() => set(files.filter((x) => x.id !== f.id))} />
                   ))}
-                  {files.length === 0 && busy === 0 && <li className="py-3 text-center text-[0.8125rem] text-muted">Drop files here, paste them, or use Upload.</li>}
+                  {files.length === 0 && busy === 0 && <li className="py-3 text-center text-label text-muted">Drop files here, paste them, or use Upload.</li>}
                   {busy > 0 && (
-                    <li className="flex items-center gap-2 py-2 text-[0.8125rem] text-muted">
+                    <li className="flex items-center gap-2 py-2 text-label text-muted">
                       <Spinner className="size-3.5" label="Uploading" /> Uploading {busy} file{busy === 1 ? "" : "s"}…
                     </li>
                   )}

@@ -44,8 +44,8 @@ export function DescriptionSelect({ candidates, field, disabled, onChange, hint 
 
 /** The whole description: rich text as markdown, anything else as text with its line breaks. */
 function FullDescription({ field, value, format }: { field: Field; value: TableRecord["values"][string]; format: FormatCtx }) {
-  if (field.type === "rich_text" && typeof value === "string") return <Markdown source={value} className="text-[0.8125rem]" />;
-  return <p className="whitespace-pre-wrap break-words text-[0.8125rem] leading-[1.5]">{displayText(field, value, format)}</p>;
+  if (field.type === "rich_text" && typeof value === "string") return <Markdown source={value} className="text-label" />;
+  return <p className="whitespace-pre-wrap break-words text-label leading-[1.5]">{displayText(field, value, format)}</p>;
 }
 
 /** The primary pointer can hover (a mouse or trackpad); touch-first screens tap to open instead. */
@@ -102,7 +102,7 @@ export function DescriptionHover({
           onClick={(e) => e.stopPropagation()}
           className="ob-fade-in z-[60] flex max-h-[min(24rem,60dvh)] w-[min(24rem,calc(100vw-1.5rem))] flex-col gap-1.5 overflow-y-auto rounded-lg border border-line bg-surface p-3 text-fg shadow-pop"
         >
-          <p className="break-words text-[0.875rem] font-semibold">{title}</p>
+          <p className="break-words text-ui font-semibold">{title}</p>
           <p className="text-xs text-faint">{field.name}</p>
           <FullDescription field={field} value={value} format={format} />
         </HoverCard.Content>

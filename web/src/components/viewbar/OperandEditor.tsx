@@ -39,7 +39,7 @@ function MultiPicker({ label, options, selected, onChange, disabled, search }: {
   return (
     <Popover title={label}>
       <PopoverTrigger asChild>
-        <button type="button" disabled={disabled} aria-label={label} className="flex h-8 min-w-36 max-w-56 items-center justify-between gap-2 rounded-md border border-line-strong bg-surface px-2.5 text-left text-[0.8125rem] disabled:opacity-70">
+        <button type="button" disabled={disabled} aria-label={label} className="flex h-8 min-w-36 max-w-56 items-center justify-between gap-2 rounded-md border border-line-strong bg-surface px-2.5 text-left text-label disabled:opacity-70">
           <span className={cn("truncate", names.length === 0 && "text-faint")}>{summary}</span>
           <ChevronDown aria-hidden className="size-4 shrink-0 text-muted" />
         </button>
@@ -55,14 +55,14 @@ function MultiPicker({ label, options, selected, onChange, disabled, search }: {
             const on = selected.includes(o.id);
             return (
               <li key={o.id} role="option" aria-selected={on}>
-                <button type="button" onClick={() => onChange(on ? selected.filter((x) => x !== o.id) : [...selected, o.id])} className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[0.8125rem] hover:bg-hover">
+                <button type="button" onClick={() => onChange(on ? selected.filter((x) => x !== o.id) : [...selected, o.id])} className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-label hover:bg-hover">
                   <span className="truncate">{o.label}</span>
                   {on && <Check aria-hidden className="size-4 text-primary-mark" />}
                 </button>
               </li>
             );
           })}
-          {options.length === 0 && <li className="px-2 py-3 text-center text-[0.8125rem] text-muted">{search?.loading ? "Searching…" : "Nothing to choose."}</li>}
+          {options.length === 0 && <li className="px-2 py-3 text-center text-label text-muted">{search?.loading ? "Searching…" : "Nothing to choose."}</li>}
         </ul>
       </PopoverContent>
     </Popover>

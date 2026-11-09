@@ -117,7 +117,7 @@ export function RichTextEditor({ value, onChange, onBlur, autoFocus, fullScreen,
   return (
     <div
       ref={box}
-      className={cn("relative flex flex-col text-[0.8125rem] leading-relaxed", fullScreen ? "min-h-0 flex-1 overflow-y-auto overscroll-contain" : "rounded-md border border-line-strong bg-surface focus-within:border-ring")}
+      className={cn("relative flex flex-col text-label leading-relaxed", fullScreen ? "min-h-0 flex-1 overflow-y-auto overscroll-contain" : "rounded-md border border-line-strong bg-surface focus-within:border-ring")}
       onKeyDown={(e) => {
         // Escape closes the list of people, not the field's edit or the dialog around the editor. Handled
         // here, not in the editor: a dialog has already marked it handled, and ProseMirror skips those.

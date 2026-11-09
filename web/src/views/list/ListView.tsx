@@ -138,7 +138,7 @@ function ListInner(props: ViewProps) {
     );
   } else if (records.error && !data) {
     body = (
-      <p role="alert" className="pt-16 text-center text-[0.8125rem] text-muted">
+      <p role="alert" className="pt-16 text-center text-label text-muted">
         Could not load records: {records.error.message}
       </p>
     );

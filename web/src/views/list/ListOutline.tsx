@@ -394,7 +394,7 @@ function GroupMark({ header, p }: { header: GroupHeader; p: ListOutlineProps }) 
   if (!field || header.key === "" || displayShapeOf(field) !== "user") return null;
   return (
     <span aria-hidden className="contents">
-      <Avatar name={header.label} email={p.emails.get(header.key)} color={p.format.userColor?.(header.key)} size="sm" className="size-[22px] text-[0.6875rem]" />
+      <Avatar name={header.label} email={p.emails.get(header.key)} color={p.format.userColor?.(header.key)} size="sm" className="size-[22px] text-initial" />
     </span>
   );
 }
@@ -427,7 +427,7 @@ function GroupHeading({ row, u }: { row: Extract<ReturnType<typeof flattenOutlin
       onClick={() => p.onToggle(row.node.path)}
       style={{ paddingLeft: ROW_PAD + row.depth * LEVEL_PX }}
       className={cn(
-        `flex min-h-11 w-full cursor-pointer items-center gap-2.5 ${ROW_BORDER} pr-4 text-left text-[0.875rem] font-semibold focus-visible:-outline-offset-2`,
+        `flex min-h-11 w-full cursor-pointer items-center gap-2.5 ${ROW_BORDER} pr-4 text-left text-ui font-semibold focus-visible:-outline-offset-2`,
         headingFill(row.node.header, p),
         target && "shadow-[inset_0_0_0_2px_var(--primary)]",
       )}

@@ -7,7 +7,7 @@
 //   - an rgb(), rgba(), hsl() or hsla() colour
 //   - a Tailwind palette colour utility (bg-white, text-black/70, border-slate-200, ring-blue-500):
 //     the colour must come from a token (bg-surface, text-fg, border-line)
-//   - a px font size: Tailwind text-[13px], fontSize: 13 / "13px" / {13}, a literal branch of a
+//   - a literal font size: Tailwind text-[13px] or text-[0.8125rem], fontSize: 13 / "13px" / {13}, a literal branch of a
 //     conditional or fallback (fontSize: big ? 16 : 13, fontSize: x || 13), "font-size": "13px",
 //     setProperty("font-size", "13px"), font-size:${13}px, font-size: 13px, font-size="13", and the
 //     font shorthand (font: 13px ..., ctx.font = "600 13px ...")
@@ -124,12 +124,14 @@ const FUNC_COLOR = /(?<![A-Za-z0-9])(?:rgba?|hsla?)\(/gi;
 const PALETTE_COLOR =
   /(?<![\w-])(?:bg|text|border(?:-[xytblrse])?|ring|ring-offset|fill|stroke|outline|shadow|divide|from|via|to|decoration|accent|caret|placeholder)-(?:white|black|(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3})(?:\/\d{1,3}|\/\[[^\]]+\])?(?![\w-])/g;
 const PX_FONT_SIZE = [
-  // Tailwind arbitrary value: text-[13px], md:text-[length:13px]
-  /(?<![\w-])text-\[(?:length:)?\d*\.?\d+px\]/g,
+  // Tailwind arbitrary value: text-[13px], md:text-[length:13px], text-[0.8125rem] (a rem or em size is a size too)
+  /(?<![\w-])text-\[(?:length:)?\d*\.?\d+(?:px|r?em)\]/g,
   // fontSize: 13, fontSize = "13px", fontSize={13}
   /\bfontSize\s*[:=]\s*\{?\s*["'`]?\d+(?:\.\d+)?(?:px)?["'`]?(?![\w%.])/g,
   // fontSize: "max(13px, 1em)"
   /\bfontSize\s*[:=]\s*\{?\s*["'`][^"'`\n]*\d\s*px\b/g,
+  // fontSize: "0.8125rem", fontSize: "1.1em" (a relative size is still a literal; "inherit", "100%" and var() are not)
+  /\bfontSize\s*[:=]\s*\{?\s*["'`]\d*\.?\d+r?em["'`]/g,
   // font-size: 13px, font-size: max(13px, 1em)
   /\bfont-size\s*:[^;}\n]*?(?<![\w.-])\d*\.?\d+px\b/gi,
   // font-size="13" (an SVG attribute)

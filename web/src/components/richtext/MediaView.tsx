@@ -103,7 +103,7 @@ function AltButton({ alt, onChange }: { alt: string; onChange: (alt: string) => 
           }
         }}
       >
-        <label htmlFor={id} className="text-[0.8125rem] font-medium">
+        <label htmlFor={id} className="text-label font-medium">
           Alt text
         </label>
         <input

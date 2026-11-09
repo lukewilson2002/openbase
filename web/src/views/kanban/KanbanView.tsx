@@ -257,7 +257,7 @@ function KanbanInner(props: ViewProps) {
     );
   } else if (records.error && !data) {
     body = (
-      <div role="alert" className="flex h-full items-center justify-center p-6 text-[0.8125rem] text-muted">
+      <div role="alert" className="flex h-full items-center justify-center p-6 text-label text-muted">
         Could not load cards: {records.error.message}
       </div>
     );
