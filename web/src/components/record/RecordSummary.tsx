@@ -83,7 +83,7 @@ export function RecordSummary({ title, record, fields, descriptionField, format,
           {/* The other fields each on a line, named, as in a list: "Tasks" says what the chips after it are. */}
           {others.map((f) => (
             <span key={f.id} className="flex w-full min-w-0 items-baseline gap-1.5 text-meta">
-              <span className="max-w-[40%] shrink-0 truncate text-faint">{f.name}</span>
+              <span className="max-w-[50%] shrink-0 truncate text-faint">{f.name}</span>
               <CellValue field={f} value={record.values[f.id] ?? null} format={format} emails={emails} className="min-w-0 flex-1 truncate text-meta text-muted" markdown={false} />
             </span>
           ))}

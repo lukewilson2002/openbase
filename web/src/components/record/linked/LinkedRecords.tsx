@@ -146,9 +146,28 @@ function OpenPage({ onOpen, href }: { onOpen?: () => void; href?: string }) {
 
 /**
  * A linked record's details: its title and collection, then every filled property of its grid's layout as
- * a `PropertyList`, read-only. `showOpen` is false where the caller puts Open page elsewhere (the sheet's footer).
+ * a `PropertyList`, read-only. `showOpen` is false where the caller puts Open page elsewhere (the sheet's footer), and
+ * `showTitle` where it has already put the title in a heading of its own (the sheet's).
  */
-export function RecordPeekBody({ table, record, format, emails, onOpen, href, showOpen = true }: { table: Table; record: TableRecord | undefined; format: FormatCtx; emails?: ReadonlyMap<string, string>; onOpen?: () => void; href?: string; showOpen?: boolean }) {
+export function RecordPeekBody({
+  table,
+  record,
+  format,
+  emails,
+  onOpen,
+  href,
+  showOpen = true,
+  showTitle = true,
+}: {
+  table: Table;
+  record: TableRecord | undefined;
+  format: FormatCtx;
+  emails?: ReadonlyMap<string, string>;
+  onOpen?: () => void;
+  href?: string;
+  showOpen?: boolean;
+  showTitle?: boolean;
+}) {
   const fields = layoutFields(table).filter((f) => f.id !== table.primary_field_id);
   const filled = record ? fields.filter((f) => hasCardValue(f, record.values[f.id], format)) : [];
   const empty = fields.length - filled.length;
@@ -159,8 +178,8 @@ export function RecordPeekBody({ table, record, format, emails, onOpen, href, sh
         <div className="flex flex-col gap-2">
           <div className="flex items-start gap-3">
             <div className="min-w-0 flex-1">
-              <p className="break-words text-ui font-semibold">{titleOf(table, record, "", format)}</p>
-              <p className="mt-0.5 flex items-center gap-1.5 text-meta text-muted">
+              {showTitle && <p className="break-words text-ui font-semibold">{titleOf(table, record, "", format)}</p>}
+              <p className={cn("flex items-center gap-1.5 text-meta text-muted", showTitle && "mt-0.5")}>
                 <ColorMark hue={table.color} name={table.name} size={8} />
                 <span className="truncate">{table.name}</span>
               </p>
@@ -409,7 +428,7 @@ export function RecordPeek({ table, recordId, record, format, emails, onOpen, hr
           }
         >
           <div data-record-peek="">
-            <RecordPeekBody table={table} record={record ?? fetched.data} format={format} emails={emails} showOpen={false} />
+            <RecordPeekBody table={table} record={record ?? fetched.data} format={format} emails={emails} showOpen={false} showTitle={false} />
           </div>
         </Sheet>
       )}

@@ -130,6 +130,8 @@ describe("linked records on the record page", () => {
     vi.useRealTimers();
     const sheet = await screen.findByRole("dialog", { name: "Buy the domain" });
     expect(within(sheet).getAllByRole("term").map((t) => t.textContent)).toEqual(["Notes", "Status", "Extra"]);
+    // The title is the sheet's heading, not said again in its body.
+    expect(within(sheet.querySelector("[data-record-peek]") as HTMLElement).queryByText("Buy the domain")).toBeNull();
     // The sheet is the whole peek: no hover card beside the card as well.
     expect(document.querySelectorAll("[data-record-peek]")).toHaveLength(1);
     expect(within(sheet).getAllByRole("button", { name: /Open page/ })).toHaveLength(1);

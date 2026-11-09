@@ -4,7 +4,7 @@
  * page's Add property box; both put it in a popover or inline on a desktop and in a bottom sheet on a phone
  * (PH-3).
  */
-import { useRef, type KeyboardEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent } from "react";
 import { Check } from "lucide-react";
 import type { FieldType } from "@/api/types";
 import { FIELD_TYPE_ICONS, FIELD_TYPE_LABELS } from "@/components/ui/field-type-icon";
@@ -55,6 +55,11 @@ export interface PropertyTypeListProps {
 
 export function PropertyTypeList({ value, onChange, unavailable, label = "Property types", className }: PropertyTypeListProps) {
   const list = useRef<HTMLDivElement>(null);
+
+  // The list opens at the chosen type: it is a third of the way down, and a list that starts at Text hides it.
+  useEffect(() => {
+    list.current?.querySelector("[aria-selected=true]")?.scrollIntoView?.({ block: "nearest" });
+  }, []);
 
   // One tab stop for the whole list (the chosen type), arrows between the types: 28 buttons in tab order would
   // bury whatever comes after the list.
