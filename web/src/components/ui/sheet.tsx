@@ -55,7 +55,7 @@ export function Sheet({ open, onOpenChange, title, description, children, footer
   const visible = useVisualViewport(open);
   const content = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
-  const returnFocus = useReturnFocus();
+  const returnFocus = useReturnFocus(open);
   const host = usePortalHost();
   const drag = useRef<DragState | null>(null);
   const tapStart = useRef<{ x: number; y: number } | null>(null);

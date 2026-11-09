@@ -69,7 +69,7 @@ export function CommandPalette({ open, onOpenChange, query, onQueryChange, group
   const desktop = useMediaQuery(DESKTOP_QUERY);
   const visible = useVisualViewport(open && !desktop);
   const input = useRef<HTMLInputElement | null>(null);
-  const returnFocus = useReturnFocus();
+  const returnFocus = useReturnFocus(open);
   const host = usePortalHost();
   const uid = useId();
   const shown = groups.filter((g) => g.items.length > 0);

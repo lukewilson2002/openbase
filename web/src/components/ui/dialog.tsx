@@ -108,7 +108,7 @@ function DialogParts({ title, description, children, footer, roomy, hideClose, f
 }
 
 function DesktopDialog({ open, onOpenChange, size = "md", roomy = false, role, dismissOnOutsidePress = true, onOpenAutoFocus, className, ...parts }: DialogProps) {
-  const returnFocus = useReturnFocus();
+  const returnFocus = useReturnFocus(open);
   const host = usePortalHost();
   return (
     <D.Root open={open} onOpenChange={onOpenChange} modal={!host.inline}>
@@ -143,7 +143,7 @@ function DesktopDialog({ open, onOpenChange, size = "md", roomy = false, role, d
 /** Below the desktop breakpoint a dialog takes the whole screen, above the on-screen keyboard (PH-3, PH-5). */
 function FullScreenDialog({ open, onOpenChange, roomy = false, role, dismissOnOutsidePress = true, onOpenAutoFocus, className, ...parts }: DialogProps) {
   const visible = useVisualViewport(open);
-  const returnFocus = useReturnFocus();
+  const returnFocus = useReturnFocus(open);
   const host = usePortalHost();
   return (
     <D.Root open={open} onOpenChange={onOpenChange} modal={!host.inline}>

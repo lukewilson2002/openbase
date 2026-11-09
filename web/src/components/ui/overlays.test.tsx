@@ -329,6 +329,57 @@ describe("Dialog", () => {
   });
 });
 
+describe("returning focus when the content takes focus itself", () => {
+  // An autoFocus field takes focus before Radix reports that the content opened, so the opener has to be noted earlier.
+  it.each([
+    ["Dialog on a desktop", true],
+    ["Dialog on a phone", false],
+  ])("%s returns focus to the opener when a field in it has autoFocus", async (_name, desktop) => {
+    if (desktop) stubDesktop();
+    const user = userEvent.setup();
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>Open it</button>
+          <Dialog open={open} onOpenChange={setOpen} title="Name it">
+            <input aria-label="Name" autoFocus />
+          </Dialog>
+        </>
+      );
+    }
+    render(<Harness />);
+    const opener = screen.getByRole("button", { name: "Open it" });
+    await user.click(opener);
+    expect(await screen.findByLabelText("Name")).toHaveFocus();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(opener).toHaveFocus();
+  });
+
+  it("Sheet returns focus to the opener when a field in it has autoFocus", async () => {
+    const user = userEvent.setup();
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>Open it</button>
+          <Sheet open={open} onOpenChange={setOpen} title="Pick one">
+            {open && <input aria-label="Search" autoFocus />}
+          </Sheet>
+        </>
+      );
+    }
+    render(<Harness />);
+    const opener = screen.getByRole("button", { name: "Open it" });
+    await user.click(opener);
+    expect(await screen.findByLabelText("Search")).toHaveFocus();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(opener).toHaveFocus();
+  });
+});
+
 describe("ConfirmDialog", () => {
   function Harness({ onConfirm = () => {} }: { onConfirm?: () => void }) {
     const [open, setOpen] = useState(false);

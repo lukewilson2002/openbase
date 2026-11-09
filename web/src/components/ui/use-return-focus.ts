@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 /**
  * Puts focus back on the control that opened a Radix dialog when it closes (A11Y-1). Radix does this only for a
@@ -6,14 +6,23 @@ import { useRef } from "react";
  * land on the page. Spread the result on `Dialog.Content`, calling its `onOpenAutoFocus` from yours (and from
  * `onCloseAutoFocus` if you have one). When the opener is gone by then (it was a menu item) Radix's own
  * fallback applies.
+ *
+ * Pass `open`: the opener is noted as the dialog opens, before its content mounts, because a field in the content
+ * with `autoFocus` takes focus before `onOpenAutoFocus` runs and would be noted in the opener's place.
  */
-export function useReturnFocus() {
+export function useReturnFocus(open: boolean) {
   const opener = useRef<HTMLElement | null>(null);
+  const note = () => {
+    const active = document.activeElement;
+    opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
+  };
+  useLayoutEffect(() => {
+    if (open) note();
+  }, [open]);
   return {
-    /** Notes what has focus, which at this moment is still the opener. */
+    /** Notes what has focus, which at this moment is still the opener; an opener noted as the dialog opened stays. */
     noteOpener() {
-      const active = document.activeElement;
-      opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
+      if (!opener.current?.isConnected) note();
     },
     onCloseAutoFocus(event: Event) {
       const el = opener.current;
