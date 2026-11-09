@@ -79,6 +79,7 @@ function AltButton({ alt, onChange }: { alt: string; onChange: (alt: string) => 
   const id = useId();
   return (
     <Popover
+      title="Alt text"
       open={open}
       onOpenChange={(o) => {
         if (o) setDraft(alt);

@@ -19,6 +19,9 @@ import { TemporaryChangesBar } from "./temporary-changes-bar";
 import { ToastProvider, useToast, type ToastOptions } from "./toast";
 
 describe("Popover", () => {
+  // A pop-over on a desktop; a phone gets the sheet (see "Popover on a phone").
+  beforeEach(() => stubDesktop());
+
   function Harness() {
     return (
       <Popover>
@@ -47,6 +50,37 @@ describe("Popover", () => {
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(opener).toHaveFocus();
+  });
+});
+
+describe("Popover on a phone", () => {
+  it("opens as a bottom sheet named for the popover, unless it opts out", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <Popover title="Pick one">
+          <PopoverTrigger asChild>
+            <button>Open</button>
+          </PopoverTrigger>
+          <PopoverContent>
+            <button>First</button>
+          </PopoverContent>
+        </Popover>
+        <Popover sheet={false}>
+          <PopoverTrigger asChild>
+            <button>Help</button>
+          </PopoverTrigger>
+          <PopoverContent aria-label="Tip">Some help</PopoverContent>
+        </Popover>
+      </>,
+    );
+    await user.click(screen.getByRole("button", { name: "Open" }));
+    const sheet = await screen.findByRole("dialog", { name: "Pick one" });
+    expect(sheet).toHaveClass("rounded-t-xl");
+    await user.click(within(sheet).getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Help" }));
+    expect(await screen.findByRole("dialog", { name: "Tip" })).toHaveClass("rounded-lg", "shadow-pop");
   });
 });
 

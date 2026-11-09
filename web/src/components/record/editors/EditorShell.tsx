@@ -11,8 +11,10 @@
  *   such as a link field's cards): the panel opens under it, and using it does not close the panel.
  *   In the grid, `anchor` is drawn over the cell in place of the bare anchor (it may be larger).
  *
- * `sheetOnPhone` (form variant) makes the panel a bottom sheet on a phone (PH-3) instead of a pop-over: the
- * same button or anchor opens it, and Done closes it like Escape does a pop-over. Editors opt in as they move.
+ * On a phone (PH-3) the panel is a bottom sheet instead of a pop-over. Form variant: the same button or anchor
+ * opens it, and Done closes it like Escape does a pop-over. Cell variant: it opens with the grid's editor, its Cancel
+ * closes the editor like Escape, and a tap on the dimmed screen is Glide's own click outside (it commits what was
+ * reported through `onChange`).
  *
  * `children` may be a function receiving `close`, which closes the pop-over or sheet (a no-op in the
  * grid, where committing closes Glide's overlay) and `sheet`, whether it is one.
@@ -37,13 +39,11 @@ export interface EditorShellProps {
   /** Form variant: the pop-over closed (by Escape or an outside click). */
   onDismiss?: () => void;
   width?: number;
-  /** Form variant: on a phone the panel is a bottom sheet, titled with `triggerLabel`. */
-  sheetOnPhone?: boolean;
   children: ReactNode | ((api: { close: () => void; sheet: boolean }) => ReactNode);
   className?: string;
 }
 
-export function EditorShell({ variant, target, trigger, anchor, triggerLabel, onCancel, onDismiss, width = 320, sheetOnPhone, children, className }: EditorShellProps) {
+export function EditorShell({ variant, target, trigger, anchor, triggerLabel, onCancel, onDismiss, width = 320, children, className }: EditorShellProps) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const pressInAnchor = useRef(false);
   // A press anywhere starts with no note of the anchor (the document hears it before the anchor does).
@@ -57,7 +57,7 @@ export function EditorShell({ variant, target, trigger, anchor, triggerLabel, on
   const session = useEditSession();
   const [open, setOpen] = useState(variant === "form" && !!session?.openOnMount);
   const desktop = useMediaQuery(DESKTOP_QUERY);
-  const asSheet = variant === "form" && !!sheetOnPhone && !desktop;
+  const asSheet = !desktop;
   const close = variant === "cell" ? () => {} : () => setOpen(false);
   const body = typeof children === "function" ? children({ close, sheet: asSheet }) : children;
   const setPanelOpen = (next: boolean) => {
@@ -126,6 +126,13 @@ export function EditorShell({ variant, target, trigger, anchor, triggerLabel, on
     </PopoverAnchor>
   );
 
+  if (variant === "cell" && asSheet) {
+    return (
+      <Sheet open onOpenChange={(next) => !next && onCancel()} title={triggerLabel ?? "Choose"} doneLabel="Cancel" className="click-outside-ignore">
+        {body}
+      </Sheet>
+    );
+  }
   if (variant === "cell") {
     return (
       <Popover open modal={false}>

@@ -117,6 +117,35 @@ describe("the link picker on a phone", () => {
   });
 });
 
+describe("the other pickers on a phone (PH-3)", () => {
+  it.each([
+    ["a choice", "Status", <ChoiceEditor key="c" field={tags} value={null} variant="form" {...callbacks()} />],
+    ["a person", "Owner", <UserEditor key="u" field={team} value={null} variant="form" {...callbacks()} />],
+    ["a file list", "Files", <AttachmentEditor key="a" field={files} value={[]} variant="form" {...callbacks()} />],
+  ])("%s opens as a bottom sheet, not a pop-over", async (_what, name, ui) => {
+    stubPhone();
+    inEnv(ui);
+    const trigger = screen.getAllByRole("button")[0]!;
+    await userEvent.click(trigger);
+    const sheet = await screen.findByRole("dialog");
+    // The sheet's own Done closes it (and so commits); the list has no second one, except a choice that is itself called Done.
+    expect(within(sheet).getAllByRole("button", { name: "Done" }).length).toBe(_what === "a choice" ? 2 : 1);
+    expect(sheet).toHaveAccessibleName(trigger.getAttribute("aria-label") ?? name);
+  });
+
+  it("the grid's choice editor is a sheet whose Cancel closes the editor like Escape", async () => {
+    stubPhone();
+    const cb = callbacks();
+    inEnv(<ChoiceEditor field={status} value="chs1" variant="cell" {...cb} />);
+    const sheet = await screen.findByRole("dialog", { name: "Status" });
+    expect(sheet).toHaveClass("click-outside-ignore");
+    await userEvent.click(within(sheet).getByRole("button", { name: "In progress" }));
+    expect(cb.onCommit).toHaveBeenCalledWith({ json: "chs2" }, undefined);
+    await userEvent.click(within(sheet).getByRole("button", { name: "Cancel" }));
+    expect(cb.onCancel).toHaveBeenCalled();
+  });
+});
+
 describe("Tab and Enter in the grid", () => {
   it("Tab in a single select takes the option highlighted after typing, and goes right", async () => {
     const cb = callbacks();

@@ -172,7 +172,6 @@ export function LinkEditor({ field, value, variant, target, initialText, addAnch
       target={target}
       onCancel={onCancel}
       width={table ? 380 : 340}
-      sheetOnPhone
       onDismiss={() => {
         if (variant === "form" && !single && !adding) commitUp({ json: selectedRef.current });
       }}
@@ -278,14 +277,14 @@ export function LinkEditor({ field, value, variant, target, initialText, addAnch
               {!results.isFetching && !results.isError && total === 0 && <p role="status" className="px-2 py-3 text-center text-label text-muted">{debounced ? "No matching records." : "No more records to link."}</p>}
             </div>
             {/* In place, the cards above remove their records: the panel only finds new ones. A sheet has its own Done. */}
-            {!adding && (!inPlace || (!single && !sheet)) && (
+            {!adding && (!inPlace || (!single && !(sheet && variant === "form"))) && (
               <div className="flex shrink-0 items-center justify-between gap-2 border-t border-line p-2">
                 {!inPlace && (
                   <Button size="sm" variant="ghost" onClick={clear} disabled={selected.length === 0}>
                     Clear
                   </Button>
                 )}
-                {!single && !sheet && (
+                {!single && !(sheet && variant === "form") && (
                   <Button size="sm" variant="primary" className="ml-auto" onClick={() => commit({ json: selectedRef.current })}>
                     Done
                   </Button>

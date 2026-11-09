@@ -146,7 +146,7 @@ export function ChoiceEditor({ field, value, variant, target, initialText, onCha
         chosen.length > 0 ? chosen.map((c) => <Pill key={c.id} choice={c} />) : <span className="text-faint">Select…</span>
       }
     >
-      {({ close }) => {
+      {({ close, sheet }) => {
         closeRef.current = close;
         return (
           <>
@@ -209,7 +209,8 @@ export function ChoiceEditor({ field, value, variant, target, initialText, onCha
         <Button size="sm" variant="ghost" onClick={clear} disabled={selected.length === 0}>
           Clear
         </Button>
-        {multiple && (
+        {/* A sheet in a form has its own Done, which closes it and so commits. */}
+        {multiple && !(sheet && variant === "form") && (
           <Button size="sm" variant="primary" onClick={() => onCommit({ json: selectedRef.current })}>
             Done
           </Button>

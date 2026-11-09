@@ -25,6 +25,7 @@ export function HelpTip({ label, children, className }: { label: string; childre
   };
   return (
     <Popover
+      sheet={false}
       open={open}
       onOpenChange={(next) => {
         pinned.current = next;

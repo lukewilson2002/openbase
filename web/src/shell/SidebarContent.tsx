@@ -131,7 +131,7 @@ function Notifications() {
   const { pathname } = useLocation();
   useEffect(() => setOpen(false), [pathname]);
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover sheet={false} open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <NotificationsRow open={open} selected={pathname === "/notifications"} />
       </PopoverTrigger>

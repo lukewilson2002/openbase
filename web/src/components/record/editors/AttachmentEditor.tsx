@@ -131,7 +131,7 @@ export function AttachmentEditor({ field, value, variant, target, onChange, onCo
       triggerLabel={field.name}
       trigger={files.length > 0 ? <span>{files.length} file{files.length === 1 ? "" : "s"}</span> : <span className="text-faint">Add files…</span>}
     >
-      {({ close }) => {
+      {({ close, sheet }) => {
         closeRef.current = close;
         return (
           <div
@@ -207,9 +207,11 @@ export function AttachmentEditor({ field, value, variant, target, onChange, onCo
               <Button size="sm" data-autofocus onClick={() => inputRef.current?.click()}>
                 <Upload aria-hidden className="size-4" /> Upload
               </Button>
-              <Button size="sm" variant="primary" onClick={() => commit({ json: filesRef.current })} disabled={busy > 0}>
-                Done
-              </Button>
+              {!(sheet && variant === "form") && (
+                <Button size="sm" variant="primary" onClick={() => commit({ json: filesRef.current })} disabled={busy > 0}>
+                  Done
+                </Button>
+              )}
             </div>
           </div>
         );

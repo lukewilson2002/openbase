@@ -127,7 +127,7 @@ export function UserEditor({ field, value, variant, target, initialText, onChang
         )
       }
     >
-      {({ close }) => {
+      {({ close, sheet }) => {
         closeRef.current = close;
         return (
           <>
@@ -173,7 +173,7 @@ export function UserEditor({ field, value, variant, target, initialText, onChang
               <Button size="sm" variant="ghost" onClick={clear} disabled={selected.length === 0}>
                 Clear
               </Button>
-              {multiple && (
+              {multiple && !(sheet && variant === "form") && (
                 <Button size="sm" variant="primary" onClick={() => commit({ json: selectedRef.current })}>
                   Done
                 </Button>

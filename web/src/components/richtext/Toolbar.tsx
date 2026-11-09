@@ -150,7 +150,7 @@ function LinkButton({ editor, active }: { editor: Editor; active: boolean }) {
   };
 
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
+    <Popover open={open} onOpenChange={onOpenChange} title="Link">
       <PopoverTrigger asChild>
         <button type="button" tabIndex={-1} aria-label="Link" title="Link (Ctrl+K)" aria-pressed={active} onMouseDown={keepFocus} className={btn}>
           <Link2 aria-hidden className="size-4" />

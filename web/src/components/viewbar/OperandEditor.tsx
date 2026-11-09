@@ -37,7 +37,7 @@ function MultiPicker({ label, options, selected, onChange, disabled, search }: {
   const names = selected.map((id) => options.find((o) => o.id === id)?.label ?? id);
   const summary = names.length === 0 ? "Choose…" : names.length <= 2 ? names.join(", ") : `${names.length} selected`;
   return (
-    <Popover>
+    <Popover title={label}>
       <PopoverTrigger asChild>
         <button type="button" disabled={disabled} aria-label={label} className="flex h-8 min-w-36 max-w-56 items-center justify-between gap-2 rounded-md border border-line-strong bg-surface px-2.5 text-left text-[0.8125rem] disabled:opacity-70">
           <span className={cn("truncate", names.length === 0 && "text-faint")}>{summary}</span>

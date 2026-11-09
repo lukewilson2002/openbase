@@ -65,7 +65,7 @@ export function TemplateInput({ value, onChange, ctx, label, multiline, rows = 4
   return (
     <div className={cn("flex items-start gap-1.5", className)}>
       {multiline ? <Textarea ref={ref} rows={rows} {...common} /> : <Input ref={ref} {...common} />}
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={setOpen} title="Insert data">
         <PopoverTrigger asChild>
           <Button size="md" variant="secondary" aria-label={`Insert data into ${label}`} title="Insert data from the trigger or an earlier step" className="px-2">
             <Braces aria-hidden className="size-4" />
