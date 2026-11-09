@@ -1,5 +1,5 @@
 import type { APIRequestContext, Cookie, Locator, Page } from "@playwright/test";
-import { clickGrid, expect, newClientContext, newRecordButton, openOptionsScreen, openRecordId, openRecordPanel, openViewOptions, redo, skipIntro, test, typeToEdit, undo } from "./fixtures";
+import { clickGrid, expect, newClientContext, openOptionsScreen, openRecordId, openRecordPanel, openViewOptions, redo, skipIntro, test, typeToEdit, undo } from "./fixtures";
 
 /**
  * Grid journeys against a live server: edit cells (text, number, select), undo/redo, filter, sort,
@@ -401,7 +401,11 @@ test("opens the record's page with Shift+Space, comments, steps with Alt+Down, a
   const url = page.url();
   await page.goto(url);
   await expect(page.getByRole("main", { name: "Record" }).getByRole("heading", { level: 1, name: "Bravo" })).toBeVisible();
-  // Escape returns to the collection the page was named for.
+  // The History panel is remembered and open again after the reload: Escape closes it first, and the next one returns
+  // to the collection the page was named for.
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("complementary", { name: "History" })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/r\//);
   await page.keyboard.press("Escape");
   await expect(page).not.toHaveURL(/\/r\//);
   await expect(canvas(page)).toBeVisible();
@@ -550,7 +554,8 @@ test("adds and deletes records, with undo", async ({ page, diagnostics }) => {
   // browser logs the failed request.
   diagnostics.allow(/status of 404.*\/api\/tables\/[^/]+\/records(\/[^/]+(\/discard)?)?\)$/);
   await gotoGrid(page);
-  await newRecordButton(page).click();
+  // The grid's own Add row, below the last record, adds inline; the header's New opens the new record as its page instead (REC-8).
+  await clickCell(page, "name", 5);
   await expect(page.getByText("6 items")).toBeVisible();
   // Undo is ignored while the grid is still finishing the write it would undo: wait for the server to have it.
   await expect.poll(async () => (await rows(page)).length).toBe(6);
