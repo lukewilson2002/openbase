@@ -5,10 +5,10 @@ import { CircleAlert } from "lucide-react";
 import { useSetupStatus } from "@/auth/useAuth";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/cn";
 import { needsPublicHttps } from "@/pages/account/AssistantsSection";
-import { AssistantArt, BasesArt, InboxArt, TablesArt, TryMe, ViewsArt, WorkspacesArt } from "./illustrations";
-import "./intro.css";
+import { AssistantArt, HomeArt, RecordsArt, ViewsArt, WorkspacesArt } from "./illustrations";
 
 interface Screen {
   title: string;
@@ -19,60 +19,57 @@ interface Screen {
 
 const strong = "font-semibold text-fg";
 
+// The five steps of APP-3, in the words of the new model. The last one is the optional one.
 const SCREENS: Screen[] = [
   {
-    title: "A project holds your tables",
-    text: ["Think of a project like a spreadsheet file. Inside it are tables. Make a separate project for each thing you are working on, like planning a wedding or running a side business."],
-    Art: BasesArt,
+    title: "Home catches your ideas",
+    text: [
+      "Home is the first thing you see. Type a thought and press Enter: OpenBase works out where it goes and when it is due, and shows you its guess so you can change it.",
+      "Not sure where something belongs? It waits in your Inbox until you do.",
+    ],
+    Art: HomeArt,
   },
   {
-    title: "Tables store your information",
+    title: "Collections hold your records",
     text: [
       <>
-        Each row is a <strong className={strong}>record</strong>, one thing you track. Each column is a <strong className={strong}>field</strong>, a detail about it, like who does
-        it or how often.
+        A <strong className={strong}>collection</strong> is a list of one kind of thing, like clients or tasks. Each item is a <strong className={strong}>record</strong>.
       </>,
-      "Tables are the universal way we keep track of things in computers. They're structured and predictable. Because tables aren't nice to look at, we have other ways to view them.",
+      "Open a record and it becomes a page: a title, a few properties, then room to write. Add a property whenever you want to keep track of another detail.",
     ],
-    Art: TablesArt,
+    Art: RecordsArt,
   },
   {
-    title: "Views show your data in other ways",
+    title: "Views show your collection your way",
     text: [
-      "A view is another way to look at a table. Tap Table, Kanban, Calendar, Timeline or Form above to see the chores each way.",
-      "Views can have filters, groups, and sort preferences. They don't affect the data, so they're safe to play around with. You can even share views by themselves, so people can see only what you want them to.",
+      "A view is a layout of a collection, like a grid, a board or a calendar, with its own filters and sorting. Type a phrase in the filter bar to narrow it down.",
+      <>
+        <strong className={strong}>Changes are just for you until you save.</strong> Choose Save as view to keep them for everyone, or Reset to go back.
+      </>,
     ],
     Art: ViewsArt,
   },
   {
-    title: "Workspaces keep things apart",
-    text: ["Each workspace has its own projects and its own people. You decide who to invite, and you can limit someone to just the projects they need."],
+    title: "Workspaces and folders keep things apart",
+    text: [
+      "Each workspace has its own collections and its own people, and a color to tell it apart. Inside one, folders group collections that belong together.",
+      "You decide who to invite, and you can limit someone to just the folders they need.",
+    ],
     Art: WorkspacesArt,
   },
   {
-    title: "The Inbox catches your ideas",
-    text: ["It is the first thing you see when you open OpenBase, so you never lose a thought while you look for the right place to keep it. Just write it down, and choose where it goes later."],
-    Art: InboxArt,
-  },
-  {
-    title: "Let an assistant manage OpenBase for you",
-    text: ["Connect an AI assistant you trust and ask in plain words. It can build tables and update records for you, and it can only do what you allow it to do."],
+    title: "Connect an assistant, if you like",
+    text: ["Everything in OpenBase works by hand. If you want help, connect an AI assistant you trust and ask in plain words. It can only do what you allow, and you can change that at any time."],
     Art: AssistantArt,
   },
 ];
-const STEPS = SCREENS.length - 1;
 const LAST = SCREENS.length - 1;
-const VIEWS_STEP = 2;
 const HTTPS_DOCS = "https://github.com/lukewilson2002/openbase/blob/main/docs/self-hosting.md#2-docker-compose-with-caddy-recommended";
 
-// Footer and header buttons are 44 px tall: the smallest comfortable target for a finger.
-const TAP = "h-11 pointer-coarse:h-11";
-const BUTTON = cn(TAP, "rounded-[10px] px-[18px] text-[0.9375rem] font-semibold");
-
 /**
- * The full-screen intro: five steps explaining projects, tables, views, workspaces and the Inbox,
- * then a closing screen suggesting an AI assistant. `onFinish` runs for skip, Escape, "I'll do it
- * myself" and "Connect an assistant" alike.
+ * The full-screen intro (APP-3): five steps explaining Home, collections and record pages, views and drafts,
+ * workspaces and folders, and last the optional assistant. `onFinish` runs for skip, Escape, "I'll do it myself"
+ * and "Connect an assistant" alike.
  */
 export function IntroOverlay({ onFinish }: { onFinish: () => void }) {
   const navigate = useNavigate();
@@ -114,41 +111,40 @@ export function IntroOverlay({ onFinish }: { onFinish: () => void }) {
             headingRef.current?.focus();
           }}
           onKeyDown={onKeyDown}
-          className="ob-fade-in fixed inset-0 z-[60] flex flex-col overflow-y-auto overscroll-contain overflow-x-hidden bg-bg"
+          className="ob-fade-in fixed inset-0 z-[60] flex flex-col overflow-y-auto overflow-x-hidden overscroll-contain bg-bg"
         >
-          <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-2 sm:px-7 sm:py-3.5">
+          <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-2 md:px-8 md:py-3">
             <Logo className="h-8" />
-            <Button variant="ghost" className={cn(TAP, "px-2 text-sm font-normal text-muted hover:bg-transparent hover:text-fg")} onClick={onFinish}>
+            <Button variant="ghost" size="md" className="text-muted hover:bg-transparent hover:text-fg" onClick={onFinish}>
               Skip the intro
             </Button>
           </header>
 
-          <main className="flex flex-1 items-start justify-center px-4 pb-6 pt-9 sm:items-center sm:pb-10">
-            <section className="relative w-full max-w-[580px] rounded-[20px] border border-line bg-surface shadow-[0_1px_2px_rgb(15_20_30/0.06),0_12px_40px_rgb(15_20_30/0.1)]">
-              {step === VIEWS_STEP && <TryMe />}
-              <div key={`art-${step}`} className="h-[220px] overflow-hidden rounded-t-[19px] bg-[color-mix(in_srgb,var(--primary)_8%,var(--surface))] sm:h-[260px]">
+          <main className="flex flex-1 items-start justify-center px-4 pb-6 pt-6 md:items-center md:pb-10">
+            <section className="w-full max-w-[36.25rem] rounded-xl border border-line bg-surface shadow-pop">
+              <div key={`art-${step}`} className="h-[13.75rem] overflow-hidden rounded-t-xl border-b border-line bg-bg md:h-[16.25rem]">
                 <screen.Art />
               </div>
 
-              <div key={`text-${step}`} className="ob-fade-in px-5 pb-1 pt-5 sm:px-8 sm:pt-[26px]">
+              <div key={`text-${step}`} className="ob-fade-in px-5 pb-1 pt-5 md:px-8 md:pt-6">
                 <D.Title asChild>
-                  <h1 ref={headingRef} tabIndex={-1} className="mb-2.5 text-[1.375rem] leading-tight tracking-[-0.015em] text-fg outline-none sm:text-[1.625rem]">
+                  <h1 ref={headingRef} tabIndex={-1} className="mb-2 text-h2 text-fg outline-none md:text-title">
                     {screen.title}
                   </h1>
                 </D.Title>
                 <D.Description asChild>
-                  <div className="flex flex-col gap-2.5 text-base leading-relaxed text-muted">
+                  <div className="flex flex-col gap-2.5 text-read-phone text-muted md:text-read">
                     {screen.text.map((t, i) => (
                       <p key={i}>{t}</p>
                     ))}
                   </div>
                 </D.Description>
                 {closing && setup && needsPublicHttps(setup.public_url) && (
-                  <p role="note" className="mt-3.5 flex items-start gap-2.5 rounded-[10px] bg-warning-soft px-3 py-2.5 text-sm leading-snug text-fg">
-                    <CircleAlert aria-hidden className="mt-px size-[18px] shrink-0" />
+                  <p role="note" className="mt-3.5 flex items-start gap-2.5 rounded-md bg-warning-soft px-3 py-2.5 text-label text-fg">
+                    <Icon icon={CircleAlert} className="mt-px shrink-0" />
                     <span>
                       Claude and ChatGPT on the web need OpenBase at a public https address. Claude Code works from this computer now.{" "}
-                      <a href={HTTPS_DOCS} target="_blank" rel="noopener noreferrer" className="font-bold text-fg underline">
+                      <a href={HTTPS_DOCS} target="_blank" rel="noopener noreferrer" className="font-semibold text-fg underline">
                         Learn more
                       </a>
                     </span>
@@ -156,26 +152,25 @@ export function IntroOverlay({ onFinish }: { onFinish: () => void }) {
                 )}
               </div>
 
-              <footer className="flex flex-wrap items-center justify-between gap-3 px-5 pb-5 pt-5 sm:px-8 sm:pb-[26px] sm:pt-[22px]">
-                {closing ? (
-                  <Button className={BUTTON} onClick={onFinish}>
-                    I'll do it myself
-                  </Button>
-                ) : (
-                  <ol aria-hidden className="flex items-center gap-2">
-                    {Array.from({ length: STEPS }, (_, i) => (
-                      <li key={i} className={cn("h-2 rounded-full transition-all duration-300 motion-reduce:transition-none", i === step ? "w-6 bg-primary" : "w-2 bg-line-strong")} />
-                    ))}
-                  </ol>
-                )}
-                {/* Phones: on the closing screen Back and Connect drop below "I'll do it myself", to the right. */}
-                <div className={cn("flex items-center gap-2.5", closing && "max-[420px]:w-full max-[420px]:justify-end")}>
+              <footer className="flex flex-wrap items-center justify-between gap-3 px-5 pb-5 pt-5 md:px-8 md:pb-6">
+                <ol aria-label={`Step ${step + 1} of ${SCREENS.length}`} className="flex items-center gap-2">
+                  {SCREENS.map((s, i) => (
+                    <li key={s.title} aria-current={i === step ? "step" : undefined} className={cn("h-2 rounded-pill", i === step ? "w-6 bg-primary" : "w-2 bg-line-strong")} />
+                  ))}
+                </ol>
+                {/* Phones: on the closing screen the three buttons drop below the dots, to the right. */}
+                <div className={cn("flex flex-wrap items-center justify-end gap-2", closing && "max-md:w-full")}>
+                  {closing && (
+                    <Button size="lg" onClick={onFinish}>
+                      I'll do it myself
+                    </Button>
+                  )}
                   {step > 0 && (
-                    <Button className={BUTTON} onClick={back}>
+                    <Button size="lg" onClick={back}>
                       Back
                     </Button>
                   )}
-                  <Button key={closing ? "connect" : "next"} variant="primary" className={cn(BUTTON, "px-[22px]")} onClick={closing ? connect : next}>
+                  <Button key={closing ? "connect" : "next"} variant="primary" size="lg" onClick={closing ? connect : next}>
                     {closing ? "Connect an assistant" : "Next"}
                   </Button>
                 </div>
