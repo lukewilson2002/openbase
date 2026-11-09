@@ -95,6 +95,9 @@ export default defineConfig({
     { name: "record-panels", testMatch: /recordPanels\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // The page's embeds: Linked records and View as live tables, + Link, Open with a draft filter, and the view a reader cannot open. Signs up its own users.
     { name: "page-embeds", testMatch: /embeds\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
+    // The record page as one walk: open from the grid and the palette, Alt+Up and Alt+Down, editing a value and the title, Add property
+    // with a guessed type, the page's / menu and a View embed, Comments, Escape, a new record taken back, a viewer, and the phone's tap. Signs up its own users.
+    { name: "record-flows", testMatch: /recordFlows\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // Every route of the signed-in app opens inside the new shell: the sidebar on a desktop, the bottom bar on a phone.
     // Signs up its own users and signs in as the journey's administrator for /admin, so it needs only the instance to be set up.
     { name: "shell-routes", testMatch: /shellRoutes\.spec\.ts$/, use: chrome, dependencies: ["journey"] },
@@ -102,6 +105,6 @@ export default defineConfig({
     { name: "ledger", testMatch: /ledger\.spec\.ts$/, use: chrome, dependencies: ["journey"] },
     // Administration -> Email: changes the instance-wide mail settings and restores them, so it
     // runs after everything else.
-    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views", "date-groups", "oauth", "assistants", "appearance", "mobile", "passkeys", "search", "sidebar", "collection", "linked-records", "record-page", "record-panels", "page-embeds", "shell-routes"] },
+    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views", "date-groups", "oauth", "assistants", "appearance", "mobile", "passkeys", "search", "sidebar", "collection", "linked-records", "record-page", "record-panels", "page-embeds", "record-flows", "shell-routes"] },
   ],
 });
