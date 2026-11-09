@@ -90,7 +90,7 @@ export function AutomationList({ baseId, automations, activeId, onNew, onDeleted
             <HoldMenuRow key={a.id} className={cn("group/item flex items-start gap-2 rounded-lg border px-3 py-2.5", active ? "border-primary-soft-line bg-primary-soft" : "border-line bg-surface hover:bg-hover")}>
               {(menu) => (
               <>
-              <Link to={`/base/${baseId}/automations/${a.id}`} aria-current={active ? "page" : undefined} className="min-w-0 flex-1 text-inherit no-underline">
+              <Link to={`/base/${baseId}/automations/${a.id}`} data-hold-ok aria-current={active ? "page" : undefined} className="min-w-0 flex-1 text-inherit no-underline [-webkit-touch-callout:none]">
                 <span className={cn("block truncate text-ui", active ? "font-semibold text-primary-ink" : "font-medium")}>{a.name}</span>
                 <span className="block truncate text-meta text-muted">{triggerSummary(a.trigger, schema)}</span>
                 <span className="mt-1 flex items-center gap-1.5 text-meta text-muted">

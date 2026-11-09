@@ -53,10 +53,15 @@ export interface HoldMenuHandlers {
 /**
  * A hold is not started on a link or a button of its own inside the card (a tick box, a chip that opens something), nor on
  * something drawn elsewhere in the page whose events still reach the card through React (the card's own sheet or menu).
+ * The row's own link, the one that fills most of it (`data-hold-ok`), is the obvious place to press and does take a hold;
+ * the click that ends the hold is swallowed like any other, so the hold does not also go to the page.
  */
 function ignored(target: EventTarget | null, on?: Element): boolean {
   if (on && target instanceof Node && !on.contains(target)) return true;
-  return target instanceof Element && target.closest("a, [data-no-hold]") !== null;
+  if (!(target instanceof Element)) return false;
+  const link = target.closest("a");
+  if (link && !link.hasAttribute("data-hold-ok")) return true;
+  return target.closest("[data-no-hold]") !== null;
 }
 
 /**
