@@ -81,6 +81,32 @@ describe("rich text Markdown layer", () => {
     });
   }
 
+  describe("HTML that the document has no markup for", () => {
+    // Opening a page and typing one letter writes the whole text back, so anything dropped on the way in is lost for good.
+    const text = (md: string) => normalizeMarkdown(md);
+
+    it("stays as text: a stray tag, an element, a comment, a script", () => {
+      expect(text("Use List<String> here, and a <b> tag.\n\nend")).toBe("Use List&lt;String> here, and a &lt;b> tag.\n\nend");
+      expect(text("a <script>x</script> b")).toContain("&lt;script>x&lt;/script>");
+      expect(text("<div>block html</div>\n\nafter")).toContain("&lt;div>block html&lt;/div>");
+      expect(text("a <!-- a note for agents --> b")).toContain("&lt;!-- a note for agents -->");
+      expect(text("<details><summary>s</summary>\n\nbody\n\n</details>")).toContain("body");
+    });
+
+    it("is stable once written, and survives the next pass", () => {
+      for (const md of ["a <b> tag", "<div>x</div>", "a <script>x</script> b", "<!-- keep -->"]) {
+        const once = text(md);
+        expect(text(once)).toBe(once);
+        expect(text(text(once))).toBe(once);
+      }
+    });
+
+    it("still reads the elements it has markup for", () => {
+      expect(text("x <b>bold</b> y and <i>it</i> and <code>c</code>")).toBe("x **bold** y and *it* and `c`");
+      expect(text("a <br> b")).toContain("a");
+    });
+  });
+
   it("keeps the start number of an ordered list", () => {
     expect(normalizeMarkdown("5. five\n6. six")).toMatch(/^5\. five\n6\. six$/);
   });

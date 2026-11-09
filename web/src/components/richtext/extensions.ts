@@ -14,7 +14,7 @@
  * (`snake_case` and `2 * 3` stay as typed, where the library writes `snake\_case` and `2 \* 3`).
  */
 import { Editor, Extension, type AnyExtension } from "@tiptap/core";
-import { Markdown } from "@tiptap/markdown";
+import { Markdown, MarkdownManager } from "@tiptap/markdown";
 import { Table, TableCell, TableHeader, TableRow, renderTableToMarkdown } from "@tiptap/extension-table";
 import { HardBreak } from "@tiptap/extension-hard-break";
 import { Paragraph } from "@tiptap/extension-paragraph";
@@ -86,6 +86,43 @@ const GentleEscaping = Extension.create({
     };
   },
 });
+
+/**
+ * HTML the document has no markup for stays as the text it was written as. The library keeps a tag it has never
+ * heard of as text, but drops any tag of a real HTML element the schema has no node or mark for (`<script>x</script>`
+ * and `<div>` vanish, and a stray `<b>` or a comment leaves nothing at all). Opening a page and typing one letter
+ * writes the whole document back, so that would quietly delete what an agent or an import put there. Tags the schema
+ * does read (`<b>bold</b>`, `<br>`) are still read.
+ *
+ * This is on the manager's prototype and not set up by an extension: the Markdown extension parses the editor's first
+ * content inside its own `onBeforeCreate`, before any extension of ours could change its manager.
+ */
+function keepHtmlAsText() {
+  type Token = { text?: string; raw?: string; block?: boolean };
+  type Manager = {
+    getSchemaParseDomTags(): Set<string>;
+    isUnrecognizedHtml(html: string): boolean;
+    parseHTMLToken(token: Token): unknown;
+    htmlAsLiteralText(html: string, isBlock: boolean): unknown;
+  };
+  const proto = MarkdownManager.prototype as unknown as Manager;
+  if (["getSchemaParseDomTags", "isUnrecognizedHtml", "parseHTMLToken", "htmlAsLiteralText"].some((m) => typeof proto[m as keyof Manager] !== "function")) return;
+  const tagNames = (html: string) => [...html.matchAll(/<\/?([a-zA-Z][\w-]*)/g)].map((m) => m[1]!.toLowerCase());
+  proto.isUnrecognizedHtml = function (this: Manager, html) {
+    const known = this.getSchemaParseDomTags();
+    // Our own blocks are read from a div or a span with a data attribute; a bare one is only a wrapper whose tags would be lost.
+    return tagNames(html).some((t) => !known.has(t) || t === "div" || t === "span");
+  };
+  const read = proto.parseHTMLToken;
+  proto.parseHTMLToken = function (this: Manager, token) {
+    const html = token.text || token.raw || "";
+    const parsed = read.call(this, token);
+    // A comment, or a tag that opens something never closed, reads as nothing: keep what was written.
+    const empty = parsed == null || (Array.isArray(parsed) && parsed.length === 0);
+    return empty && html.trim() ? this.htmlAsLiteralText(html, !!token.block) : parsed;
+  };
+}
+keepHtmlAsText();
 
 /**
  * Tab and Shift+Tab in a list indent and outdent its item (the list items' own shortcuts). Where the
