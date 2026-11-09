@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Design-token check (UX overhaul DL-1): fail on a raw hex colour, rgb()/rgba()/hsl() colour, Tailwind
-# palette colour (bg-white, text-black/70) or px font size in web/src outside the exempt lists. See
-# scripts/check-tokens.mjs for the rules and scripts/check-tokens.temporary-list.txt for the files that
-# have not moved to tokens yet (scripts/check-tokens.baseline.txt keeps that list from growing).
+# palette colour (bg-white, text-black/70) or px font size in web/src outside the exempt files. See
+# scripts/check-tokens.mjs for the rules.
 #
 #   scripts/check-tokens.sh
 #

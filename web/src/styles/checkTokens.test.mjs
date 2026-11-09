@@ -1,4 +1,4 @@
-// Tests for the design-token check's detector and list rules (scripts/check-tokens.mjs). They live
+// Tests for the design-token check's detector and exempt files (scripts/check-tokens.mjs). They live
 // here, not in scripts/, because Vitest only serves test files inside web/. Plain .mjs: the script
 // is plain Node and has no types.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -7,8 +7,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   findViolations,
-  isPermanentlyExempt,
-  parseTemporaryList,
+  isExempt,
   runCheck,
   stripComments,
 } from "../../../scripts/check-tokens.mjs";
@@ -267,7 +266,7 @@ describe("the permanent exempt list", () => {
     "test/setup.ts",
     "test/utils.tsx",
   ])("exempts %s", (rel) => {
-    expect(isPermanentlyExempt(rel)).toBe(true);
+    expect(isExempt(rel)).toBe(true);
   });
 
   it.each([
@@ -282,17 +281,17 @@ describe("the permanent exempt list", () => {
     "components/latest.tsx",
     "components/Foo.test-helpers.tsx",
   ])("does not exempt %s", (rel) => {
-    expect(isPermanentlyExempt(rel)).toBe(false);
+    expect(isExempt(rel)).toBe(false);
   });
 });
 
-describe("the temporary list", () => {
+describe("the check", () => {
   const dirs = [];
   afterEach(() => {
     for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
   });
 
-  function tree(files, list, baseline = list) {
+  function tree(files) {
     const dir = mkdtempSync(path.join(tmpdir(), "check-tokens-"));
     dirs.push(dir);
     const srcDir = path.join(dir, "src");
@@ -300,81 +299,30 @@ describe("the temporary list", () => {
       mkdirSync(path.dirname(path.join(srcDir, rel)), { recursive: true });
       writeFileSync(path.join(srcDir, rel), content);
     }
-    const listFile = path.join(dir, "list.txt");
-    writeFileSync(listFile, list);
-    const baselineFile = path.join(dir, "baseline.txt");
-    if (baseline !== null) writeFileSync(baselineFile, baseline);
-    return { srcDir, listFile, baselineFile };
+    return { srcDir };
   }
 
   const bad = 'export const c = "#fff";\n';
   const good = 'export const c = "var(--fg)";\n';
 
-  it("passes when every violating file is listed and every listed file still violates", () => {
-    const r = runCheck(tree({ "a/Bad.tsx": bad, "b/Good.tsx": good }, "# note\n\na/Bad.tsx\n"));
-    expect(r.violations.size).toBe(0);
-    expect(r.problems).toEqual([]);
-    expect(r.temporary).toEqual(["a/Bad.tsx"]);
-  });
-
-  it("fails on a violating file that is on neither list", () => {
-    const r = runCheck(tree({ "a/Bad.tsx": bad }, ""));
+  it("fails on every file with a literal, and only on those", () => {
+    const r = runCheck(tree({ "a/Bad.tsx": bad, "b/Good.tsx": good }));
     expect([...r.violations.keys()]).toEqual(["a/Bad.tsx"]);
-  });
-
-  it("fails on a listed file with nothing left to flag", () => {
-    const r = runCheck(tree({ "b/Good.tsx": good }, "b/Good.tsx\n"));
-    expect(r.problems).toHaveLength(1);
-    expect(r.problems[0]).toMatch(/b\/Good\.tsx: no raw colour or px font size left/);
-  });
-
-  it("fails on a listed file that is missing", () => {
-    const r = runCheck(tree({ "b/Good.tsx": good }, "gone/File.tsx\n"));
-    expect(r.problems[0]).toMatch(/gone\/File\.tsx: no such file/);
-  });
-
-  it("fails on a listed file that is exempt for good, and on a duplicate entry", () => {
-    const r = runCheck(
-      tree({ "lib/colors.ts": bad, "a/Bad.tsx": bad }, "lib/colors.ts\na/Bad.tsx\na/Bad.tsx\n"),
-    );
-    expect(r.problems.some((p) => /lib\/colors\.ts: already exempt/.test(p))).toBe(true);
-    expect(r.problems.some((p) => /duplicate/.test(p))).toBe(true);
+    expect(r.scanned).toBe(2);
   });
 
   it("never scans exempt files", () => {
     const r = runCheck(
-      tree({ "lib/colors.ts": bad, "x.test.ts": bad, "views/grid/glide/t.ts": bad, "styles/t.css": "a{color:#fff}" }, ""),
+      tree({ "lib/colors.ts": bad, "x.test.ts": bad, "views/grid/glide/t.ts": bad, "styles/t.css": "a{color:#fff}" }),
     );
     expect(r.violations.size).toBe(0);
     expect(r.scanned).toBe(0);
   });
-
-  it("fails on a file added to the list that the baseline never held, so the list cannot grow", () => {
-    const r = runCheck(tree({ "a/Old.tsx": bad, "a/New.tsx": bad }, "a/Old.tsx\na/New.tsx\n", "# frozen\na/Old.tsx\n"));
-    expect(r.violations.size).toBe(0);
-    expect(r.problems).toHaveLength(1);
-    expect(r.problems[0]).toMatch(/a\/New\.tsx: was not on the list when it was frozen/);
-  });
-
-  it("lets the list shrink below the baseline", () => {
-    const r = runCheck(tree({ "a/Old.tsx": bad }, "a/Old.tsx\n", "a/Old.tsx\na/Fixed.tsx\n"));
-    expect(r.problems).toEqual([]);
-  });
-
-  it("fails when the baseline file is missing", () => {
-    const r = runCheck(tree({ "a/Bad.tsx": bad }, "a/Bad.tsx\n", null));
-    expect(r.problems.some((p) => /baseline.txt is missing/.test(p))).toBe(true);
-  });
-
-  it("parses one path per line and skips comments and blanks", () => {
-    expect(parseTemporaryList("# c\n\n  a.ts  \nb/c.tsx\n")).toEqual(["a.ts", "b/c.tsx"]);
-  });
 });
 
 describe("the real tree", () => {
-  it("is green: no violation outside the lists, no stale temporary entry", () => {
+  it("is green: no literal colour or px font size outside the exempt files", () => {
     const r = runCheck();
     expect([...r.violations.keys()]).toEqual([]);
-    expect(r.problems).toEqual([]);
   });
 });

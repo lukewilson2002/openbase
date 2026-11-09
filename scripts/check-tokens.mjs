@@ -2,7 +2,7 @@
 // web/src/styles/index.css, never from a literal in a component. Run through scripts/check-tokens.sh
 // (scripts/check.sh and CI do); the detector is unit-tested in web/src/styles/checkTokens.test.mjs.
 //
-// Flagged, outside the two lists below:
+// Flagged, outside the exempt files below:
 //   - a raw hex colour (#fff, #1f5ae0, #1f5ae080)
 //   - an rgb(), rgba(), hsl() or hsla() colour
 //   - a Tailwind palette colour utility (bg-white, text-black/70, border-slate-200, ring-blue-500):
@@ -14,24 +14,16 @@
 // Comments are ignored; so are "#" in URLs, anchors, ids and entities, and "px" on anything that is
 // not a font size (widths, borders, offsets).
 //
-// The two lists:
-//   PERMANENT  files that legitimately hold literals: the token files themselves, the palettes the
-//              server shares, generated brand marks, the grid's canvas drawing, and tests.
-//   TEMPORARY  scripts/check-tokens.temporary-list.txt: files that still fail because they have not
-//              moved to tokens yet. It only shrinks: a file there with no violation left, or that no
-//              longer exists, fails the check, so whoever fixes the last literal in a file removes
-//              its line. It must be empty by Phase 7 of the UX overhaul.
-//              scripts/check-tokens.baseline.txt is the frozen set of files the list may ever hold: a
-//              file on the list but not in the baseline fails, so the list cannot grow.
-import { readdirSync, readFileSync, existsSync } from "node:fs";
+// The exempt files (PERMANENT) legitimately hold literals: the token files themselves, the palettes the
+// server shares, generated brand marks, the grid's canvas drawing, and tests. There is no list of files
+// that "have not moved yet": every other file in web/src uses tokens, and stays that way (DONE-4).
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
 const SRC = path.join(root, "web", "src");
-const TEMPORARY_LIST = path.join(here, "check-tokens.temporary-list.txt");
-const BASELINE = path.join(here, "check-tokens.baseline.txt");
 
 const SCANNED = /\.(?:[cm]?[jt]sx?|css)$/;
 
@@ -45,8 +37,8 @@ const PERMANENT_FILES = new Set([
 ]);
 const PERMANENT_DIRS = ["views/grid/glide/", "test/"];
 
-/** True for a file that may hold literals for good (not the temporary list). */
-export function isPermanentlyExempt(rel) {
+/** True for a file that may hold literals. */
+export function isExempt(rel) {
   if (PERMANENT_FILES.has(rel)) return true;
   if (PERMANENT_DIRS.some((d) => rel.startsWith(d))) return true;
   if (/^styles\/[^/]+\.css$/.test(rel)) return true;
@@ -224,78 +216,34 @@ function* walk(dir) {
   }
 }
 
-/** Entries of the temporary list: one path per line, `#` lines and blank lines ignored. */
-export function parseTemporaryList(text) {
-  return text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l && !l.startsWith("#"));
-}
-
-/**
- * The whole check, without any printing: { violations: Map<file, violation[]> for files on neither
- * list, problems: string[] about the temporary list, scanned, temporary }.
- */
-export function runCheck({ srcDir = SRC, listFile = TEMPORARY_LIST, baselineFile = BASELINE } = {}) {
-  const temporary = parseTemporaryList(existsSync(listFile) ? readFileSync(listFile, "utf8") : "");
-  const onList = new Set(temporary);
-  const problems = [];
-  if (onList.size !== temporary.length) problems.push("the temporary list has a duplicate entry");
-  // The list only shrinks: nothing may be on it that was not there when the baseline was frozen.
-  if (!existsSync(baselineFile)) {
-    problems.push(`the baseline ${path.basename(baselineFile)} is missing`);
-  } else {
-    const baseline = new Set(parseTemporaryList(readFileSync(baselineFile, "utf8")));
-    for (const rel of temporary) {
-      if (!baseline.has(rel)) {
-        problems.push(`${rel}: was not on the list when it was frozen (check-tokens.baseline.txt); the list never grows, use tokens in this file`);
-      }
-    }
-  }
-
+/** The whole check, without any printing: { violations: Map<file, violation[]>, scanned }. */
+export function runCheck({ srcDir = SRC } = {}) {
   const violations = new Map();
-  const withViolations = new Set();
   let scanned = 0;
   for (const full of walk(srcDir)) {
     const rel = path.relative(srcDir, full).split(path.sep).join("/");
-    if (isPermanentlyExempt(rel)) continue;
+    if (isExempt(rel)) continue;
     scanned++;
     const found = findViolations(readFileSync(full, "utf8"), rel);
-    if (found.length === 0) continue;
-    withViolations.add(rel);
-    if (!onList.has(rel)) violations.set(rel, found);
+    if (found.length > 0) violations.set(rel, found);
   }
-
-  for (const rel of temporary) {
-    if (isPermanentlyExempt(rel)) {
-      problems.push(`${rel}: already exempt for good, remove it from the temporary list`);
-    } else if (!existsSync(path.join(srcDir, rel))) {
-      problems.push(`${rel}: no such file (moved or deleted), remove it from the temporary list`);
-    } else if (!withViolations.has(rel)) {
-      problems.push(`${rel}: no raw colour or px font size left, remove it from the temporary list`);
-    }
-  }
-  return { violations, problems, scanned, temporary };
+  return { violations, scanned };
 }
 
 function main() {
-  const { violations, problems, scanned, temporary } = runCheck();
+  const { violations, scanned } = runCheck();
   for (const [file, found] of violations) {
     for (const v of found) console.error(`web/src/${file}:${v.line}:${v.col}  ${v.kind}: ${v.text}`);
   }
-  for (const p of problems) console.error(`scripts/check-tokens.temporary-list.txt: ${p}`);
   if (violations.size > 0) {
     console.error(
       `\n${violations.size} file(s) use a literal where a design token belongs. Use a token from ` +
         "web/src/styles/index.css (a colour like text-fg or bg-primary-soft, a size like text-ui or " +
-        "text-label, a surface like bg-surface or border-line). Files that have not moved yet are listed in " +
-        "scripts/check-tokens.temporary-list.txt; never add to it.",
+        "text-label, a surface like bg-surface or border-line).",
     );
+    process.exit(1);
   }
-  if (violations.size > 0 || problems.length > 0) process.exit(1);
-  console.log(
-    `Design tokens are used everywhere: ${scanned} files checked, ${temporary.length} still on the temporary list.`,
-  );
+  console.log(`Design tokens are used everywhere: ${scanned} files checked.`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
