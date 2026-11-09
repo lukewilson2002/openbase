@@ -63,8 +63,8 @@ export function CsvFilePicker({ picked, onPicked, disabled }: CsvFilePickerProps
         <div className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-subtle px-3 py-2">
           <FileSpreadsheet aria-hidden className="size-5 shrink-0 text-muted" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[0.8125rem] font-medium">{picked.file.name}</p>
-            <p className="text-xs text-muted">{formatBytes(picked.file.size)}</p>
+            <p className="truncate text-label font-medium">{picked.file.name}</p>
+            <p className="text-meta text-muted">{formatBytes(picked.file.size)}</p>
           </div>
           <Button size="sm" disabled={disabled} onClick={() => input.current?.click()}>
             Choose another file
@@ -81,7 +81,7 @@ export function CsvFilePicker({ picked, onPicked, disabled }: CsvFilePickerProps
           className={cn("flex flex-col items-center gap-2 rounded-md border border-dashed border-line-strong px-4 py-8 text-center", over && "bg-primary-soft")}
         >
           {reading ? (
-            <span className="inline-flex items-center gap-2 text-[0.8125rem] text-muted">
+            <span className="inline-flex items-center gap-2 text-label text-muted">
               <Spinner className="size-4" label="Reading the file" /> Reading the file…
             </span>
           ) : (
@@ -90,7 +90,7 @@ export function CsvFilePicker({ picked, onPicked, disabled }: CsvFilePickerProps
               <Button variant="primary" disabled={disabled} onClick={() => input.current?.click()}>
                 Choose a CSV file
               </Button>
-              <p className="text-xs text-muted">or drop it here. Up to {formatBytes(MAX_CSV_BYTES)}, 100,000 rows and 500 columns.</p>
+              <p className="text-meta text-muted">or drop it here. Up to {formatBytes(MAX_CSV_BYTES)}, 100,000 rows and 500 columns.</p>
             </>
           )}
         </div>

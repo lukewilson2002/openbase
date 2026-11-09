@@ -1,5 +1,5 @@
 /**
- * "New table from CSV" (Creators): the server makes a table whose fields are inferred from the data
+ * "New collection from CSV" (Creators): the server makes a table whose fields are inferred from the data
  * (the first column becomes the primary field) and imports every row, all or nothing.
  */
 import { useState } from "react";
@@ -17,7 +17,7 @@ import { PREVIEW_ROWS } from "@/lib/csv/read";
 import { CsvFilePicker, type PickedCsv } from "./CsvFilePicker";
 import { ImportProblems } from "./ImportProblems";
 
-/** A CSV file is one table, so an import always makes a table, in the project (base) it is started from. */
+/** A CSV file is one table, so an import always makes a collection, in the folder (base) it is started from. */
 export interface NewTableFromCsvDialogProps {
   baseId: string;
   open: boolean;
@@ -82,22 +82,22 @@ function Body({ baseId, onClose }: { baseId: string; onClose: () => void }) {
       {picked && (
         <>
           <Field
-            label="Table name"
+            label="Collection name"
             hint="Leave it as it is to use the file name. A name that is taken gets a number."
           >
             {(ctl) => <Input {...ctl} value={name} maxLength={255} disabled={busy} onChange={(e) => setName(e.target.value)} />}
           </Field>
           <Checkbox checked={hasHeader} disabled={busy} onCheckedChange={setHasHeader} label="The first row holds the property names" />
           <section aria-label="Preview">
-            <h3 className="mb-1.5 text-[0.9375rem]">Preview</h3>
-            <div className="overflow-x-auto rounded-md border border-line">
-              <table className="w-full min-w-max border-collapse text-left text-[0.8125rem]">
+            <h3 className="mb-1.5 text-h3">Preview</h3>
+            <div className="overflow-x-auto rounded-lg border border-line">
+              <table className="w-full min-w-max border-collapse text-left text-label">
                 <thead className="bg-subtle">
                   <tr>
                     {names.map((n, i) => (
                       <th key={i} scope="col" className="min-w-32 border-b border-line px-2 py-1.5 font-medium">
                         {hasHeader ? n : `Column ${i + 1}`}
-                        {i === 0 && <span className="ml-1.5 text-xs font-normal text-muted">primary field</span>}
+                        {i === 0 && <span className="ml-1.5 text-meta font-normal text-muted">title property</span>}
                       </th>
                     ))}
                   </tr>
@@ -115,20 +115,20 @@ function Body({ baseId, onClose }: { baseId: string; onClose: () => void }) {
                 </tbody>
               </table>
             </div>
-            <p className="mt-1.5 text-xs text-muted">
-              The first {sample.length} row{sample.length === 1 ? "" : "s"}. Field types (text, number, date, checkbox, select...) are chosen from all the values in each column; you can change them afterwards.
+            <p className="mt-1.5 text-meta text-muted">
+              The first {sample.length} row{sample.length === 1 ? "" : "s"}. Property types (text, number, date, checkbox, select...) are chosen from all the values in each column; you can change them afterwards.
             </p>
           </section>
         </>
       )}
       {failure !== null && <ImportProblems error={failure} />}
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line pt-3">
-        {busy && <span className="mr-auto text-[0.8125rem] text-muted">Importing… large files take a moment. Keep this window open.</span>}
+        {busy && <span className="mr-auto text-label text-muted">Importing… large files take a moment. Keep this window open.</span>}
         <Button onClick={onClose} disabled={busy}>
           Cancel
         </Button>
         <Button variant="primary" loading={busy} disabled={!picked || name.trim() === ""} onClick={() => void run()}>
-          Create table
+          Create collection
         </Button>
       </div>
     </div>

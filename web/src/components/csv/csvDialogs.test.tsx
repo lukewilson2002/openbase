@@ -177,11 +177,11 @@ describe("a new table from a CSV", () => {
     const user = userEvent.setup();
     const api = creator({ "POST /api/bases/app1/import": { status: 200, json: { table_id: "tbl9", created: 2, fields: [{ id: "f1", name: "Name", type: "text" }, { id: "f2", name: "Qty", type: "number" }] } } });
     await choose(user, csv(CSV, "People 2026.csv"));
-    expect(await screen.findByLabelText("Table name")).toHaveValue("People 2026");
+    expect(await screen.findByLabelText("Collection name")).toHaveValue("People 2026");
     const preview = screen.getByRole("region", { name: "Preview" });
     expect(within(preview).getByText("Ann")).toBeInTheDocument();
-    expect(within(preview).getByText("primary field")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Create table" }));
+    expect(within(preview).getByText("title property")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create collection" }));
     await waitFor(() => expect(api.callsTo("POST /api/bases/app1/import")).toHaveLength(1));
     const form = api.callsTo("POST /api/bases/app1/import")[0]!.body as FormData;
     expect((form.get("file") as File).name).toBe("People 2026.csv");
@@ -194,10 +194,10 @@ describe("a new table from a CSV", () => {
     const user = userEvent.setup();
     const api = creator({ "POST /api/bases/app1/import": { table_id: "tbl9", created: 2, fields: [] } });
     await choose(user, csv(CSV));
-    const nameBox = await screen.findByLabelText("Table name");
+    const nameBox = await screen.findByLabelText("Collection name");
     await user.clear(nameBox);
     await user.type(nameBox, "Customers");
-    await user.click(screen.getByRole("button", { name: "Create table" }));
+    await user.click(screen.getByRole("button", { name: "Create collection" }));
     await waitFor(() => expect(api.callsTo("POST /api/bases/app1/import")).toHaveLength(1));
     expect((api.callsTo("POST /api/bases/app1/import")[0]!.body as FormData).get("name")).toBe("Customers");
   });
@@ -206,8 +206,8 @@ describe("a new table from a CSV", () => {
     const user = userEvent.setup();
     creator({ "POST /api/bases/app1/import": { status: 422, json: { error: { code: "import_failed", message: "1 row(s) could not be imported", rows: [{ row: 4, message: "invalid value" }], truncated: false } } } });
     await choose(user, csv(CSV));
-    await screen.findByLabelText("Table name");
-    await user.click(screen.getByRole("button", { name: "Create table" }));
+    await screen.findByLabelText("Collection name");
+    await user.click(screen.getByRole("button", { name: "Create collection" }));
     expect(await screen.findByText("Nothing was imported.")).toBeInTheDocument();
     expect(screen.getByText("invalid value")).toBeInTheDocument();
   });

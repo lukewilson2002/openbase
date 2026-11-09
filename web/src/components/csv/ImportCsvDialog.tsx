@@ -1,9 +1,8 @@
 /**
  * "Import CSV" into an existing table (Editors and above): choose a file, see its first rows,
- * map each column to a field (or skip it), import. The server takes the file all-or-nothing:
+ * map each column to a property (or skip it), import. The server takes the file all-or-nothing:
  * if any row is refused nothing is written, and the problem rows are listed here.
  */
-import { EntityLabel } from "@/components/icons/EntityIcon";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CircleCheck } from "lucide-react";
@@ -13,6 +12,7 @@ import type { ImportResult, Table } from "@/api/types";
 import { Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ColorMark } from "@/components/ui/color-mark";
 import { Dialog } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/input";
 import { autoAssign, checkAssignment, columnNames, isImportable, mappingKeys, mappingPayload } from "@/lib/csv/mapping";
@@ -24,16 +24,16 @@ export interface ImportCsvDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   baseId: string;
-  table: Pick<Table, "id" | "name" | "fields"> & { icon?: string | null };
+  table: Pick<Table, "id" | "name" | "fields"> & { color?: string | null };
 }
 
 export function ImportCsvDialog({ open, onOpenChange, baseId, table }: ImportCsvDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange} size="xl" title={
         <span className="flex min-w-0 items-center gap-2">
-          Import CSV into <EntityLabel icon={table.icon}>{table.name}</EntityLabel>
+          Import CSV into <ColorMark hue={table.color} name={table.name} size={14} /> <span className="min-w-0 truncate">{table.name}</span>
         </span>
-      } description="New records are added to the table. Existing records are not changed.">
+      } description="New records are added to the collection. Existing records are not changed.">
       {open && <ImportBody baseId={baseId} table={table} onClose={() => onOpenChange(false)} />}
     </Dialog>
   );
@@ -84,10 +84,10 @@ function ImportBody({ baseId, table, onClose }: { baseId: string; table: ImportC
     return (
       <div className="flex flex-col items-center gap-3 py-6 text-center" role="status">
         <CircleCheck aria-hidden className="size-9 text-success" />
-        <h3 className="text-lg">
+        <h3 className="text-h2">
           Imported {result.created.toLocaleString()} record{result.created === 1 ? "" : "s"}
         </h3>
-        <p className="text-[0.8125rem] text-muted">They are in {table.name} now.</p>
+        <p className="text-label text-muted">They are in {table.name} now.</p>
         <Button variant="primary" onClick={onClose}>
           Done
         </Button>
@@ -110,12 +110,12 @@ function ImportBody({ baseId, table, onClose }: { baseId: string; table: ImportC
             label="The first row holds the column names"
           />
           <section aria-label="Column mapping" className="flex flex-col gap-2">
-            <h3 className="text-[0.9375rem]">Match columns to properties</h3>
-            <p className="text-xs text-muted">
-              Columns whose name matches a field are matched for you. Pick “Skip this column” to leave one out. Values are read the way pasted text is (“$1,200”, “25%”, “yes”); a select value that does not exist yet becomes a new choice.
+            <h3 className="text-h3">Match columns to properties</h3>
+            <p className="text-meta text-muted">
+              Columns whose name matches a property are matched for you. Pick “Skip this column” to leave one out. Values are read the way pasted text is (“$1,200”, “25%”, “yes”); a select value that does not exist yet becomes a new choice.
             </p>
-            <div className="overflow-x-auto rounded-md border border-line">
-              <table className="w-full min-w-max border-collapse text-left text-[0.8125rem]">
+            <div className="overflow-x-auto rounded-lg border border-line">
+              <table className="w-full min-w-max border-collapse text-left text-label">
                 <thead className="bg-subtle align-top">
                   <tr>
                     {names.map((name, i) => {
@@ -132,7 +132,7 @@ function ImportBody({ baseId, table, onClose }: { baseId: string; table: ImportC
                             disabled={busy}
                             value={target}
                             onChange={(e) => setAssignment((a) => a.map((v, k) => (k === i ? e.target.value || null : v)))}
-                            className="text-[0.8125rem] font-normal"
+                            className="text-label font-normal"
                           >
                             <option value="">Skip this column</option>
                             {importable.map((f) => (
@@ -166,7 +166,7 @@ function ImportBody({ baseId, table, onClose }: { baseId: string; table: ImportC
                 </tbody>
               </table>
             </div>
-            <p className="text-xs text-muted">
+            <p className="text-meta text-muted">
               Showing the first {sample.length} row{sample.length === 1 ? "" : "s"}
               {picked.head.preview.more ? " of the file" : ""}.
               {skipped.length > 0 && ` ${skipped.map((f) => f.name).join(", ")} cannot be imported (computed, link, user and attachment properties are filled in other ways).`}
@@ -178,7 +178,7 @@ function ImportBody({ baseId, table, onClose }: { baseId: string; table: ImportC
       )}
       {failure !== null && <ImportProblems error={failure} />}
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line pt-3">
-        {busy && <span className="mr-auto text-[0.8125rem] text-muted">Importing… large files take a moment. Keep this window open.</span>}
+        {busy && <span className="mr-auto text-label text-muted">Importing… large files take a moment. Keep this window open.</span>}
         <Button onClick={onClose} disabled={busy}>
           Cancel
         </Button>
