@@ -409,6 +409,31 @@ describe("the capture box (HOME-3)", () => {
   });
 });
 
+describe("the on-screen keyboard (PH-5)", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(window, "visualViewport");
+  });
+
+  it("docks Add just above the keyboard while the box has focus, and lets it back into the card after", async () => {
+    stubPhone();
+    const user = userEvent.setup();
+    routes();
+    await openHome();
+    await screen.findByRole("button", { name: /Goes to Tasks/ });
+    // A keyboard that covers the bottom 300 px of the screen.
+    Object.defineProperty(window, "visualViewport", { configurable: true, value: { height: window.innerHeight - 300, offsetTop: 0, addEventListener: () => {}, removeEventListener: () => {} } });
+    const add = screen.getByRole("button", { name: "Add" });
+    expect(add.parentElement).not.toHaveAttribute("data-docked");
+    await user.click(await box());
+    await waitFor(() => expect(add.parentElement).toHaveAttribute("data-docked"));
+    expect(add.parentElement).toHaveStyle({ bottom: "300px" });
+    expect(add.parentElement).toHaveClass("fixed");
+    await user.tab();
+    await user.tab();
+    await waitFor(() => expect(add.parentElement).not.toHaveAttribute("data-docked"));
+  });
+});
+
 describe("date chips (HOME-4)", () => {
   it("turns a date phrase into a chip on the Home date, leaving the title without the words", async () => {
     const user = userEvent.setup();

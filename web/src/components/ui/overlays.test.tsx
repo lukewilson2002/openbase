@@ -12,7 +12,7 @@ import { Dialog } from "./dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./dropdown-menu";
 import { FilterBar, type FilterBarChip, type FilterBarSuggestion } from "./filter-bar";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
-import { Sheet } from "./sheet";
+import { Sheet, SheetActions } from "./sheet";
 import { rubberBand, settleSheet, sheetSnapPoints } from "./sheet-snap";
 import { SidePanel } from "./side-panel";
 import { TemporaryChangesBar } from "./temporary-changes-bar";
@@ -50,6 +50,27 @@ describe("Popover", () => {
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(opener).toHaveFocus();
+  });
+});
+
+describe("SheetActions (PH-5)", () => {
+  it("sticks to the foot of a sheet's body, which itself rides above the keyboard", async () => {
+    Object.defineProperty(window, "visualViewport", { configurable: true, value: { height: window.innerHeight - 250, offsetTop: 0, addEventListener: () => {}, removeEventListener: () => {} } });
+    try {
+      render(
+        <Sheet open onOpenChange={() => {}} title="Set Status">
+          <input aria-label="Value" />
+          <SheetActions>
+            <button>Set Status</button>
+          </SheetActions>
+        </Sheet>,
+      );
+      const sheet = await screen.findByRole("dialog", { name: "Set Status" });
+      expect(sheet).toHaveStyle({ bottom: "250px" });
+      expect(screen.getByRole("button", { name: "Set Status" }).parentElement).toHaveClass("max-md:sticky", "max-md:bottom-0");
+    } finally {
+      Reflect.deleteProperty(window, "visualViewport");
+    }
   });
 });
 

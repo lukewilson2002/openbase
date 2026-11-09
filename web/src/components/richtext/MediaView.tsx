@@ -15,6 +15,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { File, Film, Image, Music, Trash2, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SheetActions } from "@/components/ui/sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/cn";
 import { embedFilename, embedPreviewSrc, mediaKind, mediaLabel, type MediaKind } from "@/lib/media";
@@ -114,7 +115,7 @@ function AltButton({ alt, onChange }: { alt: string; onChange: (alt: string) => 
           placeholder="Describe it for people who cannot see it"
           className="h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 focus-visible:border-ring"
         />
-        <div className="flex justify-end">
+        <SheetActions className="justify-end">
           <Button
             onClick={() => {
               onChange(draft.trim());
@@ -123,7 +124,7 @@ function AltButton({ alt, onChange }: { alt: string; onChange: (alt: string) => 
           >
             Done
           </Button>
-        </div>
+        </SheetActions>
       </PopoverContent>
     </Popover>
   );

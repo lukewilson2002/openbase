@@ -24,7 +24,8 @@ import { CaptureChip } from "@/components/ui/capture-chip";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
 import { COARSE_POINTER, DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
-import { useVisualViewport } from "@/hooks/useVisualViewport";
+import { useKeyboardInset } from "@/hooks/useVisualViewport";
+import { cn } from "@/lib/cn";
 import { toWire } from "@/lib/cells/wire";
 import { restorePhrase, type DateGuess } from "@/lib/dateGuess";
 import { recordPath } from "@/lib/recordPath";
@@ -77,8 +78,14 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
   const phone = !useMediaQuery(DESKTOP_QUERY);
   const coarse = useMediaQuery(COARSE_POINTER);
   const [focused, setFocused] = useState(false);
-  const visible = useVisualViewport(phone && focused);
+  // While the keyboard is up the Add row is docked just above it (PH-5), and its place in the card is held so nothing jumps.
+  const keyboard = useKeyboardInset(phone && focused);
+  const docked = phone && focused && keyboard > 0;
   const addRow = useRef<HTMLDivElement>(null);
+  const [addRowHeight, setAddRowHeight] = useState(0);
+  useLayoutEffect(() => {
+    if (!docked && addRow.current) setAddRowHeight(addRow.current.offsetHeight);
+  }, [docked]);
 
   const timeZone = me.data?.timezone || browserTimeZone();
   const weekStart: 0 | 1 = me.data?.week_start === 1 ? 1 : 0;
@@ -264,12 +271,6 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
     }
   };
 
-  // The Add row stays above the keyboard as the box grows.
-  useEffect(() => {
-    const row = addRow.current;
-    if (phone && focused && row && typeof row.scrollIntoView === "function") row.scrollIntoView({ block: "nearest" });
-  }, [phone, focused, text, visible.height]);
-
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // A finger's keyboard has no Shift+Enter: there Return starts a new line and Add is the way to add.
     if (coarse || e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
@@ -419,13 +420,22 @@ export function CaptureBox({ workspace }: { workspace: WorkspaceSummary }) {
           {problem}
         </p>
       )}
-      <div ref={addRow} className="mt-3 flex items-center justify-end gap-3">
-        <span id={`${id}-hint`} className="text-meta text-faint max-md:hidden pointer-coarse:hidden">
-          Enter to add
-        </span>
-        <Button variant="primary" size="md" disabled={!canAdd} loading={busy} onClick={() => void add()}>
-          Add
-        </Button>
+      <div className="mt-3" style={docked ? { minHeight: addRowHeight } : undefined}>
+        <div
+          ref={addRow}
+          data-docked={docked ? "" : undefined}
+          // Pressing Add must not take the box's focus: the keyboard would drop, and the dock with it, before the press lands.
+          onMouseDown={docked ? (e) => e.preventDefault() : undefined}
+          style={docked ? { bottom: keyboard } : undefined}
+          className={cn("flex items-center justify-end gap-3", docked && "fixed inset-x-0 z-40 border-t border-line bg-surface px-4 py-2")}
+        >
+          <span id={`${id}-hint`} className="text-meta text-faint max-md:hidden pointer-coarse:hidden">
+            Enter to add
+          </span>
+          <Button variant="primary" size="md" disabled={!canAdd} loading={busy} onClick={() => void add()}>
+            Add
+          </Button>
+        </div>
       </div>
     </Card>
   );

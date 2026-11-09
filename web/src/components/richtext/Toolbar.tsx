@@ -31,6 +31,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SheetActions } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/cn";
@@ -192,7 +193,7 @@ function LinkButton({ editor, active }: { editor: Editor; active: boolean }) {
             {error}
           </p>
         )}
-        <div className="flex justify-end gap-2">
+        <SheetActions className="justify-end">
           {active && (
             <Button
               variant="secondary"
@@ -205,7 +206,7 @@ function LinkButton({ editor, active }: { editor: Editor; active: boolean }) {
             </Button>
           )}
           <Button onClick={apply}>Apply</Button>
-        </div>
+        </SheetActions>
       </PopoverContent>
     </Popover>
   );

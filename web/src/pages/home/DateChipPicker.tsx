@@ -8,6 +8,7 @@ import { guessDate } from "@/lib/dateGuess";
 import type { YMD } from "@/lib/cells/dates";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SheetActions } from "@/components/ui/sheet";
 import { PickerShell } from "./PickerShell";
 
 /** The new date; `time` is left out to keep the time the chip has. */
@@ -81,9 +82,11 @@ function Body({ label, includeTime, clock, onPick }: Pick<DateChipPickerProps, "
         <p id={`${id}-hint`} role={error ? "alert" : undefined} className={error ? "text-label text-danger" : "text-label text-muted"}>
           {error ?? "Type a date, such as Friday or Nov 14."}
         </p>
-        <Button type="submit" variant="primary" size="sm" className="self-end">
-          Change date
-        </Button>
+        <SheetActions className="justify-end">
+          <Button type="submit" variant="primary" size="sm">
+            Change date
+          </Button>
+        </SheetActions>
       </form>
       <label htmlFor={`${id}-day`} className="text-label font-semibold">
         Or pick a day

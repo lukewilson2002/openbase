@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { CaptureChip } from "@/components/ui/capture-chip";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
+import { SheetActions } from "@/components/ui/sheet";
 import { isComputed } from "@/lib/cells/kinds";
 import { chipText, planProperty, valueFor, whyNoValue, type PropertyPlan, type ValueCtx } from "@/record/newProperty";
 import { PickerShell } from "./PickerShell";
@@ -124,14 +125,14 @@ function ValueStep({ field, users, ctx, onBack, onAdd }: { field: Field; users: 
       <p id={`${id}-hint`} role={error ? "alert" : undefined} className={error ? "text-label text-danger" : "text-label text-muted"}>
         {error ?? why ?? hintFor(field)}
       </p>
-      <div className="flex justify-between gap-2">
+      <SheetActions>
         <Button type="button" variant="ghost" size="sm" onClick={onBack}>
           Back
         </Button>
         <Button type="submit" variant="primary" size="sm">
           Set {field.name}
         </Button>
-      </div>
+      </SheetActions>
     </form>
   );
 }
@@ -188,14 +189,14 @@ function NewStep({ schema, table, onBack, onAdd }: { schema: BaseSchema; table: 
           {problem}
         </p>
       )}
-      <div className="flex justify-between gap-2">
+      <SheetActions>
         <Button type="button" variant="ghost" size="sm" onClick={onBack}>
           Back
         </Button>
         <Button type="submit" variant="primary" size="sm">
           Add property
         </Button>
-      </div>
+      </SheetActions>
     </form>
   );
 }

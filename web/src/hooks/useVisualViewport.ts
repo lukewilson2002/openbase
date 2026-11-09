@@ -38,3 +38,12 @@ export function useVisualViewport(enabled = true): VisibleArea {
   }, [enabled]);
   return area;
 }
+
+/**
+ * How far the on-screen keyboard (or anything else) covers the bottom of the layout viewport, in px: what a
+ * `position: fixed` bar needs as its `bottom` to sit just above the keyboard (PH-5). Zero where there is none.
+ */
+export function useKeyboardInset(enabled = true): number {
+  const visible = useVisualViewport(enabled);
+  return enabled && typeof window !== "undefined" ? Math.max(0, Math.round(window.innerHeight - (visible.top + visible.height))) : 0;
+}

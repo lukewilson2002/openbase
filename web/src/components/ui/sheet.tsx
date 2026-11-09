@@ -193,3 +193,16 @@ export function Sheet({ open, onOpenChange, title, description, children, footer
     </D.Root>
   );
 }
+
+/**
+ * The primary action of a form that sits in a sheet's body (PH-5): below the desktop breakpoint it stays at the foot of the
+ * sheet's visible part as the form scrolls, and the sheet itself rides above the on-screen keyboard, so Add, Apply or Save is
+ * never under the keyboard while a field is being typed in. On a desktop, where the form is in a pop-over, it is a plain row.
+ */
+export function SheetActions({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div data-sheet-actions className={cn("flex items-center justify-between gap-2 max-md:sticky max-md:bottom-0 max-md:-mx-4 max-md:border-t max-md:border-line max-md:bg-surface max-md:px-4 max-md:pb-[max(0.5rem,env(safe-area-inset-bottom))] max-md:pt-2", className)}>
+      {children}
+    </div>
+  );
+}
