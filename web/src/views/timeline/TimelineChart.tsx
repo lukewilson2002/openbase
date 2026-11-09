@@ -911,7 +911,7 @@ export function TimelineChart(props: TimelineChartProps) {
               {showLabels &&
                 (cl.recordId ? (
                   <div className="sticky left-0 z-20 flex h-full items-center gap-2 border-r border-line bg-surface px-3.5" style={{ width: labelW }}>
-                    <button type="button" onClick={() => props.onOpen(cl.recordId!)} className="min-w-0 flex-1 truncate text-left text-ui font-medium hover:underline" title={lane.label}>
+                    <button type="button" onClick={() => props.onOpen(cl.recordId!)} className="min-w-0 flex-1 truncate text-left text-ui font-medium hover:underline pointer-coarse:min-h-control-touch max-md:min-h-control-touch" title={lane.label}>
                       {lane.label}
                     </button>
                     {cl.sublabel && <span className="max-w-[45%] shrink-0 truncate text-label text-muted">{cl.sublabel}</span>}

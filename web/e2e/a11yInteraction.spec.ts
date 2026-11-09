@@ -1,7 +1,9 @@
+import AxeBuilder from "@axe-core/playwright";
 import type { Locator, Page } from "@playwright/test";
 import { expect, newClientContext, test } from "./fixtures";
 import { seedLedger, type LedgerSeed } from "./ledgerSeed";
 import { settle } from "./ledgerShots";
+import { tapTargetFailures } from "./phoneAudit";
 
 /**
  * Accessibility beyond axe (A11Y-1 to A11Y-6), on the ledger's seeded workspace: keyboard-only walks through capture,
@@ -215,6 +217,30 @@ test.describe("A11Y-1 keyboard", () => {
   });
 });
 
+test.describe("A11Y-1 a dialog opened from a menu", () => {
+  // The menu item that opened the dialog is gone when it closes: focus goes back to the button that opened the menu.
+  for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
+    test(`Escape in a dialog opened from a row's menu puts the focus back on the row's menu button, ${label}`, async ({ browser }, testInfo) => {
+      const { context, page } = await signedIn(browser, testInfo, viewport);
+      if (viewport === PHONE) {
+        await page.goto(`${home()}/collections`);
+        await expect(page.getByRole("heading", { level: 1, name: "Collections" })).toBeVisible();
+      } else await openClients(page);
+      const opener = page.getByRole("button", { name: "Collection options for Clients" }).first();
+      await opener.focus();
+      await page.keyboard.press("Enter");
+      await page.getByRole("menuitem", { name: "Rename" }).or(page.getByRole("dialog", { name: "Clients" }).getByRole("button", { name: "Rename" })).click();
+      const dialog = page.getByRole("dialog", { name: "Rename collection" });
+      await expect(dialog).toBeVisible();
+      await settle(page);
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+      await expect(opener).toBeFocused();
+      await context.close();
+    });
+  }
+});
+
 // ---------------------------------------------------------------------------------------------------------------------
 // A11Y-2 Focus
 // ---------------------------------------------------------------------------------------------------------------------
@@ -320,6 +346,50 @@ test.describe("A11Y-2 focus ring", () => {
       await context.close();
     });
   }
+
+  test("a tab shows its ring inside the strip that scrolls, and the panel it controls shows one when Tab reaches it", async ({ browser }, testInfo) => {
+    const { context, page } = await signedIn(browser, testInfo, DESKTOP);
+    await page.goto("/account");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    const tab = page.getByRole("tab").first();
+    await tab.focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    await expect(tab).toBeFocused();
+    const ring = await tab.evaluate((el) => {
+      const s = getComputedStyle(el);
+      // The strip scrolls, so it clips: the ring (width and offset outward from the tab) has to lie inside its box.
+      const grow = parseFloat(s.outlineWidth) + parseFloat(s.outlineOffset);
+      const r = el.getBoundingClientRect();
+      const clip = (el.closest("[role=tablist]") as HTMLElement).getBoundingClientRect();
+      return { style: s.outlineStyle, width: parseFloat(s.outlineWidth), inside: r.top - grow >= clip.top - 0.5 && r.bottom + grow <= clip.bottom + 0.5 && r.left - grow >= clip.left - 0.5 };
+    });
+    expect(ring).toMatchObject({ style: "solid", width: 2, inside: true });
+    await page.keyboard.press("Tab");
+    const panel = await page.evaluate(() => {
+      const el = document.activeElement as HTMLElement;
+      const s = getComputedStyle(el);
+      return { role: el.getAttribute("role"), style: s.outlineStyle, width: parseFloat(s.outlineWidth) };
+    });
+    expect(panel).toEqual({ role: "tabpanel", style: "solid", width: 2 });
+    await context.close();
+  });
+
+  test("the search in a choice editor has the 2 px ring when it takes the focus", async ({ browser }, testInfo) => {
+    const { context, page } = await signedIn(browser, testInfo, DESKTOP);
+    await openAccount(page);
+    await page.getByRole("main", { name: "Record" }).getByRole("button", { name: "Edit Status" }).focus();
+    await page.keyboard.press("Enter");
+    const search = page.getByRole("combobox", { name: "Find an option in Status" });
+    await expect(search).toBeFocused();
+    const ring = await search.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { style: s.outlineStyle, width: parseFloat(s.outlineWidth), colour: s.outlineColor, ring: getComputedStyle(document.documentElement).getPropertyValue("--ring").trim() };
+    });
+    expect(ring.style).toBe("solid");
+    expect(ring.width).toBe(2);
+    await context.close();
+  });
 
   test("on a phone, Tab reaches the bottom bar and the capture box with the same ring", async ({ browser }, testInfo) => {
     const { context, page } = await signedIn(browser, testInfo, PHONE, { reducedMotion: "reduce" });
@@ -628,6 +698,45 @@ test.describe("A11Y-6 sizing and motion", () => {
     await context.close();
   });
 
+  test("on a phone the choice sheet and the date field of a record are 44 px targets (PH-6)", async ({ browser }, testInfo) => {
+    const { context, page } = await signedIn(browser, testInfo, PHONE);
+    await openAccount(page);
+    const properties = page.getByRole("main", { name: "Record" });
+    await properties.getByRole("button", { name: "Edit Status" }).evaluate((el) => (el as HTMLElement).click());
+    const sheet = page.getByRole("dialog");
+    await expect(sheet.getByRole("combobox", { name: "Find an option in Status" })).toBeVisible();
+    await settle(page);
+    expect(await tapTargetFailures(page), "the choice sheet").toEqual([]);
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+    await properties.getByRole("button", { name: "Edit Renewal" }).evaluate((el) => (el as HTMLElement).click());
+    await expect(properties.getByRole("textbox", { name: "Renewal", exact: true })).toBeVisible();
+    await settle(page);
+    expect(await tapTargetFailures(page), "the date field").toEqual([]);
+    await context.close();
+  });
+
+  test("on a phone the calendar, the list and the timeline have 44 px targets (PH-6)", async ({ browser }, testInfo) => {
+    test.setTimeout(120_000);
+    const { context, page } = await signedIn(browser, testInfo, PHONE);
+    const open = async (collection: string, view: string) => {
+      await page.goto(`/base/${seed.bases[collection]}/${seed.tables[collection]}/${seed.views[`${collection} / ${view}`]}`);
+      await expect(page.getByRole("heading", { level: 1, name: collection })).toBeVisible();
+      await page.waitForLoadState("networkidle");
+      await settle(page);
+    };
+    await open("Clients", "Follow-ups");
+    await expect(page.locator(".fc-daygrid-day").first()).toBeVisible();
+    expect(await tapTargetFailures(page), "the calendar").toEqual([]);
+    await open("Clients", "By status");
+    await expect(page.getByRole("tree")).toBeVisible();
+    expect(await tapTargetFailures(page), "the list").toEqual([]);
+    await open("Projects", "Schedule");
+    await expect(page.getByRole("button", { name: /^Fernwood website rebuild/ }).first()).toBeVisible();
+    expect(await tapTargetFailures(page), "the timeline").toEqual([]);
+    await context.close();
+  });
+
   test("reduced motion: pop-overs and sheets fade instead of moving, and scrolling does not glide", async ({ browser }, testInfo) => {
     const { context, page } = await signedIn(browser, testInfo, DESKTOP, { reducedMotion: "reduce" });
     await openClients(page);
@@ -658,4 +767,38 @@ test.describe("A11Y-6 sizing and motion", () => {
     expect(sheetMoves, "properties animated while a sheet opens").toEqual([]);
     await phone.context.close();
   });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// A11Y-7 What a search says when it finds nothing
+// ---------------------------------------------------------------------------------------------------------------------
+
+test.describe("A11Y-7 no results", () => {
+  // A listbox with no option in it is a critical axe finding, and "no matches" is a common state of these screens; the ledger shows them with results.
+  for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
+    test(`the command palette and Home's Goes to picker with nothing found have no serious or critical axe violations, ${label}`, async ({ browser }, testInfo) => {
+      const { context, page } = await signedIn(browser, testInfo, viewport, { reducedMotion: "reduce" });
+      const blocking = async () => {
+        await settle(page);
+        const { violations } = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
+        return violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.impact} ${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`);
+      };
+      await page.goto(home());
+      await expect(captureBox(page)).toBeVisible();
+      await page.getByRole("button", { name: /^Goes to/ }).click();
+      const goesTo = page.getByRole("combobox", { name: "Search collections" });
+      await goesTo.fill("zzqqxx");
+      await expect(page.getByText("No collection matches.")).toBeVisible();
+      expect(await blocking(), "Goes to with no match").toEqual([]);
+      await page.keyboard.press("Escape");
+
+      if (viewport === PHONE) await page.getByRole("main").locator("header").first().getByRole("button", { name: "Search everything" }).tap();
+      else await page.keyboard.press("ControlOrMeta+k");
+      const palette = page.getByRole("dialog", { name: "Search everything" });
+      await palette.getByRole("combobox", { name: "Search" }).fill("zzqqxx");
+      await expect(palette.locator("p", { hasText: /^No matches for/ })).toBeVisible();
+      expect(await blocking(), "the palette with no match").toEqual([]);
+      await context.close();
+    });
+  }
 });
