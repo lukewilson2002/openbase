@@ -48,6 +48,37 @@ pub fn schema_version() -> i64 {
     MIGRATIONS.len() as i64
 }
 
+/// Opens the read-only connections of the reader pool. `r2d2_sqlite` would do
+/// this, but it has no release for the `rusqlite` that bundles a SQLite without
+/// RUSTSEC-2026-0459, so the few lines it held live here.
+struct ReaderManager {
+    path: PathBuf,
+}
+
+impl r2d2::ManageConnection for ReaderManager {
+    type Connection = Connection;
+    type Error = rusqlite::Error;
+
+    fn connect(&self) -> Result<Connection, rusqlite::Error> {
+        let conn = Connection::open_with_flags(
+            &self.path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        conn.execute_batch(
+            "PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA cache_size = -4000;",
+        )?;
+        Ok(conn)
+    }
+
+    fn is_valid(&self, conn: &mut Connection) -> Result<(), rusqlite::Error> {
+        conn.execute_batch("")
+    }
+
+    fn has_broken(&self, _conn: &mut Connection) -> bool {
+        false
+    }
+}
+
 #[derive(Clone)]
 pub struct Db {
     inner: Arc<Inner>,
@@ -55,7 +86,7 @@ pub struct Db {
 
 struct Inner {
     writer: Mutex<Connection>,
-    readers: r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
+    readers: r2d2::Pool<ReaderManager>,
 }
 
 impl Drop for Inner {
@@ -101,13 +132,9 @@ impl Db {
         let writer = Connection::open(path).map_err(AppError::internal)?;
         configure(&writer).map_err(AppError::internal)?;
         migrate_with(&writer, MIGRATIONS, backup_dir)?;
-        let manager = r2d2_sqlite::SqliteConnectionManager::file(path)
-            .with_flags(OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)
-            .with_init(|c| {
-                c.execute_batch(
-                    "PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA cache_size = -4000;",
-                )
-            });
+        let manager = ReaderManager {
+            path: path.to_path_buf(),
+        };
         let readers = r2d2::Pool::builder()
             .max_size(4)
             .min_idle(Some(1))
