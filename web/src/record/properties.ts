@@ -78,11 +78,15 @@ export function recordInitials(title: string): string {
 }
 
 /**
- * The picture that fills the tile: the first file of the collection's first attachment property, when it is an
- * image (a PDF or a video there is not the record's picture).
+ * The picture that fills the tile: the first attachment property, in the default view's order, whose first file
+ * on this record is an image (a PDF or a video there is not the record's picture, so the next property is looked at).
  */
-export function tileImage(table: Pick<Table, "fields">, values: Readonly<Record<string, unknown>>): AttachmentRef | null {
-  const property = table.fields.find((f) => f.type === "attachment");
-  const first = property ? attachmentRefs(values[property.id])[0] : undefined;
-  return first?.mime.startsWith("image/") ? first : null;
+export function tileImage(table: Pick<Table, "fields" | "primary_field_id">, values: Readonly<Record<string, unknown>>, layout?: Pick<ViewConfig, "field_order" | "hidden_fields">): AttachmentRef | null {
+  const { visible, hidden } = resolveFieldOrder(table, layout ?? { field_order: [], hidden_fields: [] });
+  for (const property of [...visible, ...hidden]) {
+    if (property.type !== "attachment") continue;
+    const first = attachmentRefs(values[property.id])[0];
+    if (first?.mime.startsWith("image/")) return first;
+  }
+  return null;
 }

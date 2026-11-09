@@ -10,7 +10,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { attachmentsApi } from "@/api/records";
-import type { Field, Table, TableRecord } from "@/api/types";
+import type { Field, Table, TableRecord, View } from "@/api/types";
 import { editText, type FormatCtx } from "@/lib/cells/format";
 import { cn } from "@/lib/cn";
 import { choiceClass } from "@/lib/colors";
@@ -20,8 +20,8 @@ import type { RecordSave } from "./useRecordSave";
 
 const TITLE = "text-record-phone md:text-record";
 
-function Tile({ table, record, title }: { table: Table; record: TableRecord; title: string }) {
-  const image = tileImage(table, record.values);
+function Tile({ table, record, title, layout }: { table: Table; record: TableRecord; title: string; layout: View["config"] | undefined }) {
+  const image = tileImage(table, record.values, layout);
   const [broken, setBroken] = useState<string | null>(null);
   const shown = image && broken !== image.id ? image : null;
   return (
@@ -41,6 +41,8 @@ export interface RecordHeadProps {
   readOnly: boolean;
   format: FormatCtx;
   save: RecordSave;
+  /** The collection's default view, whose property order decides which attachment property gives the tile its picture. */
+  layoutView?: View | null;
   /** The record was just added: the title starts focused (REC-8). */
   autoFocus: boolean;
   /** Enter in the title. */
@@ -49,11 +51,11 @@ export interface RecordHeadProps {
   onEscapeWhenEmpty?: () => void;
 }
 
-export function RecordHead({ table, record, primary, mode, title, readOnly, format, save, autoFocus, onEnter, onEscapeWhenEmpty }: RecordHeadProps) {
+export function RecordHead({ table, record, primary, mode, title, readOnly, format, save, layoutView, autoFocus, onEnter, onEscapeWhenEmpty }: RecordHeadProps) {
   const editable = mode === "inline" && !readOnly && !!primary;
   return (
     <div className="mb-6">
-      <Tile table={table} record={record} title={title === "Untitled record" ? "" : title} />
+      <Tile table={table} record={record} title={title === "Untitled record" ? "" : title} layout={layoutView?.config} />
       {editable ? (
         <TitleInput key={record.id} field={primary} record={record} format={format} save={save} autoFocus={autoFocus} onEnter={onEnter} onEscapeWhenEmpty={onEscapeWhenEmpty} label={title} />
       ) : (

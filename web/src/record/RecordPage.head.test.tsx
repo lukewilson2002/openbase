@@ -85,8 +85,8 @@ describe("the record head: title", () => {
     const box = await title();
     await userEvent.click(box);
     await userEvent.type(box, "!{Enter}");
-    // Until the page has a body of its own the focus goes to the first value.
-    await waitFor(() => expect(screen.getByRole("button", { name: "Edit Company" })).toHaveFocus());
+    // A collection with no Page property still has the page editor (the first save makes the property), so the focus goes there.
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Page" })).toHaveFocus());
     await waitFor(() => expect(api.callsTo(PATCH_RECORDS)).toHaveLength(1));
     expect(box).toHaveValue("Harper & Co!");
     await new Promise((r) => setTimeout(r, 50));

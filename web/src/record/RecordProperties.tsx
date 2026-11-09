@@ -41,7 +41,12 @@ import type { RecordSave, Unsent } from "./useRecordSave";
 /** What a property's name is: plain text, or the button that opens its menu. */
 function PropertyName({ field, table, id, role, hidden, layout, roles, onRename, onEdit, onDelete }: { field: Field; table: Table; id: string; role: string; hidden: boolean; layout: RecordLayout | null; roles: PropertyRoles; onRename(): void; onEdit(): void; onDelete(): void }) {
   const creator = atLeast(role, "creator");
-  const editor = !!layout && atLeast(role, "editor");
+  // The title is shown as a row only when it needs an editor of its own (a choice, a date); it is still the title,
+  // which cannot be hidden or deleted, as in the grid's column menu.
+  const isTitle = field.id === table.primary_field_id;
+  const editor = !!layout && atLeast(role, "editor") && !isTitle;
+  const titleReason = isTitle ? "It is the title already" : whyNotTitle(field);
+  const pageReason = field.id === table.body_field_id ? "It is the page already" : whyNotPage(field, table);
   const box = "flex min-h-9 items-center truncate max-md:min-h-control-touch";
   if (!creator && !editor) {
     return (
@@ -67,11 +72,11 @@ function PropertyName({ field, table, id, role, hidden, layout, roles, onRename,
           <MenuItem icon={SlidersHorizontal} onSelect={onEdit}>
             Edit property
           </MenuItem>
-          <MenuItem icon={Heading1} reason={whyNotTitle(field)} disabled={!!whyNotTitle(field)} onSelect={() => roles.setTitle(field)}>
+          <MenuItem icon={Heading1} reason={titleReason} disabled={!!titleReason} onSelect={() => roles.setTitle(field)}>
             Use as title
           </MenuItem>
           {field.type === "rich_text" && (
-            <MenuItem icon={FileText} reason={whyNotPage(field, table)} disabled={!!whyNotPage(field, table)} onSelect={() => roles.setPage(field)}>
+            <MenuItem icon={FileText} reason={pageReason} disabled={!!pageReason} onSelect={() => roles.setPage(field)}>
               Use as page
             </MenuItem>
           )}
@@ -85,7 +90,7 @@ function PropertyName({ field, table, id, role, hidden, layout, roles, onRename,
       {creator && (
         <>
           <MenuSeparator />
-          <MenuItem icon={Trash2} danger onSelect={onDelete}>
+          <MenuItem icon={Trash2} danger reason={isTitle ? "The title can't be deleted" : null} disabled={isTitle} onSelect={onDelete}>
             Delete property
           </MenuItem>
         </>
@@ -129,7 +134,16 @@ function PropertyEntry({ field, table, roles, record, readOnly, hidden, role, er
   const rebuilds = useRebuilds(textKey, value, lastSaved, unsent, typedIn);
   const editorKey = typedIn ? `${record.id}:${field.id}:${rebuilds}` : `${record.id}:${field.id}:${JSON.stringify(value)}`;
   return (
-    <PropertyRow label={<PropertyName field={field} table={table} id={labelId} role={role} hidden={hidden} layout={layout} roles={roles} onRename={() => onRename(field)} onEdit={() => onEdit(field)} onDelete={() => onDelete(field)} />} className="items-start">
+    <PropertyRow
+      label={
+        <>
+          <PropertyName field={field} table={table} id={labelId} role={role} hidden={hidden} layout={layout} roles={roles} onRename={() => onRename(field)} onEdit={() => onEdit(field)} onDelete={() => onDelete(field)} />
+          {/* Shown, not only a tooltip: a touch screen has no hover. */}
+          {field.description && <span className="mb-1 line-clamp-2 block whitespace-normal break-words text-meta text-muted">{field.description}</span>}
+        </>
+      }
+      className="items-start"
+    >
       {readOnly || computed ? (
         <div className="flex min-h-9 flex-col justify-center rounded-md px-2 py-1 max-md:min-h-control-touch">
           <CellValue field={field} value={value} format={env.format} emails={emails} linkFiles />

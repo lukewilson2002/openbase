@@ -39,6 +39,18 @@ describe("the property list", () => {
   });
 });
 
+describe("a property's description", () => {
+  it("is written under its name, where a touch screen can read it", async () => {
+    const described = makeTable([name, { ...company, description: "The legal name, as on the invoice" }, status], { primary_field_id: "fld_name" });
+    renderRecordPage({ table: described, record: makeRecord({ fld_name: "Harper", fld_company: "Acme", fld_status: "chs2" }) });
+    await ready();
+    const term = screen.getByRole("region", { name: "Properties" }).querySelector("dt:has(#property-fld_company)")!;
+    expect(within(term as HTMLElement).getByText("The legal name, as on the invoice")).toBeVisible();
+    // A property without one has no empty line.
+    expect(screen.getByRole("region", { name: "Properties" }).querySelector("dt:has(#property-fld_status)")!.children).toHaveLength(1);
+  });
+});
+
 describe("the empty properties fold", () => {
   it("counts the properties with nothing in them and keeps them out of sight until asked", async () => {
     renderRecordPage({ table, record, layout });
@@ -207,6 +219,19 @@ describe("a property's name", () => {
     await userEvent.click(screen.getByRole("button", { name: "Company" }));
     const items = (await screen.findAllByRole("menuitem")).map((i) => i.textContent?.trim());
     expect(items).toEqual(["Rename", "Edit property", "Use as title", "Hide from pages", "Delete property"]);
+  });
+
+  it("offers no Hide and no Delete for the title when it is a row of its own (a choice), and says why Use as title is off", async () => {
+    // A choice cannot be typed in the head, so the title is a row; it is still the title.
+    const choiceTitle = makeTable([status, name, company], { primary_field_id: "fld_status" });
+    renderRecordPage({ table: choiceTitle, record: makeRecord({ fld_status: "chs2", fld_name: "x" }) });
+    await screen.findByRole("button", { name: "Edit Status" });
+    await userEvent.click(screen.getByRole("button", { name: "Status" }));
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((i) => i.textContent?.trim().replace(/\s+/g, " "))).toEqual(["Rename", "Edit property", "Use as titleIt is the title already", "Delete propertyThe title can't be deleted"]);
+    expect(items[2]).toHaveAttribute("aria-disabled", "true");
+    expect(items[3]).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByRole("menuitem", { name: /Hide from pages/ })).not.toBeInTheDocument();
   });
 
   it("Use as title makes it the primary property, and the record's head then shows its value", async () => {

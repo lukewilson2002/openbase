@@ -257,7 +257,7 @@ describe("the page for people who cannot edit", () => {
 });
 
 describe("a collection with no Page property", () => {
-  it("offers a creator Add Page property in place of the editor, and the editor once it is there", async () => {
+  it("gives a creator the editor at once, with Add Page property beside it rather than in its place", async () => {
     let made = false;
     const { api, server } = renderRecordPage({
       table: bare,
@@ -270,12 +270,28 @@ describe("a collection with no Page property", () => {
       },
     });
     const section = await screen.findByRole("region", { name: "Page" });
-    expect(within(section).queryByRole("textbox")).not.toBeInTheDocument();
+    expect(await within(section).findByRole("textbox", { name: "Page" })).toBeInTheDocument();
     await userEvent.click(within(section).getByRole("button", { name: "Add Page property" }));
     await waitFor(() => expect(api.callsTo(BODY_FIELD)).toHaveLength(1));
     expect(api.callsTo(BODY_FIELD)[0]!.body).toEqual({ create: true });
     expect(made).toBe(true);
     expect(server.schema()).toBeTruthy();
+  });
+
+  it("lets a creator type first: the first save makes Page through the page endpoint, as for an editor", async () => {
+    const { api, server } = renderRecordPage({
+      table: bare,
+      record,
+      role: "creator",
+      routes: {
+        [PUT_PAGE]: () => ({ field_id: "fld_page", created: true, record: { ...server.record(), values: { ...server.record().values, fld_page: "Hi" } } }),
+      },
+    });
+    const { type, box } = await editorOf();
+    type("Hi");
+    act(() => box.blur());
+    await waitFor(() => expect(api.callsTo(PUT_PAGE)).toHaveLength(1));
+    expect(api.callsTo(PUT_PAGE)[0]!.body).toEqual({ text: "Hi" });
   });
 
   it("gives an editor the page editor, and the first save makes Page through the page endpoint", async () => {

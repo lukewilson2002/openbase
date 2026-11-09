@@ -5,7 +5,8 @@
  *
  * - The editor is lazy: Tiptap is its own chunk, and the properties above show first.
  * - With a Page property the text saves like any other value (useRecordSave); with none, the first save makes
- *   "Page" (usePageSave). Creators are offered the property instead of an editor, so adding it is their choice.
+ *   "Page" (usePageSave), for creators as for editors. Creators are also offered "Add Page property" beside the
+ *   editor, to make it before anything is typed.
  * - The editor (and its autosave) is built again when the page changes under it (someone else's edit, a refused
  *   save rolling back), never for our own save coming back (useRebuilds).
  */
@@ -83,11 +84,15 @@ export function PageSection({ schema, table, record, role, save, pageSave, colla
   if (!canEdit) {
     if (!text.trim()) return null;
     content = <Markdown source={text} className="text-read-phone md:text-read" />;
-  } else if (!field && atLeast(role, "creator")) {
-    content = <AddPage schema={schema} table={table} />;
   } else {
     // Built again when the page changes under it, with its autosave: see useRebuilds.
-    content = <PageEditing key={`${record.id}:${rebuilds}`} schema={schema} table={table} record={record} save={save} pageSave={pageSave} text={text} collaborators={collaborators} upload={upload} onAddProperty={onAddProperty} />;
+    // With no Page property the first save makes it, for a creator as for an editor (REC-5, decision 2).
+    content = (
+      <>
+        <PageEditing key={`${record.id}:${rebuilds}`} schema={schema} table={table} record={record} save={save} pageSave={pageSave} text={text} collaborators={collaborators} upload={upload} onAddProperty={onAddProperty} />
+        {!field && atLeast(role, "creator") && <AddPage schema={schema} table={table} />}
+      </>
+    );
   }
   return (
     <section aria-label="Page" className="mt-6 border-t border-line pt-6">
@@ -100,8 +105,8 @@ function AddPage({ schema, table }: { schema: BaseSchema; table: Table }) {
   const roles = usePropertyRoles(schema.id, table);
   const [busy, setBusy] = useState(false);
   return (
-    <div className="flex flex-wrap items-center gap-3 text-label text-muted">
-      <p>This collection has no Page property yet. It keeps the text of each record's page.</p>
+    <div className="mt-4 flex flex-wrap items-center gap-3 text-label text-muted">
+      <p>The text of each page is kept in a Page property, made when one is first saved.</p>
       <Button
         variant="secondary"
         loading={busy}

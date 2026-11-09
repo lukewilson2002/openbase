@@ -291,7 +291,7 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
     </div>
   ) : (
     <>
-      <RecordHead table={table} record={record.data} primary={primary} mode={titleMode} title={title} readOnly={!canEdit} format={format} save={save} autoFocus={justCreated && canEdit} onEnter={focusPage} onEscapeWhenEmpty={justCreated ? onClose : undefined} />
+      <RecordHead table={table} record={record.data} primary={primary} mode={titleMode} title={title} readOnly={!canEdit} format={format} save={save} layoutView={layoutView} autoFocus={justCreated && canEdit} onEnter={focusPage} onEscapeWhenEmpty={justCreated ? onClose : undefined} />
       <LinkedRecordsProvider value={linkedHost}>
         <RecordProperties schema={schema} table={table} record={record.data} view={layoutView} role={role} env={env} emails={emails} save={save} layout={layout} titleMode={titleMode} justCreated={justCreated && canEdit} addPropertyRequest={addPropertyRequest} />
         <PageSection schema={schema} table={table} record={record.data} role={role} save={save} pageSave={pageSave} collaborators={collaborators} upload={uploadToProject} emails={emails} onAddProperty={addProperty} />

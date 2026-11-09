@@ -120,7 +120,14 @@ describe("tileImage", () => {
     expect(tileImage(makeTable([f("title")]), {})).toBeNull();
   });
 
-  it("looks at the first attachment property only", () => {
-    expect(tileImage(table, { photos: [], docs: [png] })).toBeNull();
+  it("goes on to the next attachment property when the first has no image on this record", () => {
+    expect(tileImage(table, { photos: [], docs: [png] })?.id).toBe("att1");
+    expect(tileImage(table, { photos: [pdf], docs: [{ ...png, id: "other" }] })?.id).toBe("other");
+    expect(tileImage(table, { photos: [pdf], docs: [pdf] })).toBeNull();
+  });
+
+  it("looks at the attachment properties in the default view's order", () => {
+    const layout = { field_order: ["docs", "photos"], hidden_fields: [] };
+    expect(tileImage(table, { photos: [png], docs: [{ ...png, id: "other" }] }, layout)?.id).toBe("other");
   });
 });
