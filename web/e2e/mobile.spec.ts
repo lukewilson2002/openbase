@@ -410,7 +410,7 @@ test("on a phone Back from a record lands the list, the gallery and the board wh
   for (const [name, type, config] of [
     ["Outline", "list", { sorts }],
     ["Cards", "gallery", { sorts }],
-    ["Board", "kanban", { sorts, kanban_stack_field_id: status.id }],
+    ["Board", "kanban", { sorts, kanban: { stack_field_id: status.id } }],
   ] as const) {
     const made = await page.request.post(`/api/tables/${table.id}/views`, { data: { name, type, personal: false, config }, headers: CSRF });
     expect(made.ok(), await made.text()).toBeTruthy();
@@ -437,13 +437,21 @@ test("on a phone Back from a record lands the list, the gallery and the board wh
       await expect.poll(spot, "the layout has to scroll for this test").not.toBeNull();
       await scrollDown();
       await expect.poll(async () => (await spot())?.top ?? 0).toBeGreaterThan(300);
+      await page.waitForTimeout(400);
       const left = (await spot())!;
-      // A record in view that is not under the header: the first whose top edge is clear of it.
-      const title = await page.evaluate(() => {
+      // A record wholly inside the scroller's visible part, so the tap does not scroll it into view (which would be a scroll of its own).
+      const title = await page.evaluate((sel) => {
+        const scroller = [...document.querySelectorAll<HTMLElement>(sel)].find((e) => e.scrollHeight - e.clientHeight > 150)!;
+        const box = scroller.getBoundingClientRect();
+        const top = Math.max(box.top, 0) + 16;
+        const bottom = Math.min(box.bottom, innerHeight) - 16;
         const cards = [...document.querySelectorAll<HTMLElement>("[data-record-id], [role=treeitem]")];
-        const card = cards.find((c) => c.getBoundingClientRect().top > 160 && c.getBoundingClientRect().bottom < innerHeight - 100 && /Item \d\d/.test(c.textContent ?? ""));
+        const card = cards.find((c) => {
+          const r = c.getBoundingClientRect();
+          return r.top > top && r.bottom < bottom && /Item \d\d/.test(c.textContent ?? "");
+        });
         return card ? /Item \d\d/.exec(card.textContent ?? "")![0] : null;
-      });
+      }, SCROLLERS);
       expect(title, "a record in view").not.toBeNull();
       await page.getByText(title!, { exact: true }).first().tap();
       await expect(page).toHaveURL(/\/r\/rec/);
@@ -457,10 +465,10 @@ test("on a phone Back from a record lands the list, the gallery and the board wh
 });
 
 /**
- * PH-3: what was a pop-over is a bottom sheet on a phone. A property's choices (a record page), the type of a new property,
- * a dropdown menu (a view's "More" in the form builder, here the record page's More) and a filter's suggestions.
+ * PH-3: what was a pop-over is a bottom sheet on a phone. A property's choices on a record page; the menus, pickers and
+ * editors are covered by the unit tests of the components that draw them (Menu, Popover, EditorShell, EntitySelect on a phone).
  */
-test("on a phone a property's choices and the record's More menu open as bottom sheets, never as pop-overs (PH-3)", async ({ page }) => {
+test("on a phone a property's choices open as a bottom sheet, never as a pop-over (PH-3)", async ({ page }) => {
   const email = `e2e-mobile-ph3-${randomBytes(4).toString("hex")}@example.com`;
   const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
   expect(signup.ok(), await signup.text()).toBeTruthy();
@@ -468,26 +476,28 @@ test("on a phone a property's choices and the record's More menu open as bottom 
   const ws = await (await page.request.post("/api/workspaces", { data: { name: "Sheet workspace" }, headers: CSRF })).json();
   const base = await (await page.request.post(`/api/workspaces/${ws.id}/bases`, { data: { name: "Sheet base" }, headers: CSRF })).json();
   const table = base.tables[0] as { id: string; primary_field_id: string };
-  const status = await (
-    await page.request.post(`/api/tables/${table.id}/fields`, { data: { name: "Status", type: "single_select", options: { choices: [{ id: "", name: "Todo", color: "gray" }, { id: "", name: "Done", color: "green" }] } }, headers: CSRF })
-  ).json();
-  const made = await (await page.request.post(`/api/tables/${table.id}/records`, { data: { records: [{ values: { [table.primary_field_id]: "Pick me" } }] }, headers: CSRF })).json();
+  const fieldRes = await page.request.post(`/api/tables/${table.id}/fields`, { data: { name: "Status", type: "single_select", options: { choices: [{ id: "", name: "Todo", color: "gray" }, { id: "", name: "Done", color: "green" }] } }, headers: CSRF });
+  expect(fieldRes.ok(), await fieldRes.text()).toBeTruthy();
+  const choices = ((await fieldRes.json()) as { id: string; options: { choices: { id: string; name: string }[] } });
+  // A value is set, so the property is shown (an empty one is folded under "Show 1 empty property").
+  const todo = choices.options.choices.find((c) => c.name === "Todo")!.id;
+  const made = await (await page.request.post(`/api/tables/${table.id}/records`, { data: { records: [{ values: { [table.primary_field_id]: "Pick me", [choices.id]: todo } }] }, headers: CSRF })).json();
   await page.goto(`/base/${base.id}/${table.id}/r/${made.records[0].id}`);
   await expect(page.getByRole("heading", { level: 1, name: "Pick me" })).toBeVisible();
 
   await test.step("the choices of a property are a sheet, and picking one saves it", async () => {
-    // The label opens the property's own menu and the value opens its choices: the value is the second of the two.
-    await page.getByRole("button", { name: "Status", exact: true }).last().tap();
+    // The label opens the property's own menu; the value, shown as its choice, opens the choices.
+    await page.getByRole("main").getByText("Todo", { exact: true }).tap();
     const sheet = page.getByRole("dialog", { name: "Status" });
     await expect(sheet).toBeVisible();
-    await expect(sheet.getByRole("button", { name: "Todo" })).toBeVisible();
+    await expect(sheet.getByRole("option", { name: "Done" })).toBeVisible();
     // A sheet rests on the bottom of the screen and is as wide as it, with a grab handle: not a floating panel.
     const box = (await sheet.boundingBox())!;
     expect(box.x).toBeLessThanOrEqual(1);
     expect(box.y + box.height).toBeGreaterThan(viewport.height - 2);
-    await sheet.getByRole("button", { name: "Todo" }).tap();
+    await sheet.getByRole("option", { name: "Done" }).tap();
     await expect(sheet).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Status", exact: true }).last()).toContainText("Todo");
+    await expect(page.getByRole("main").getByText("Done", { exact: true })).toBeVisible();
   });
 
   await test.step("nothing on the screen is a pop-over while a sheet is open", async () => {
