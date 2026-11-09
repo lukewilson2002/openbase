@@ -372,6 +372,11 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   the accepted risks with their reasons: share tokens stored readable, `style-src 'unsafe-inline'`,
   the ignored advisory, and that anyone who knows a password-protected link can lock its
   password prompt for 15 minutes by guessing wrongly 100 times.
+- **Rich text can no longer restyle the app.** Markdown and rich text (comments, rich text cells, Pages,
+  public form answers) keep only the classes the renderer itself writes, so raw HTML in a value cannot use
+  the app's own styles to cover the screen with a fake page or an invisible link. Ordinary formatting is
+  unchanged. A very long run of spaces in a rich text value, or in a text cell shown in the grid, no longer
+  stalls the browser tab.
 
 ### Changed
 

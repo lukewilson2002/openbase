@@ -627,8 +627,11 @@ Web and dependencies:
   `script-src 'self'` allows no inline script, no `eval` and no WebAssembly, so injected markup
   cannot run code, which is what the policy is there to stop. Cell values are shown as text, and
   rich text is Markdown rendered by the web client and sanitized by DOMPurify, which also strips
-  `style` attributes and `<style>`, form and frame tags, so what people type cannot become an
-  inline style. Removing the exception means moving every dynamic style into classes or CSS
+  `style` attributes and `<style>`, form and frame tags, and every `class` that is not one the
+  renderer writes itself (`ob-*`, a code block's `language-*`), so what people type cannot become
+  an inline style or use the app's own utility classes to cover the screen (`fixed inset-0`).
+  Long runs of spaces are cut before Markdown is read and before a cell is drawn, because the
+  Markdown library and a line-break pattern take time that grows with the square of such a run. Removing the exception means moving every dynamic style into classes or CSS
   variables; it is not planned.
 - **One dependency advisory is ignored: RUSTSEC-2023-0071 (`rsa`, the Marvin timing attack).**
   No fixed release exists. `rsa` comes in through `webauthn-rs`, which uses it only to verify
