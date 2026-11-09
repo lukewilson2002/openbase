@@ -26,6 +26,7 @@ use serde_json::{Value as Json, json};
 use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use crate::ids::{new_id, new_token};
+use crate::store::mentions;
 use crate::store::schema::{self, TableRow, ViewRow};
 
 /// Prefix of share tokens (they appear in URLs).
@@ -507,7 +508,8 @@ pub fn public_config(config: &ViewConfig, visible: &[Field]) -> PublicViewConfig
 /// - `User` fields become `[{"name"}]`;
 /// - created-by / last-modified-by become `{"name"}`;
 /// - everything else (links as `[{id,name}]`, attachments, computed values)
-///   is passed through, since it is part of the visible cell.
+///   is passed through, since it is part of the visible cell, except that
+///   the user ids of @mentions in its text become plain `@Name`.
 pub fn public_record(
     conn: &Connection,
     record: Record,
@@ -540,13 +542,29 @@ pub fn public_record(
                     None => continue,
                 }
             }
-            _ => v.clone(),
+            // Rich text, and lookups and formulas of it, carry @mentions
+            // that hold user ids.
+            _ => without_mentioned_ids(v),
         };
         values.insert(f.id.clone(), rendered);
     }
     PublicRecord {
         id: record.id,
         values,
+    }
+}
+
+/// `v` with the user ids of @mentions in any text inside it replaced by names.
+fn without_mentioned_ids(v: &Json) -> Json {
+    match v {
+        Json::String(s) => Json::String(mentions::without_user_ids(s)),
+        Json::Array(a) => Json::Array(a.iter().map(without_mentioned_ids).collect()),
+        Json::Object(o) => Json::Object(
+            o.iter()
+                .map(|(k, x)| (k.clone(), without_mentioned_ids(x)))
+                .collect(),
+        ),
+        other => other.clone(),
     }
 }
 

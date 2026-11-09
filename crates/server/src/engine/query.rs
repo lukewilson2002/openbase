@@ -797,15 +797,27 @@ pub fn visible_view(conn: &Connection, user_id: &str, view_id: &str) -> AppResul
 /// named by a [`TransientConfig`] replaced. The override is validated like a
 /// saved config (only the parts it carries, so stale references elsewhere in
 /// the saved config do not matter) and is never stored.
+///
+/// `anonymous` is a public share link's request. The saved filter is what
+/// bounds the records such a link exposes, and its owner alone may widen it,
+/// so a transient filter (which replaces the saved one) is refused there
+/// instead of being allowed to drop it. Every other part of the override
+/// only changes how the exposed records are ordered, grouped or coloured.
 pub fn effective_config(
     conn: &Connection,
     view: &ViewRow,
     transient: Option<&TransientConfig>,
+    anonymous: bool,
 ) -> AppResult<ViewConfig> {
     let mut config = view.view.config.clone();
     let Some(t) = transient else {
         return Ok(config);
     };
+    if anonymous && t.filter.is_some() {
+        return Err(AppError::bad_request(
+            "a shared view's filter cannot be changed; sort or search instead",
+        ));
+    }
     let fields = schema::table_fields(conn, &view.view.table_id)?;
     let only_the_override = ViewConfig {
         filter: t.filter.clone(),
@@ -844,14 +856,34 @@ struct Scanned {
     table_id: String,
 }
 
+/// Who a query runs for.
+#[derive(Clone, Copy)]
+enum Viewer<'a> {
+    Member(&'a str),
+    /// A public share link's visitor: no user, and no say over the view's
+    /// saved filter (see [`effective_config`]).
+    Anonymous,
+}
+
+impl Viewer<'_> {
+    fn user_id(&self) -> &str {
+        match self {
+            Viewer::Member(id) => id,
+            Viewer::Anonymous => "",
+        }
+    }
+}
+
 fn scan(
     conn: &Connection,
     cache: &QueryCache,
     versions: &DataVersions,
-    user_id: &str,
+    viewer: Viewer,
     view: &ViewRow,
     req: &QueryRequest,
 ) -> AppResult<Scanned> {
+    let user_id = viewer.user_id();
+    let anonymous = matches!(viewer, Viewer::Anonymous);
     let table_id = view.view.table_id.as_str();
     let table = schema::live_table(conn, table_id)?;
     // Version first, data second (see store::versions): the plan below reads
@@ -862,7 +894,7 @@ fn scan(
     let version = versions.current(&table.base_id);
     let tz = viewer_timezone(conn, user_id, req.timezone.as_deref())?;
     let week_start = viewer_week_start(conn, user_id, req.week_start)?;
-    let config = effective_config(conn, view, req.transient.as_ref())?;
+    let config = effective_config(conn, view, req.transient.as_ref(), anonymous)?;
     let plan = Plan::build(conn, table_id, &config, Some(req), user_id, tz, week_start)?;
 
     let key = CacheKey {
@@ -916,9 +948,15 @@ pub fn run_query(
     view: &ViewRow,
     req: &QueryRequest,
 ) -> AppResult<QueryResponse> {
-    run_query_with(conn, cache, versions, user_id, view, req, |entry, _| {
-        entry.groups.clone()
-    })
+    run_query_with(
+        conn,
+        cache,
+        versions,
+        Viewer::Member(user_id),
+        view,
+        req,
+        |entry, _| entry.groups.clone(),
+    )
 }
 
 /// [`run_query`] for a public share link: the group headers are cut down to
@@ -936,54 +974,71 @@ pub fn run_query_public(
     req: &QueryRequest,
     visible: &HashSet<&str>,
 ) -> AppResult<QueryResponse> {
-    run_query_with(conn, cache, versions, "", view, req, |entry, plan| {
-        // Placeholder keys, numbered per field in order of appearance.
-        let mut aliases: HashMap<(&str, &str), String> = HashMap::new();
-        entry
-            .groups
-            .iter()
-            .filter(|g| visible.contains(g.field_id.as_str()))
-            .take(PUBLIC_MAX_GROUP_HEADERS)
-            .map(|g| {
-                let holds_user_ids = plan.by_id.get(&g.field_id).is_some_and(|f| {
-                    matches!(
-                        f.kind,
-                        FieldKind::User(_) | FieldKind::CreatedBy(_) | FieldKind::LastModifiedBy(_)
-                    )
-                });
-                let key = if holds_user_ids && !g.key.is_empty() {
-                    let n = aliases.len();
-                    aliases
-                        .entry((g.field_id.as_str(), g.key.as_str()))
-                        .or_insert_with(|| format!("user-{n}"))
-                        .clone()
-                } else {
-                    g.key.chars().take(PUBLIC_GROUP_TEXT_CHARS).collect()
-                };
-                GroupHeader {
-                    depth: g.depth,
-                    field_id: g.field_id.clone(),
-                    key,
-                    label: g.label.chars().take(PUBLIC_GROUP_TEXT_CHARS).collect(),
-                    value: Json::Null,
-                    start: g.start,
-                    count: g.count,
-                }
-            })
-            .collect()
-    })
+    run_query_with(
+        conn,
+        cache,
+        versions,
+        Viewer::Anonymous,
+        view,
+        req,
+        |entry, plan| {
+            // Placeholder keys, numbered per field in order of appearance.
+            let mut aliases: HashMap<(&str, &str), String> = HashMap::new();
+            entry
+                .groups
+                .iter()
+                .filter(|g| visible.contains(g.field_id.as_str()))
+                .take(PUBLIC_MAX_GROUP_HEADERS)
+                .map(|g| {
+                    let holds_user_ids = plan.by_id.get(&g.field_id).is_some_and(|f| {
+                        matches!(
+                            f.kind,
+                            FieldKind::User(_)
+                                | FieldKind::CreatedBy(_)
+                                | FieldKind::LastModifiedBy(_)
+                        )
+                    });
+                    let key = if holds_user_ids && !g.key.is_empty() {
+                        let n = aliases.len();
+                        aliases
+                            .entry((g.field_id.as_str(), g.key.as_str()))
+                            .or_insert_with(|| format!("user-{n}"))
+                            .clone()
+                    } else {
+                        // A key can be a rich text value with @mentions in it.
+                        crate::store::mentions::without_user_ids(&g.key)
+                            .chars()
+                            .take(PUBLIC_GROUP_TEXT_CHARS)
+                            .collect()
+                    };
+                    GroupHeader {
+                        depth: g.depth,
+                        field_id: g.field_id.clone(),
+                        key,
+                        label: crate::store::mentions::without_user_ids(&g.label)
+                            .chars()
+                            .take(PUBLIC_GROUP_TEXT_CHARS)
+                            .collect(),
+                        value: Json::Null,
+                        start: g.start,
+                        count: g.count,
+                    }
+                })
+                .collect()
+        },
+    )
 }
 
 fn run_query_with(
     conn: &Connection,
     cache: &QueryCache,
     versions: &DataVersions,
-    user_id: &str,
+    viewer: Viewer,
     view: &ViewRow,
     req: &QueryRequest,
     groups: impl FnOnce(&CachedQuery, &Plan) -> Vec<GroupHeader>,
 ) -> AppResult<QueryResponse> {
-    let scanned = scan(conn, cache, versions, user_id, view, req)?;
+    let scanned = scan(conn, cache, versions, viewer, view, req)?;
     let limit = req
         .limit
         .unwrap_or(DEFAULT_PAGE_SIZE)
@@ -1030,7 +1085,7 @@ pub fn query_ids(
     view: &ViewRow,
     req: &QueryRequest,
 ) -> AppResult<std::sync::Arc<CachedQuery>> {
-    Ok(scan(conn, cache, versions, user_id, view, req)?.entry)
+    Ok(scan(conn, cache, versions, Viewer::Member(user_id), view, req)?.entry)
 }
 
 /// Load the page's records by id and render them, with row colours.
@@ -1141,7 +1196,7 @@ pub fn run_aggregations(
     let tz = viewer_timezone(conn, user_id, opts.timezone)?;
     let week_start = viewer_week_start(conn, user_id, opts.week_start)?;
     let table_id = view.view.table_id.as_str();
-    let config = effective_config(conn, view, opts.transient)?;
+    let config = effective_config(conn, view, opts.transient, false)?;
     let req = QueryRequest {
         search: opts.search.map(str::to_string),
         ..QueryRequest::default()
@@ -1494,14 +1549,14 @@ mod tests {
                 v.bump("b");
             }));
         });
-        let first = scan(&conn, &cache, &versions, "", &view, &req).unwrap();
+        let first = scan(&conn, &cache, &versions, Viewer::Member(""), &view, &req).unwrap();
         BEFORE_VERSION_READ.with(|h| *h.borrow_mut() = None);
         // With the field gone its condition is ignored, so both records match.
         assert_eq!(first.entry.ids.len(), 2, "plan must see the new schema");
 
         // A later request is served from the cache under the new version and
         // must agree with a fresh scan.
-        let again = scan(&conn, &cache, &versions, "", &view, &req).unwrap();
+        let again = scan(&conn, &cache, &versions, Viewer::Member(""), &view, &req).unwrap();
         assert_eq!(again.entry.ids.len(), 2);
     }
 

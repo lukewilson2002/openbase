@@ -445,6 +445,18 @@ pub fn first_foreign_ref(
     Ok(None)
 }
 
+/// The first file referenced in `text` that a signed-in user uploaded (or that does not exist).
+/// A public form's text may only point at files visitors uploaded anonymously.
+pub fn first_member_ref(conn: &Connection, text: &str) -> AppResult<Option<String>> {
+    for id in referenced_ids(text) {
+        let anonymous = get(conn, &id)?.is_some_and(|a| a.created_by.is_none());
+        if !anonymous {
+            return Ok(Some(id));
+        }
+    }
+    Ok(None)
+}
+
 /// Delete attachment rows that nothing references: created before
 /// `cutoff_ms`, or (uploads without a user, i.e. from public forms) before
 /// `anonymous_cutoff_ms`. "Referenced" means mentioned in the data of any

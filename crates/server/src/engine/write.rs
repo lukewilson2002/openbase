@@ -647,8 +647,14 @@ impl<'a> Writer<'a> {
                     if !seen.insert(id.to_string()) {
                         continue;
                     }
+                    // A public form accepts only what a visitor could have
+                    // uploaded to it (no uploader). Any other file of the base
+                    // would otherwise become readable through a share link of
+                    // a view showing this field once its id sits in a cell.
+                    let form = matches!(self.ctx.source, WriteSource::Form { .. });
                     let row = attachments::get(self.conn(), id)?
                         .filter(|a| a.base_id.as_deref() == Some(self.table.base_id.as_str()))
+                        .filter(|a| !form || a.created_by.is_none())
                         .ok_or_else(|| {
                             field_error(
                                 field,
@@ -670,6 +676,14 @@ impl<'a> Writer<'a> {
                         text,
                         old.and_then(Json::as_str),
                     )?
+                {
+                    return Err(field_error(field, not_a_project_file(&bad)));
+                }
+                // Same rule as for an attachment cell: a public form may only
+                // reference files uploaded anonymously.
+                if matches!(self.ctx.source, WriteSource::Form { .. })
+                    && let Some(text) = value.as_str()
+                    && let Some(bad) = attachments::first_member_ref(self.conn(), text)?
                 {
                     return Err(field_error(field, not_a_project_file(&bad)));
                 }

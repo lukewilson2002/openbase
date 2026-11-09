@@ -96,6 +96,54 @@ pub fn mentions(md: &str) -> Vec<Mention> {
     out
 }
 
+/// `md` with every mention rewritten from `@[Name](usrXXXX)` to `@Name`, the
+/// rest of the text untouched. For anyone who may read the text but must not
+/// learn user ids (a public share link).
+pub fn without_user_ids(md: &str) -> String {
+    if !md.contains("](usr") {
+        return md.to_string();
+    }
+    // (start, end, replacement) of each mention, `@` included.
+    let mut edits: Vec<(usize, usize, String)> = Vec::new();
+    let mut open: Option<(usize, usize, String)> = None;
+    for (event, range) in parser(md).into_offset_iter() {
+        match event {
+            Event::Start(Tag::Link { dest_url, .. })
+                if md[range.start..].starts_with('[')
+                    && md[..range.start].ends_with('@')
+                    && USER_ID.is_match(&dest_url) =>
+            {
+                open = Some((range.start - 1, range.end, String::new()));
+            }
+            Event::Text(t) | Event::Code(t) => {
+                if let Some((_, _, label)) = open.as_mut() {
+                    label.push_str(&t);
+                }
+            }
+            Event::End(TagEnd::Link) => {
+                if let Some((start, end, label)) = open.take() {
+                    // The name is Markdown text again: escape what would
+                    // read as markup (or as a link around the id) instead.
+                    let mut name = String::from("@");
+                    for c in label.chars() {
+                        if c.is_ascii_punctuation() {
+                            name.push('\\');
+                        }
+                        name.push(c);
+                    }
+                    edits.push((start, end, name));
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut out = md.to_string();
+    for (start, end, name) in edits.into_iter().rev() {
+        out.replace_range(start..end, &name);
+    }
+    out
+}
+
 /// The distinct user ids mentioned in `md`, in order of first appearance.
 pub fn mentioned_user_ids(md: &str) -> Vec<String> {
     mentions(md).into_iter().map(|m| m.user_id).collect()
@@ -285,6 +333,20 @@ mod tests {
         );
         assert_eq!(added(None, after).len(), 2);
         assert!(added(Some(after), before).is_empty());
+    }
+
+    #[test]
+    fn without_user_ids_keeps_the_name_and_the_rest_of_the_markup() {
+        assert_eq!(
+            without_user_ids("Hi @[Ann](usr1) and @[Bo *x*](usr2): **ok** [site](https://e.com)"),
+            "Hi @Ann and @Bo x: **ok** [site](https://e.com)"
+        );
+        // A name with markup characters stays text; code is not a mention.
+        assert_eq!(
+            without_user_ids("`@[A](usr1)` @[x_y](usr9)"),
+            "`@[A](usr1)` @x\\_y"
+        );
+        assert_eq!(without_user_ids("no mentions"), "no mentions");
     }
 
     #[test]

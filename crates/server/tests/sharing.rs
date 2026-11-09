@@ -1061,17 +1061,82 @@ async fn public_transient_overrides_may_only_use_shown_fields() {
         r.assert_status(400);
         assert!(r.body.get("records").is_none());
     }
-    // The same override on a shown field works.
+    // A sort on a shown field works. (A filter on one is refused too: see
+    // `an_anonymous_transient_filter_cannot_widen_the_saved_filter`.)
     let r = pub_post(
         s.app(),
         &q,
-        json!({ "transient": {
-            "filter": and(vec![cond(&s.p.age, "gt", json!(29))]),
-            "sorts": [{ "field_id": s.p.age, "direction": "desc" }] } }),
+        json!({ "transient": { "sorts": [{ "field_id": s.p.age, "direction": "desc" }] } }),
     )
     .await;
     r.assert_status(200);
-    assert_eq!(names(&s.p, &r.body), ["Carol", "Alice", "Eve"]);
+    assert_eq!(names(&s.p, &r.body)[0], "Carol");
+}
+
+/// F1, F7, F24, F29: the saved filter bounds what a link exposes; a visitor
+/// must not replace it, whether with an empty filter or a broader one.
+#[tokio::test]
+async fn an_anonymous_transient_filter_cannot_widen_the_saved_filter() {
+    let p = people().await;
+    let t = p.f.table_id.clone();
+    let todo = p.f.choice_id(&t, "Status", "Todo").await;
+    let done = p.f.choice_id(&t, "Status", "Done").await;
+    let view =
+        p.f.view_of(
+            &t,
+            "Todo only",
+            "grid",
+            json!({ "filter": and(vec![cond(&p.status, "is", json!(todo))]) }),
+        )
+        .await;
+    let token = p.f.share(&view, "view", None).await["token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let q = format!("/api/public/shares/{token}/query");
+    let base = pub_post(&p.f.app, &q, json!({})).await;
+    base.assert_status(200);
+    assert_eq!(base.body["total"], 2);
+    let mut want = names(&p, &base.body);
+    want.sort();
+    assert_eq!(want, ["Alice", "Eve"]);
+    for filter in [
+        and(vec![]),
+        and(vec![cond(&p.name, "is_not_empty", json!(null))]),
+        or(vec![
+            cond(&p.status, "is", json!(todo)),
+            cond(&p.status, "is", json!(done)),
+        ]),
+    ] {
+        let r = pub_post(
+            &p.f.app,
+            &q,
+            json!({ "limit": 1000, "transient": { "filter": filter } }),
+        )
+        .await;
+        r.assert_status(400);
+        assert!(r.body.get("records").is_none(), "{}", r.body);
+    }
+    // Sorting and searching still work on top of the saved filter.
+    let r = pub_post(
+        &p.f.app,
+        &q,
+        json!({ "search": "e", "transient": { "sorts": [{ "field_id": p.name, "direction": "desc" }] } }),
+    )
+    .await;
+    r.assert_status(200);
+    assert_eq!(names(&p, &r.body), ["Eve", "Alice"]);
+    // A signed-in member keeps the replace behaviour.
+    let r =
+        p.f.app
+            .post(
+                &p.f.owner,
+                &format!("/api/views/{view}/query"),
+                json!({ "transient": { "filter": and(vec![]) } }),
+            )
+            .await;
+    r.assert_status(200);
+    assert_eq!(r.body["total"], 5);
 }
 
 #[tokio::test]
@@ -1520,4 +1585,113 @@ async fn attachment_password_guesses_are_rate_limited() {
     pub_get_pw(&f.app, &url, "pw-12345")
         .await
         .assert_status(429);
+}
+
+// ------------------------------------------------------ mention markup (F55)
+
+#[tokio::test]
+async fn public_rich_text_shows_mentions_by_name_not_user_id() {
+    let p = people().await;
+    let f = &p.f;
+    let t = f.table_id.clone();
+    let owner_id = f.owner.user_id.clone().unwrap();
+    let text = format!("Ask @[Ann *B*]({owner_id}) about `@[Code]({owner_id})` **today**");
+    f.set(&t, &p.ids[0], json!({ &f.notes_id: text })).await;
+    let token = f.share(&f.view_id, "view", None).await["token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let r = pub_post(
+        &f.app,
+        &format!("/api/public/shares/{token}/query"),
+        json!({}),
+    )
+    .await;
+    r.assert_status(200);
+    let shown = r.body["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|rec| rec["id"] == p.ids[0].as_str())
+        .unwrap()["values"][&f.notes_id]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(
+        shown,
+        "Ask @Ann B about `@[Code](".to_string() + &owner_id + ")` **today**"
+    );
+}
+
+// ------------------------------------- form uploads only name anonymous files (F50)
+
+#[tokio::test]
+async fn a_public_form_cannot_attach_a_file_a_member_uploaded() {
+    let p = people().await;
+    let f = &p.f;
+    let t = f.table_id.clone();
+    let files = id_of(&f.attachment_field(&t, "Files").await);
+    let form_view = f
+        .view_of(
+            &t,
+            "Form",
+            "form",
+            json!({ "form": { "fields": [
+                { "field_id": p.name }, { "field_id": files }, { "field_id": f.notes_id } ] } }),
+        )
+        .await;
+    let form_token = f.share(&form_view, "form", None).await["token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let submit = format!("/api/public/forms/{form_token}/submit");
+    // A private file of the same base, uploaded by the owner.
+    let secret = f.upload("secret.txt", b"private").await;
+    let id = secret["id"].as_str().unwrap();
+    let before = f
+        .app
+        .get(&f.owner, &format!("/api/tables/{t}/records"))
+        .await;
+    let before = before.body.to_string();
+    let r = pub_post(
+        &f.app,
+        &submit,
+        json!({ "values": { &p.name: "x", &files: [secret.clone()] } }),
+    )
+    .await;
+    r.assert_status(400);
+    let r = pub_post(
+        &f.app,
+        &submit,
+        json!({ "values": { &p.name: "x",
+            &f.notes_id: format!("![a](/api/attachments/{id}/secret.txt)") } }),
+    )
+    .await;
+    r.assert_status(400);
+    let after = f
+        .app
+        .get(&f.owner, &format!("/api/tables/{t}/records"))
+        .await;
+    assert_eq!(
+        before,
+        after.body.to_string(),
+        "no stray record was created"
+    );
+    // A file the visitor uploaded to the form is accepted.
+    let up = post_multipart(
+        &f.app,
+        &f.app.anon(),
+        &format!("/api/public/forms/{form_token}/attachments"),
+        &[("file", Some("mine.txt"), b"mine")],
+        &[],
+    )
+    .await;
+    up.assert_status(200);
+    let r = pub_post(
+        &f.app,
+        &submit,
+        json!({ "values": { &p.name: "y", &files: [up.body.clone()] } }),
+    )
+    .await;
+    r.assert_status(200);
 }
