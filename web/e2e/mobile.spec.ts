@@ -207,8 +207,8 @@ test("the shell, its sheets, the collection and the record page fit a phone", as
   await expect(tiles).toHaveCount(7);
   await expect(sheet.getByRole("button", { name: "Grid", pressed: true })).toBeVisible();
   await expectTouchTargets(sheet.getByRole("button"), "View options");
-  const first = (await tiles.nth(0).boundingBox())!;
-  const fourth = (await tiles.nth(3).boundingBox())!;
+  // Both rectangles are read in one call: the sheet is still rising, so two separate reads would measure it at two heights.
+  const [first, fourth] = await tiles.evaluateAll((els) => [els[0], els[3]].map((el) => { const r = el.getBoundingClientRect(); return { y: r.y, height: r.height }; }));
   expect(fourth.y, "the fourth tile starts the second row").toBeGreaterThan(first.y + first.height - 1);
   await expectFits(page, "view options");
   // A row opens its screen in the same sheet, with Back.
