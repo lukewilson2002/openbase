@@ -61,9 +61,9 @@ export interface LedgerSeed {
    * of its cards drags it; with one link the same hold opens the peek, which is what a phone's shot needs.
    */
   soloLink: { recordId: string; billId: string; billTitle: string };
-  /** The token of an open invite to the workspace (the invite page), and the address of the form and shared-view links. */
+  /** The token of an open invite to the workspace (the invite page), and the addresses of the form and the shared-view links (the board, the grid and the calendar). */
   inviteToken: string;
-  links: { form: string; view: string };
+  links: { form: string; view: string; grid: string; calendar: string };
   /** The two automations of the top level: one on with runs, one off. */
   automations: { research: string; welcome: string };
   /** The name of the app that is connected to the owner's account. */
@@ -617,6 +617,9 @@ export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<
   // A public form and a shared board.
   const formLink = await call<{ path: string }>(r, "post", `/api/views/${savedViews["Clients / Intake"]}/shares`, { kind: "form" });
   const viewLink = await call<{ path: string }>(r, "post", `/api/views/${savedViews["Clients / Pipeline"]}/shares`, { kind: "view" });
+  // The other layouts a link can show: the grid (the canvas) and the calendar (FullCalendar).
+  const gridLink = await call<{ path: string }>(r, "post", `/api/views/${defaultViews["Clients"]}/shares`, { kind: "view" });
+  const calendarLink = await call<{ path: string }>(r, "post", `/api/views/${savedViews["Clients / Follow-ups"]}/shares`, { kind: "view" });
 
   // Open invites: one to the workspace for the invite page, one to a person for a folder (the member list shows it as pending).
   const open = await call<{ url: string }>(r, "post", `/api/workspaces/${ws.id}/invites`, { role: "editor", email: null, all_bases: true });
@@ -698,7 +701,7 @@ export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<
     peekedBill: billRows[1]!.id,
     soloLink: { recordId: accountRows[1]!.id, billId: billRows[2]!.id, billTitle: "Design software" },
     inviteToken: open.url.split("/invite/")[1]!,
-    links: { form: formLink.path, view: viewLink.path },
+    links: { form: formLink.path, view: viewLink.path, grid: gridLink.path, calendar: calendarLink.path },
     automations: { research: research.id, welcome: welcome.id },
     connectedApp: "Claude Code",
   };

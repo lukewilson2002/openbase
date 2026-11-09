@@ -924,6 +924,32 @@ export const SHOTS: Shot[] = [
     },
   },
 
+  {
+    row: 34,
+    slug: "public-view-grid",
+    name: "public shared grid",
+    as: "anonymous",
+    open: async ({ page, seed }) => {
+      await page.goto(seed.links.grid);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      // The signed-in grid's canvas draws the rows; its accessible table beneath says when they are in.
+      await expect.poll(async () => (await page.locator("canvas[data-testid='data-grid-canvas']").first().textContent()) ?? "").toContain("Fernwood Dental");
+      await rest(page);
+    },
+  },
+  {
+    row: 34,
+    slug: "public-view-calendar",
+    name: "public shared calendar",
+    as: "anonymous",
+    open: async ({ page, seed }) => {
+      await page.goto(seed.links.calendar);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await expect(page.locator(".ob-cal-chip").first()).toBeVisible();
+      await rest(page);
+    },
+  },
+
   // 35 · Share (APP-8): inviting people over folders, and a view's links.
   {
     row: 35,
