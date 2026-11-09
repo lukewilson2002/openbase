@@ -258,6 +258,14 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Security
 
+- **A share link's visitor can no longer change the view's filter.** `POST /api/public/shares/{token}/query`
+  used to let a `transient.filter` replace the saved filter, which showed every record of the collection
+  in the shown properties, including the ones the filter hides. It now answers 400 for a `transient`
+  with a `filter`; sorts, groups, row colors, summaries and `search` still work on top of the saved
+  filter, and the shared view in the web app only ever sent sorts. Signed-in callers are unchanged.
+  Mentions (`@[Name](usr...)`) in the rich text of a shared view now read `@Name`, so a share link no
+  longer tells a visitor who was mentioned by user id. A public form accepts only files visitors uploaded
+  to it anonymously (in a file property or linked in rich text), not any other file of the folder.
 - **Everyone is signed out once after this update when OpenBase is served over https.** The
   session cookie is now named `__Host-ob_session` (the browser then refuses to let a sibling
   subdomain set it); sessions issued under the old name are no longer recognised. Over plain

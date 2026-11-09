@@ -418,6 +418,17 @@ ceremony state (not the credentials) is kept in memory, which suits the single-n
   visible attachment field of such a record; knowing an attachment id is not
   enough. Trashing the workspace, project, table or view, disabling the link, hiding
   the field or removing the file all close the download.
+- The saved filter is the boundary of a link and a visitor cannot change it: a
+  public query with a `transient.filter` is refused (400), while sorts, groups,
+  `search` and the like still apply on top of the saved filter. @mentions in
+  rich text reach a visitor as `@Name`, never as a user id.
+- A public form takes only files that visitors uploaded anonymously (attachment
+  properties and files linked in rich text answers). A file a member uploaded,
+  even one of the same folder, is refused, so an attachment id seen in a URL
+  cannot be put into a record to make it downloadable through a share link. The
+  remaining gap is a file another visitor uploaded to a form of the same
+  folder, whose id a visitor would have to know; it is bounded by the 2 hour
+  clean-up of unattached public uploads and not tied to one form.
 - Because a link follows its view's live configuration, **changing the shown
   fields, their order, the filter or the form of a view that has an enabled link
   needs the Creator role**, the same as managing the link. Editors keep the rest
