@@ -8,8 +8,10 @@ import type { EmailSettings, EmailTestResult, UpdateEmailSettings } from "@/api/
 import { useMe } from "@/auth/useAuth";
 import { Notice, Section } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
+import { StatusChip } from "@/components/ui/status-chip";
 import { useToast } from "@/components/ui/toast";
 
 const ENV_VARS = {
@@ -64,7 +66,7 @@ export function EmailTab() {
 }
 
 function Badge({ tone, children }: { tone: "good" | "neutral"; children: string }) {
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${tone === "good" ? "bg-success-soft text-success" : "bg-subtle text-muted"}`}>{children}</span>;
+  return <StatusChip hue={tone === "good" ? "green" : "gray"}>{children}</StatusChip>;
 }
 
 function EmailPanel({ settings }: { settings: EmailSettings }) {
@@ -181,7 +183,7 @@ function EmailPanel({ settings }: { settings: EmailSettings }) {
               {(ctl) => <Input {...ctl} value={form.from} onChange={(e) => set({ from: e.target.value })} disabled={locked("from")} spellCheck={false} />}
             </Field>
             <div className="flex items-center justify-end gap-3">
-              {dirty && <span className="text-xs text-muted">Unsaved changes</span>}
+              {dirty && <span className="text-meta text-muted">Unsaved changes</span>}
               <Button type="submit" variant="primary" disabled={!dirty || portInvalid} loading={save.isPending}>
                 Save changes
               </Button>
@@ -193,23 +195,23 @@ function EmailPanel({ settings }: { settings: EmailSettings }) {
       <TestEmail settings={settings} dirty={dirty} />
 
       <Section title="Sending limits" description="These are set in the server's environment, not here.">
-        <dl className="grid gap-3 text-[0.8125rem] sm:grid-cols-2">
+        <dl className="grid gap-3 text-label sm:grid-cols-2">
           <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">Per user, per hour</dt>
+            <dt className="text-meta uppercase tracking-wide text-muted">Per user, per hour</dt>
             <dd className="mt-0.5 font-medium tabular-nums">{settings.budgets.per_user_hour}</dd>
-            <dd className="text-xs text-muted">
+            <dd className="text-meta text-muted">
               <code>OPENBASE_EMAIL_PER_USER_HOUR</code>
             </dd>
           </div>
           <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">Whole server, per hour</dt>
+            <dt className="text-meta uppercase tracking-wide text-muted">Whole server, per hour</dt>
             <dd className="mt-0.5 font-medium tabular-nums">{settings.budgets.per_hour}</dd>
-            <dd className="text-xs text-muted">
+            <dd className="text-meta text-muted">
               <code>OPENBASE_EMAIL_PER_HOUR</code>
             </dd>
           </div>
         </dl>
-        <p className="mt-3 text-xs text-muted">Invitation and automation emails count against these limits; each recipient counts once.</p>
+        <p className="mt-3 text-meta text-muted">Invitation and automation emails count against these limits; each recipient counts once.</p>
       </Section>
     </div>
   );
@@ -232,13 +234,13 @@ function Status({ settings }: { settings: EmailSettings }) {
     );
   }
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-surface px-3 py-2 text-[0.8125rem]">
+    <Card className="flex flex-wrap items-center gap-2 px-3 py-2 text-label">
       <Badge tone="good">Email is on</Badge>
       <span>
         Sending through <span className="font-medium">{settings.host}</span>:{settings.port}
       </span>
       <Badge tone="neutral">{settings.source === "environment" ? "Host set by environment" : "Host saved here"}</Badge>
-    </div>
+    </Card>
   );
 }
 
@@ -266,20 +268,20 @@ function PasswordField({ settings, locked, value, onChange, replacing, setReplac
   if (settings.password_set && !replacing) {
     return (
       <div className="flex flex-col gap-1">
-        <span className="text-[0.8125rem] font-medium text-fg" id="smtp-password-label">
+        <span className="text-label font-medium text-fg" id="smtp-password-label">
           {label}
         </span>
         <div className="flex min-h-8 flex-wrap items-center gap-2" role="group" aria-labelledby="smtp-password-label">
           {removing ? (
             <>
-              <span className="text-[0.8125rem] text-danger">Will be removed when you save</span>
+              <span className="text-label text-danger">Will be removed when you save</span>
               <Button size="sm" onClick={() => setRemoving(false)}>
                 Undo
               </Button>
             </>
           ) : (
             <>
-              <span className="inline-flex items-center gap-1.5 text-[0.8125rem]">
+              <span className="inline-flex items-center gap-1.5 text-label">
                 <KeyRound aria-hidden className="size-4 text-muted" /> Saved
               </span>
               <Button size="sm" onClick={() => setReplacing(true)}>
@@ -291,7 +293,7 @@ function PasswordField({ settings, locked, value, onChange, replacing, setReplac
             </>
           )}
         </div>
-        <p className="text-xs text-muted">For security the saved password is never shown.</p>
+        <p className="text-meta text-muted">For security the saved password is never shown.</p>
       </div>
     );
   }
@@ -333,13 +335,13 @@ function TestEmail({ settings, dirty }: { settings: EmailSettings; dirty: boolea
             <Send aria-hidden className="size-4" /> Send test email
           </Button>
         </div>
-        {blocked && <p className="text-xs text-muted">{blocked}</p>}
+        {blocked && <p className="text-meta text-muted">{blocked}</p>}
         {send.isError && <Notice tone="error">{errorMessage(send.error)}</Notice>}
         {result?.ok && <Notice tone="success">Test email sent to {result.to}. The mail server accepted it; check that it arrives (and look in the spam folder).</Notice>}
         {result && !result.ok && (
           <Notice tone="error">
             <p className="font-medium">The test email to {result.to} was not sent.</p>
-            <p className="mt-1 break-words font-mono text-xs">{result.error}</p>
+            <p className="mt-1 break-words font-mono text-meta">{result.error}</p>
           </Notice>
         )}
       </div>

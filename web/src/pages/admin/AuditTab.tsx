@@ -8,6 +8,7 @@ import { Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageSpinner } from "@/components/ui/spinner";
+import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/format";
 
 export const AUDIT_PAGE_SIZE = 50;
@@ -52,40 +53,38 @@ export function AuditTab() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="overflow-x-auto rounded-lg border border-line bg-surface">
-        <table className="w-full min-w-[44rem] text-left text-[0.8125rem]">
-          <thead className="border-b border-line bg-subtle text-xs uppercase tracking-wide text-muted">
-            <tr>
-              <th scope="col" className="px-3 py-2 font-medium">When</th>
-              <th scope="col" className="px-3 py-2 font-medium">Who</th>
-              <th scope="col" className="px-3 py-2 font-medium">Action</th>
-              <th scope="col" className="px-3 py-2 font-medium">Target</th>
-              <th scope="col" className="px-3 py-2 font-medium">IP</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {entries.map((e) => (
-              <tr key={e.id}>
-                <td className="whitespace-nowrap px-3 py-2 text-muted">{formatDateTime(e.created_at)}</td>
-                <td className="px-3 py-2">
-                  {e.user_email ?? e.user_id ?? "System"}
-                  {viaOf(e.detail) && (
-                    <span className="block text-xs text-muted">
-                      via <bdi>{viaOf(e.detail)}</bdi>
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2 font-mono text-xs">{e.action}</td>
-                <td className="max-w-56 truncate px-3 py-2 text-muted" title={e.detail ? JSON.stringify(e.detail) : undefined}>
-                  {e.target ?? ""}
-                </td>
-                <td className="px-3 py-2 font-mono text-xs text-muted">{e.ip ?? ""}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="flex items-center justify-between text-[0.8125rem] text-muted">
+      <Table minWidth="44rem">
+        <THead>
+          <tr>
+            <Th>When</Th>
+            <Th>Who</Th>
+            <Th>Action</Th>
+            <Th>Target</Th>
+            <Th>IP</Th>
+          </tr>
+        </THead>
+        <TBody>
+          {entries.map((e) => (
+            <Tr key={e.id}>
+              <Td className="whitespace-nowrap text-muted">{formatDateTime(e.created_at)}</Td>
+              <Td>
+                {e.user_email ?? e.user_id ?? "System"}
+                {viaOf(e.detail) && (
+                  <span className="block text-meta text-muted">
+                    via <bdi>{viaOf(e.detail)}</bdi>
+                  </span>
+                )}
+              </Td>
+              <Td className="font-mono text-label">{e.action}</Td>
+              <Td className="max-w-56 truncate text-muted" title={e.detail ? JSON.stringify(e.detail) : undefined}>
+                {e.target ?? ""}
+              </Td>
+              <Td className="font-mono text-label text-muted">{e.ip ?? ""}</Td>
+            </Tr>
+          ))}
+        </TBody>
+      </Table>
+      <div className="flex items-center justify-between text-label text-muted">
         <span>
           {entries.length > 0 ? `Page ${page + 1} (${entries.length} entries)` : "No entries"}
         </span>

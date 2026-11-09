@@ -22,8 +22,8 @@ export function AdminPage() {
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="email">Email</TabsTrigger>
           <TabsTrigger value="apps">Connected apps</TabsTrigger>
-          <TabsTrigger value="audit">Audit log</TabsTrigger>
-          <TabsTrigger value="stats">Instance</TabsTrigger>
+          <TabsTrigger value="audit">Audit</TabsTrigger>
+          <TabsTrigger value="stats">Stats</TabsTrigger>
           <TabsTrigger value="backups">Backups</TabsTrigger>
         </TabsList>
         <TabsContent value="users">

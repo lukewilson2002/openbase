@@ -17,12 +17,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { IconButton } from "@/components/ui/icon-button";
 import { Field, Input } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
+import { StatusChip } from "@/components/ui/status-chip";
+import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { absoluteUrl, formatDateTime } from "@/lib/format";
 
 function Badge({ children, tone = "neutral" }: { children: string; tone?: "neutral" | "good" | "bad" }) {
-  const cls = tone === "good" ? "bg-success-soft text-success" : tone === "bad" ? "bg-danger-soft text-danger" : "bg-subtle text-muted";
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{children}</span>;
+  return <StatusChip hue={tone === "good" ? "green" : tone === "bad" ? "red" : "gray"}>{children}</StatusChip>;
 }
 
 export function UsersTab() {
@@ -53,30 +54,29 @@ export function UsersTab() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <p className="text-[0.8125rem] text-muted">{users.data.length} user{users.data.length === 1 ? "" : "s"}</p>
+        <p className="text-label text-muted">{users.data.length} user{users.data.length === 1 ? "" : "s"}</p>
         <Button variant="primary" onClick={() => setCreating(true)}>
           <UserPlus aria-hidden className="size-4" /> New user
         </Button>
       </div>
-      <div className="overflow-x-auto rounded-lg border border-line bg-surface">
-        <table className="w-full text-left text-[0.8125rem]">
-          <thead className="border-b border-line bg-subtle text-xs uppercase tracking-wide text-muted">
-            <tr>
-              <th scope="col" className="px-3 py-2 font-medium">User</th>
-              <th scope="col" className="px-3 py-2 font-medium">Status</th>
-              <th scope="col" className="hidden px-3 py-2 font-medium md:table-cell">Created</th>
-              <th scope="col" className="hidden px-3 py-2 font-medium md:table-cell">Last login</th>
-              <th scope="col" className="w-10 px-3 py-2">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
+      <Table>
+        <THead>
+          <tr>
+            <Th>User</Th>
+            <Th>Status</Th>
+            <Th className="max-md:hidden">Created</Th>
+            <Th className="max-md:hidden">Last login</Th>
+            <Th className="w-10">
+              <span className="sr-only">Actions</span>
+            </Th>
+          </tr>
+        </THead>
+        <TBody>
             {users.data.map((u) => {
               const self = u.id === me?.id;
               return (
-                <tr key={u.id}>
-                  <td className="px-3 py-2">
+                <Tr key={u.id}>
+                  <Td>
                     <div className="flex items-center gap-2.5">
                       <Avatar name={u.name} email={u.email} size="sm" />
                       <div className="min-w-0">
@@ -84,11 +84,11 @@ export function UsersTab() {
                           {u.name}
                           {self && <span className="ml-1 font-normal text-muted">(you)</span>}
                         </p>
-                        <p className="truncate text-xs text-muted">{u.email}</p>
+                        <p className="truncate text-meta text-muted">{u.email}</p>
                       </div>
                     </div>
-                  </td>
-                  <td className="px-3 py-2">
+                  </Td>
+                  <Td>
                     <div className="flex flex-wrap gap-1">
                       {u.is_admin && <Badge tone="good">Admin</Badge>}
                       {!u.is_active && <Badge tone="bad">Deactivated</Badge>}
@@ -96,10 +96,10 @@ export function UsersTab() {
                       {u.passkey_count > 0 && <Badge>{u.passkey_count === 1 ? "1 passkey" : `${u.passkey_count} passkeys`}</Badge>}
                       {u.is_active && !u.is_admin && !u.totp_enabled && u.passkey_count === 0 && <span className="text-muted">Active</span>}
                     </div>
-                  </td>
-                  <td className="hidden whitespace-nowrap px-3 py-2 text-muted md:table-cell">{formatDateTime(u.created_at)}</td>
-                  <td className="hidden whitespace-nowrap px-3 py-2 text-muted md:table-cell">{u.last_login_at ? formatDateTime(u.last_login_at) : "Never"}</td>
-                  <td className="px-3 py-2">
+                  </Td>
+                  <Td className="whitespace-nowrap text-muted max-md:hidden">{formatDateTime(u.created_at)}</Td>
+                  <Td className="whitespace-nowrap text-muted max-md:hidden">{u.last_login_at ? formatDateTime(u.last_login_at) : "Never"}</Td>
+                  <Td>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <IconButton label={`Actions for ${u.name}`} size="sm" noTooltip>
@@ -134,13 +134,12 @@ export function UsersTab() {
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </td>
-                </tr>
+                  </Td>
+                </Tr>
               );
             })}
-          </tbody>
-        </table>
-      </div>
+        </TBody>
+      </Table>
 
       {creating && (
         <CreateUserDialog
@@ -166,7 +165,7 @@ export function UsersTab() {
           }
         >
           <CopyField label="Reset link" value={absoluteUrl(link.link.url)} />
-          <p className="mt-2 text-xs text-muted">Expires {formatDateTime(link.link.expires_at)}.</p>
+          <p className="mt-2 text-meta text-muted">Expires {formatDateTime(link.link.expires_at)}.</p>
         </Dialog>
       )}
       <ConfirmDialog
