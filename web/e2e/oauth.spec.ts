@@ -8,7 +8,7 @@ import { expect, skipIntro, test } from "./fixtures";
  * desktop app connects:
  *   - register with dynamic client registration and a loopback redirect address served by this test;
  *   - open /oauth/authorize in the browser, get sent to the login (nobody is signed in), sign in, land
- *     on the consent page, choose "Read & edit" and approve;
+ *     on the consent page, choose "Read and write" and approve;
  *   - the browser is sent to the loopback listener, which captures the code; exchange it with PKCE;
  *   - call /mcp: tools/list shows the tools of a write grant, a write tool changes data, a manage
  *     tool is refused with 403 insufficient_scope, the REST API refuses the token;
@@ -114,9 +114,9 @@ test("an MCP client connects through the browser, works with its token, and is r
     await expect(page.getByRole("heading", { name: `Allow ${name} to use your OpenBase?` })).toBeVisible();
     await expect(page.getByTestId("redirect-host")).toHaveText(`127.0.0.1:${listener.port}`);
     await expect(page.getByText("This app runs on your own computer")).toHaveCount(2); // the label and the warning
-    await expect(page.getByLabel(/Read & edit/)).toBeChecked(); // what the app asked for is preselected
-    await expect(page.getByLabel(/Read only/)).not.toBeChecked();
-    await expect(page.getByLabel(/Full control/)).not.toBeChecked(); // always offered, never preselected unless asked for
+    await expect(page.getByRole("radio", { name: "Read and write" })).toBeChecked(); // what the app asked for is preselected
+    await expect(page.getByRole("radio", { name: "Read", exact: true })).not.toBeChecked();
+    await expect(page.getByRole("radio", { name: "Full control" })).not.toBeChecked(); // always offered, never preselected unless asked for
 
     // The consent page cannot be framed.
     const consentUrl = page.url();
@@ -124,7 +124,7 @@ test("an MCP client connects through the browser, works with its token, and is r
     expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
     expect(headers["x-frame-options"]).toBe("DENY");
 
-    await page.getByLabel(/Read & edit/).check();
+    await page.getByRole("radio", { name: "Read and write" }).check();
     await page.getByRole("button", { name: "Approve" }).click();
 
     // The browser goes to the app's loopback address with the code, the state and the issuer.
@@ -167,10 +167,19 @@ test("an MCP client connects through the browser, works with its token, and is r
     const apps = page.getByRole("list", { name: "Connected apps" });
     const row = apps.getByRole("listitem").filter({ hasText: name });
     await expect(row).toBeVisible();
-    await expect(row).toContainText("Read & edit");
+    await expect(row).toContainText("Read and write");
     await expect(row).toContainText(`Connects from 127.0.0.1:${listener.port}`);
-    await expect(row).toContainText("all projects");
+    await expect(row).toContainText("all folders");
     await expect(row).toContainText(/last used/);
+
+    // Change access there (AGT-2): the same access token can manage from its next request, with no reconnect.
+    await row.getByRole("button", { name: `Change access for ${name}` }).click();
+    const change = page.getByRole("dialog", { name: `Change access for ${name}` });
+    await change.getByRole("radio", { name: "Full control" }).check();
+    await change.getByRole("button", { name: "Save access" }).click();
+    await expect(row).toContainText("Full control");
+    const upgraded = await mcp(request, access, "tools/call", { name: "create_workspace", arguments: { name: "After Change access" } });
+    expect(upgraded.status(), await upgraded.text()).toBe(200);
 
     // Revoke it there: the tokens stop working at once.
     await page.getByRole("button", { name: `Revoke ${name}` }).click();

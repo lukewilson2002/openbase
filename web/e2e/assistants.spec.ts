@@ -96,7 +96,7 @@ test("the AI assistants tab shows the server's MCP address, collapsible instruct
   // The token link leads to the Tokens tab.
   await page.getByRole("link", { name: "API tokens" }).click();
   await expect(page).toHaveURL(/tab=tokens/);
-  await expect(page.getByRole("heading", { name: "Personal access tokens" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "API tokens" })).toBeVisible();
 });
 
 for (const theme of ["light", "dark"] as const) {

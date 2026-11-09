@@ -21,6 +21,13 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   confirmations name the thing and say whether it can be restored ("moves to the trash for 30 days", with the server's
   `OPENBASE_TRASH_DAYS`, now also reported as `trash_days` by `GET /api/setup`). Not-found and error screens say what
   happened and what to do, and lead to Home.
+- **History, Trash, settings, Members, Account and Admin in the Notebook look.** History and Trash filter with chips in a
+  bar like a collection's (workspace, folder, collection, person, kind); the Trash has kind chips, each item's color mark,
+  who deleted it, the days left and Restore, and `GET /api/history` places and `GET /api/trash` items carry `table_color`.
+  Workspace settings lets owners choose the top-level folder, and Members shows Folder access with the top level first.
+  Account has a week start on the profile (used by "this week" filters), and API tokens, connected apps and the consent
+  screen share Read, Read and write and Full control with one plain sentence each. A connected app's access can be
+  changed from Account, AI assistants with Change access, and applies from its next request. Admin's tables share one style.
 - **A record is a page.** Opening a record, from any layout, a search result, a notification or a
   linked record, goes to its own address (`/base/<folder>/<collection>/<view>/r/<record>`) instead of
   a window over the collection. A bar on top holds the breadcrumb (folder, collection, record),
