@@ -26,10 +26,13 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   the browser's back goes one page at a time. Old `?record=` and `?linked=` links (emails,
   notifications, history) land on the page, and a link followed while signed out comes back to it
   after sign-in. A linked record's chip opens its page. The expanded-record window and the stack of
-  linked-record panels are gone.
+  linked-record panels are gone. Back from a page (the browser's back, Escape or the phone's back link)
+  lands where the list was scrolled to, Ctrl+Z still reverts what was done in the collection before the
+  page was opened, and Previous and Next ask the server for just the two records either side of this one,
+  so they work in a collection of any size (`neighbours_of` on `POST /api/views/{id}/query`).
 - **A record reads like a document.** The page starts with a tile in the collection's colour holding
-  the title's initials (the record's own picture when the first file in the collection's first file
-  property is an image), then the title, edited where it stands (Enter commits it and moves on).
+  the title's initials (the record's own picture when the first file of one of the collection's file
+  properties is an image), then the title, edited where it stands (Enter commits it and moves on).
   Below it is a list of the properties that have a value, in the order of the collection's default
   grid. Properties with nothing in them fold into "Show 2 empty properties", and properties the default
   grid hides fold into "Show 1 hidden property"; both folds are remembered on this device. A value is
@@ -58,8 +61,10 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   outdent and a + that opens the block menu. The page saves 800 ms after you stop typing, as an
   ordinary save of the Page property, and the bar says Saving, Saved or Couldn't save. Linked records and
   View write the embed's fenced `openbase` block with the property or view you pick (see the next entry).
-  Viewers and commenters read the page rendered. A collection with no Page
-  property offers creators "Add Page property"; an editor who types in one gets "Page" made by that first save.
+  Viewers and commenters read the page rendered. In a collection with no Page property creators and
+  editors alike can type at once and the first save makes "Page"; creators also have "Add Page property"
+  beside the editor. HTML that the page has no markup for (a `<script>` or `<div>`, a stray tag, a comment)
+  stays as text when the page is saved. Text still waiting for its pause is saved when the tab is closed.
 - **Embeds in a page: linked records and views.** A page can show a small table of this record's linked
   records, or the first records of any saved view of the workspace. Linked records picks one of the record's
   link properties: the linked collection's title and its first three visible properties, a caption such as
