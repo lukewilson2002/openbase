@@ -71,7 +71,8 @@ describe("setup and first administrator", () => {
   it("reports that setup is needed", async () => {
     const status = parse("SetupStatus", await asAnon(api.setup.status));
     // The contract server's public URL is an IP address, which WebAuthn cannot use.
-    expect(status).toEqual({ needs_setup: true, open_signup: false, email_enabled: false, public_url: env.baseUrl, passkeys_enabled: false });
+    // trash_days is the default retention that delete confirmations quote (APP-16).
+    expect(status).toEqual({ needs_setup: true, open_signup: false, email_enabled: false, public_url: env.baseUrl, passkeys_enabled: false, trash_days: 30 });
   });
 
   it("answers 401 with the error envelope before anyone is signed in", async () => {
