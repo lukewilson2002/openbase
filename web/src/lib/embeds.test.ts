@@ -49,6 +49,17 @@ describe("parseEmbed", () => {
     expect(parseEmbed(`{"embed":"view","view":"${VIEW}","constructor":{}}`)).toBeNull();
   });
 
+  it("allows no key to be written twice, whatever the first value says", () => {
+    expect(parseEmbed(`{"embed":"view","view":"x","view":"${VIEW}"}`)).toBeNull();
+    expect(parseEmbed(`{"embed":"view","view":"<img src=x onerror=alert(1)> \`\`\` hidden text","view":"${VIEW}"}`)).toBeNull();
+    expect(parseEmbed(`{"embed":"linked","field":"${FIELD}","field":"${FIELD}"}`)).toBeNull();
+    expect(parseEmbed(`{"embed":"view","view":"${VIEW}","limit":3,"limit":4}`)).toBeNull();
+    // The same key spelled with an escape is still the same key.
+    expect(parseEmbed(`{"embed":"view","vi\\u0065w":"x","view":"${VIEW}"}`)).toBeNull();
+    // Colons, braces and quotes inside values are not keys.
+    expect(parseEmbed(`{"embed":"view","view":"${VIEW}","limit":10}`)).toEqual({ embed: "view", view: VIEW, limit: 10 });
+  });
+
   it("needs the id of its kind, in the shape of an id", () => {
     expect(parseEmbed(`{"embed":"linked"}`)).toBeNull();
     expect(parseEmbed(`{"embed":"view"}`)).toBeNull();

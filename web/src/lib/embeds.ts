@@ -42,6 +42,32 @@ function keysAre(obj: Record<string, unknown>, required: readonly string[], opti
 }
 
 /**
+ * How many keys the top-level object of `body` writes, counting repeats. `JSON.parse` keeps the last value of a
+ * repeated key, so a block like `{"view":"anything at all","view":"viwXXXX"}` would read as a valid embed while
+ * the first value, which no reader ever sees, carries whatever text it likes. Comparing this count with the keys
+ * of the parsed object turns such a block into one that cannot be shown.
+ */
+function writtenKeyCount(body: string): number {
+  let depth = 0;
+  let count = 0;
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (c === "{" || c === "[") depth++;
+    else if (c === "}" || c === "]") depth--;
+    else if (c === '"') {
+      // A string runs to its closing quote, past escaped ones.
+      let j = i + 1;
+      while (j < body.length && body[j] !== '"') j += body[j] === "\\" ? 2 : 1;
+      let k = j + 1;
+      while (k < body.length && /\s/.test(body[k]!)) k++;
+      if (depth === 1 && body[k] === ":") count++;
+      i = j;
+    }
+  }
+  return count;
+}
+
+/**
  * The embed that `text` (the body of an `openbase` block) holds, or null when it is anything else. Never throws and
  * never looks at anything but the text.
  */
@@ -54,7 +80,7 @@ export function parseEmbed(text: string): Embed | null {
   } catch {
     return null;
   }
-  if (!isPlainObject(json)) return null;
+  if (!isPlainObject(json) || writtenKeyCount(body) !== Object.keys(json).length) return null;
   if (json.embed === "linked") {
     if (!keysAre(json, ["embed", "field"]) || typeof json.field !== "string" || !FIELD_ID.test(json.field)) return null;
     return { embed: "linked", field: json.field };
