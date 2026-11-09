@@ -415,7 +415,7 @@ function activityFeed(): Obj[] {
         created_at: at,
         author: by[(n + ri) % by.length],
         record: { id: t.id, name: t.name, deleted: t.deleted },
-        place: { workspace_id: home.id, workspace_name: home.name, workspace_color: "green", base_id: project.id, base_name: project.name, base_icon: project.icon ?? null, base_color: project.color, table_id: t.table, table_name: tableDto(t.table).name },
+        place: { workspace_id: home.id, workspace_name: home.name, workspace_color: "green", base_id: project.id, base_name: project.name, base_icon: project.icon ?? null, base_color: project.color, table_id: t.table, table_name: tableDto(t.table).name, table_color: tableDto(t.table).color },
         changes: step.changes ?? {},
         comment: step.comment ?? null,
       });
@@ -511,6 +511,15 @@ function tableDto(id: string): Obj {
 }
 
 let introSeen = true;
+
+/** The profile fields PATCH /api/auth/me saves (APP-14): name, time zone and the week start BE-7 reads. */
+const profile = { name: "Ada Lovelace", timezone: "America/Chicago", week_start: 0 };
+/** Apps connected through OAuth, so Account -> AI assistants has something to change access on (AGT-2). */
+const grants: Obj[] = [
+  { id: "grt1", client_name: "Claude", client_source: "preregistered", redirect_host: "claude.ai", write: true, manage: false, bases: null, created_at: Date.now() - 5 * 86_400_000, last_used_at: Date.now() - 3_600_000, expires_at: Date.now() + 20 * 86_400_000 },
+];
+let apiTokens: Obj[] = [{ id: "pat1", name: "Nightly export", write: false, manage: false, base_ids: null, created_at: Date.now() - 9 * 86_400_000, last_used_at: null, expires_at: null }];
+
 /** The account's accent colour (PATCH /api/auth/me {accent}); null = blue. */
 let accent: string | null = null;
 let roleOverride: string | null = null;
@@ -954,6 +963,46 @@ function homeFor(workspaceId: string): Obj {
   return { today, timezone: "UTC", due: due.slice(0, 50), truncated: false, recent, drafts: [...inbox].sort((a, b) => b.updated_at - a.updated_at) };
 }
 
+/** Account and admin screens: sessions, passkeys, API tokens, connected apps and the admin lists, enough to draw each. */
+function accountRoutes(m: string, p: string, body: Obj, res: ServerResponse): boolean {
+  let g: RegExpExecArray | null;
+  const now = Date.now();
+  if (p === "/api/auth/sessions" && m === "GET") return send(res, 200, [{ id: "ses1", created_at: now - 86_400_000, last_seen_at: now - 60_000, expires_at: now + 20 * 86_400_000, user_agent: "Chrome on macOS", ip: "127.0.0.1", current: true }]), true;
+  if (p === "/api/auth/passkeys" && m === "GET") return send(res, 200, []), true;
+  if (p === "/api/tokens" && m === "GET") return send(res, 200, apiTokens), true;
+  if (p === "/api/tokens" && m === "POST") {
+    const info = { id: `pat${apiTokens.length + 1}`, name: body.name, write: !!body.write, manage: !!body.manage, base_ids: body.base_ids ?? null, created_at: now, last_used_at: null, expires_at: body.expires_in_days ? now + body.expires_in_days * 86_400_000 : null };
+    apiTokens = [...apiTokens, info];
+    return send(res, 200, { token: "ob_mock_token", info }), true;
+  }
+  if ((g = /^\/api\/tokens\/([^/]+)$/.exec(p)) && m === "DELETE") {
+    apiTokens = apiTokens.filter((t) => t.id !== g![1]);
+    return send(res, 204), true;
+  }
+  if (p === "/api/oauth/grants" && m === "GET") return send(res, 200, grants), true;
+  if ((g = /^\/api\/oauth\/grants\/([^/]+)$/.exec(p))) {
+    const grant = grants.find((x) => x.id === g![1]);
+    if (!grant) return err(res, 404, "not_found", "no such app"), true;
+    if (m === "DELETE") return grants.splice(grants.indexOf(grant), 1), send(res, 204), true;
+    if (m === "PATCH") {
+      // As the server does: an app limited to some folders cannot have Full control.
+      if (body.access === "manage" && grant.bases) return err(res, 400, "bad_request", "An app limited to some folders cannot have full control."), true;
+      Object.assign(grant, { write: body.access !== "read", manage: body.access === "manage" });
+      return send(res, 200, grant), true;
+    }
+  }
+  if (p === "/api/admin/users" && m === "GET") return send(res, 200, [{ id: ME, email: "ada@example.com", name: profile.name, is_admin: true, is_active: true, totp_enabled: false, passkey_count: 0, created_at: now - 40 * 86_400_000, last_login_at: now - 60_000 }, { id: "usr2", email: "grace@example.com", name: "Grace Hopper", is_admin: false, is_active: true, totp_enabled: true, passkey_count: 1, created_at: now - 20 * 86_400_000, last_login_at: null }]), true;
+  if (p === "/api/admin/stats" && m === "GET") return send(res, 200, { users: 2, workspaces: ws.workspaces.length, bases: ws.bases.length, records: records.size, database_bytes: 4_200_000, attachments_bytes: 0, last_backup_at: now - 86_400_000, version: "0.0.0-mock" }), true;
+  if (p === "/api/admin/backups" && m === "GET") return send(res, 200, [{ name: "openbase-backup.db", size: 4_100_000, created_at: now - 86_400_000 }]), true;
+  if (p.startsWith("/api/admin/audit") && m === "GET") return send(res, 200, { entries: [{ id: 1, user_id: ME, user_email: "ada@example.com", action: "login", target: null, detail: null, ip: "127.0.0.1", created_at: now - 60_000 }], next_before: null }), true;
+  if (p === "/api/admin/oauth/grants" && m === "GET") return send(res, 200, grants.map((x) => ({ ...x, user_email: "ada@example.com", user_name: profile.name }))), true;
+  if (p === "/api/admin/email" && m === "GET") {
+    const source = { host: "default", port: "default", security: "default", username: "default", password: "default", from: "default" };
+    return send(res, 200, { enabled: false, source: "none", host: null, port: 587, security: "starttls", username: null, from: "OpenBase <noreply@example.com>", password_set: false, sources: source, budgets: { per_user_hour: 10, per_hour: 100 } }), true;
+  }
+  return false;
+}
+
 function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, url: URL): boolean {
   let g: RegExpExecArray | null;
   if ((g = /^\/api\/__mock\/workspaces\/(none|reset)$/.exec(p))) {
@@ -1093,7 +1142,7 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
       .filter((r) => r.deleted)
       .map((r) => ({ kind: "record", id: r.id, name: String(r.values[PRIMARY[r.table_id]!] ?? ""), table_id: r.table_id, deleted_at: r.updated_at }))
       .concat(trashedExtras as never[])
-      .map((i: Obj) => ({ ...i, workspace_id: home.id, workspace_name: home.name, workspace_color: "green", base_id: BASE_ID, base_name: project.name, base_color: project.color, table_name: i.kind === "table" ? null : tableName(i.table_id), deleted_by_id: ME, deleted_by_name: "Ada Lovelace" }));
+      .map((i: Obj) => ({ ...i, workspace_id: home.id, workspace_name: home.name, workspace_color: "green", base_id: BASE_ID, base_name: project.name, base_color: project.color, table_name: i.kind === "table" ? null : tableName(i.table_id), table_color: tableDto(i.kind === "table" ? i.id : i.table_id).color, deleted_by_id: ME, deleted_by_name: "Ada Lovelace" }));
     const workspaces = ws.deleted.map((d) => ({ ...d, workspace_id: d.id, workspace_name: d.name, workspace_color: "teal" }));
     const items = [...inBase, ...workspaces]
       .map((i: Obj) => ({ ...i, expires_at: i.deleted_at + 30 * 86_400_000 }))
@@ -1316,13 +1365,19 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
   if (p === "/api/auth/me") {
     if (m === "PATCH" && typeof body.intro_seen === "boolean") introSeen = body.intro_seen;
     if (m === "PATCH" && typeof body.accent === "string") accent = body.accent || null;
-    return send(res, 200, { id: ME, email: "ada@example.com", name: "Ada Lovelace", is_admin: true, timezone: "America/Chicago", week_start: 0, totp_enabled: false, intro_seen: introSeen, accent }), true;
+    if (m === "PATCH") {
+      if (typeof body.name === "string") profile.name = body.name;
+      if (typeof body.timezone === "string") profile.timezone = body.timezone || "America/Chicago";
+      if (body.week_start === 0 || body.week_start === 1) profile.week_start = body.week_start;
+    }
+    return send(res, 200, { id: ME, email: "ada@example.com", name: profile.name, is_admin: true, timezone: profile.timezone, week_start: profile.week_start, totp_enabled: false, intro_seen: introSeen, accent }), true;
   }
   // GET /api/__mock/intro/unseen brings the first-run intro back on the next page load.
   if ((g = /^\/api\/__mock\/intro\/(seen|unseen)$/.exec(p))) {
     introSeen = g[1] === "seen";
     return send(res, 200, { intro_seen: introSeen }), true;
   }
+  if (accountRoutes(m, p, body, res)) return true;
   if (workspaceRoutes(m, p, body, res, url)) return true;
   if ((g = /^\/api\/__mock\/role\/(\w+)$/.exec(p))) {
     roleOverride = g[1] === "reset" ? null : g[1]!;
