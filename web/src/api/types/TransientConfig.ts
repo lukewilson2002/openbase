@@ -16,6 +16,9 @@ import type { Sort } from "./Sort";
  * `{"mode": "by_conditions", "rules": []}`; `summaries` replaces the whole map,
  * so `{}` drops every summary.
  *
+ * A public share link's query refuses a `filter` here (its saved filter is
+ * what limits the records the link exposes).
+ *
  * The view query takes it as the `transient` body field; the aggregations
  * endpoint takes it JSON-encoded in the `transient` query parameter. A view
  * query returns the colors the effective `row_color` gives, and the

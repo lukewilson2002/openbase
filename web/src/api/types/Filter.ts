@@ -4,5 +4,8 @@ import type { FilterItem } from "./FilterItem";
 
 /**
  * A filter tree. Top level is a group; groups nest (the UI allows 2 levels).
+ *
+ * `Deserialize` is written by hand (see [`parse`]) so a request body cannot make the parser
+ * copy its nested groups once per level; the derive's `untagged` buffering did exactly that.
  */
 export type Filter = { conjunction: Conjunction, items: Array<FilterItem>, };
