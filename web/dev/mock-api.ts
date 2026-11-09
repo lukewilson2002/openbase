@@ -247,6 +247,18 @@ function seedData(): void {
   }
 }
 seedData();
+// Home (HOME-6): a few tasks due around today, so Due soon has something in it on any day. Open ones first, then one already done.
+{
+  const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+  const tasks = [...records.values()].filter((r) => r.table_id === T_TASKS);
+  [-3, -1, 0, 0, 1, 4, 2].forEach((offset, i) => {
+    const rec = tasks[20 + i];
+    if (!rec) return;
+    rec.values.fld_due = day(offset);
+    rec.values.fld_done = i === 6;
+    rec.updated_at = Date.now() - (i + 1) * 3_600_000;
+  });
+}
 // A few long notes for the search's snippets.
 for (const [i, note] of [
   // A page with a heading, a list and both embeds (REC-6): the first task's owner, and the projects board.
@@ -904,6 +916,44 @@ function createInvite(workspaceId: string, body: Obj, fromBase: string | null): 
   return { url: `https://openbase.example.com/invite/${newId("tok")}${newId("x")}`, info };
 }
 
+/** `GET /api/workspaces/{id}/home` for the mock: the workspace's records dated near today and the latest edits, from the in-memory fixtures. */
+function homeFor(workspaceId: string): Obj {
+  const today = new Date().toISOString().slice(0, 10);
+  const dayNumber = (d: string) => Math.floor(Date.parse(`${d}T00:00:00Z`) / 86_400_000);
+  const inWorkspace = ws.bases.some((b) => b.id === BASE_ID && b.workspace_id === workspaceId);
+  const live = inWorkspace ? [...records.values()].filter((r) => !r.deleted && PRIMARY[r.table_id]) : [];
+  const role = roleOverride ?? "owner";
+  const due: Obj[] = [];
+  for (const r of live) {
+    const t = tableDto(r.table_id);
+    const raw = t.home_date_field_id ? r.values[t.home_date_field_id as string] : null;
+    if (typeof raw !== "string") continue;
+    const date = raw.slice(0, 10);
+    const ahead = dayNumber(date) - dayNumber(today);
+    if (ahead < -30 || ahead > 7) continue;
+    if (t.done_field_id && r.values[t.done_field_id as string] === true) continue;
+    const hasTime = raw.includes("T");
+    due.push({
+      record_id: r.id, table_id: r.table_id, base_id: BASE_ID, base_name: "Project tracker", title: String(r.values[PRIMARY[r.table_id]!] ?? ""),
+      table_name: t.name, table_color: t.color, date, has_time: hasTime, time: hasTime ? raw.slice(11, 16) : null,
+      has_done: !!t.done_field_id, done_field_id: t.done_field_id ?? null, overdue: ahead < 0, can_edit: role !== "viewer" && role !== "commenter",
+    });
+  }
+  due.sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.time ?? "").localeCompare(String(b.time ?? "")));
+  const recent = [...live]
+    .sort((a, b) => b.updated_at - a.updated_at)
+    .slice(0, 10)
+    .map((r) => {
+      const t = tableDto(r.table_id);
+      const author = USERS.find((u) => u.id === r.updated_by);
+      return {
+        record_id: r.id, table_id: r.table_id, base_id: BASE_ID, base_name: "Project tracker", title: String(r.values[PRIMARY[r.table_id]!] ?? ""),
+        table_name: t.name, table_color: t.color, kind: r.updated_at > r.created_at ? "update" : "create", author: author ? { id: author.id, name: author.name } : null, at: r.updated_at,
+      };
+    });
+  return { today, timezone: "UTC", due: due.slice(0, 50), truncated: false, recent, drafts: [...inbox].sort((a, b) => b.updated_at - a.updated_at) };
+}
+
 function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, url: URL): boolean {
   let g: RegExpExecArray | null;
   if ((g = /^\/api\/__mock\/workspaces\/(none|reset)$/.exec(p))) {
@@ -915,6 +965,19 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
     return send(res, 200, { ok: true }), true;
   }
   if (p === "/api/workspaces" && m === "GET") return send(res, 200, workspaceList()), true;
+  // Home in one read (BE-3): what is due, what changed lately and the inbox drafts (they belong to the person, not the workspace).
+  if ((g = /^\/api\/workspaces\/([^/]+)\/home$/.exec(p)) && m === "GET") {
+    if (!ws.workspaces.some((w) => w.id === g![1])) return err(res, 404, "not_found", "workspace not found"), true;
+    return send(res, 200, homeFor(g[1]!)), true;
+  }
+  // The workspace's one stream (BE-9). The mock has nothing to relay but a heartbeat, so Home stays as loaded until a refetch.
+  if ((g = /^\/api\/workspaces\/([^/]+)\/events$/.exec(p)) && m === "GET") {
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+    res.write(": hello\n\n");
+    sseClients.add(res);
+    res.on("close", () => sseClients.delete(res));
+    return true;
+  }
   // The caller's own order (the mock has one user); a workspace's projects in theirs.
   if (p === "/api/workspaces/reorder" && m === "POST") {
     reorderInPlace(ws.workspaces as { id: string }[], body.ids);
