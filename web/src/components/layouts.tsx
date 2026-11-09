@@ -47,16 +47,35 @@ export function AuthLayout({
   );
 }
 
-/** Titled settings section. */
-export function Section({ title, description, children, className }: { title: string; description?: ReactNode; children: ReactNode; className?: string }) {
+/** Titled settings section: a Card with its heading above a bordered body. `danger` draws the border in the danger color; `flush` lets a list of rows fill the body edge to edge; `actions` sit at the right of the heading. */
+export function Section({ title, description, children, className, danger, flush, actions }: { title: string; description?: ReactNode; children: ReactNode; className?: string; danger?: boolean; flush?: boolean; actions?: ReactNode }) {
   return (
-    <section className={cn("rounded-lg border border-line bg-surface", className)}>
-      <div className="border-b border-line px-4 py-3">
-        <h2 className="text-h3">{title}</h2>
-        {description && <p className="mt-0.5 text-label text-muted">{description}</p>}
+    <Card padded={false} className={cn(danger && "border-danger/40", className)}>
+      <section>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-4 py-3">
+          <div className="min-w-0 flex-1 basis-64">
+            <h2 className="text-h3">{title}</h2>
+            {description && <p className="mt-0.5 text-label text-muted">{description}</p>}
+          </div>
+          {actions}
+        </div>
+        <div className={cn(!flush && "p-4")}>{children}</div>
+      </section>
+    </Card>
+  );
+}
+
+/** One setting in a list of them: its name and what it is now on the left, the button that changes it on the right. */
+export function SettingsRow({ title, description, action, leading }: { title: ReactNode; description?: ReactNode; action?: ReactNode; leading?: ReactNode }) {
+  return (
+    <li className="flex flex-wrap items-center gap-3 px-4 py-3 max-md:min-h-row-feed-phone">
+      {leading}
+      <div className="min-w-0 flex-1 basis-48">
+        <p className="text-ui font-medium">{title}</p>
+        {description && <div className="text-label text-muted">{description}</div>}
       </div>
-      <div className="p-4">{children}</div>
-    </section>
+      {action}
+    </li>
   );
 }
 

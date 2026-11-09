@@ -1,8 +1,8 @@
 /**
- * The people of a workspace: one role each, and the bases each of them can open (every base,
- * including later ones, or a picked list). Owners change both, for members and for the invites
- * still waiting, remove people and resend or cancel invites; everyone else sees the list as it is
- * and can leave.
+ * The people of a workspace: one role each, and the folders each of them can open (every folder,
+ * including later ones, or a picked list, with the top level as the first of them; APP-13). Owners change
+ * both, for members and for the invites still waiting, remove people and resend or cancel invites;
+ * everyone else sees the list as it is and can leave.
  */
 import { useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
@@ -18,7 +18,9 @@ import { InviteLinkResult, useEmailEnabled } from "@/components/invites/InviteLi
 import { Notice } from "@/components/layouts";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ColorMark } from "@/components/ui/color-mark";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
@@ -27,8 +29,9 @@ import { PageSpinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
 import { ROLE_LABELS, ROLES, atLeast, isRole } from "@/lib/roles";
+import { foldersOf, topLevelOf } from "@/lib/topLevel";
+import { AppPage } from "@/shell/AppPage";
 import { PendingFace } from "@/shell/BaseAvatars";
-import { HomeShell } from "@/shell/HomeShell";
 import { accessSummary } from "./access";
 import { rememberWorkspace } from "./lastWorkspace";
 import { useWorkspace } from "./useWorkspace";
@@ -37,9 +40,9 @@ export function MembersPage() {
   const { workspaceId } = useParams();
   const { ws, fallback } = useWorkspace(workspaceId);
   return (
-    <HomeShell workspaceId={workspaceId}>
+    <AppPage workspaceId={workspaceId} title="Members">
       {ws ? <Members key={ws.id} ws={ws} /> : fallback}
-    </HomeShell>
+    </AppPage>
   );
 }
 
@@ -105,15 +108,11 @@ function Members({ ws }: { ws: WorkspaceSummary }) {
   const lastOwner = (members.data ?? []).filter((m) => m.role === "owner").length <= 1;
 
   return (
-    <div className="mx-auto flex w-full max-w-[900px] flex-col gap-[22px] px-4 py-6 sm:px-6 md:px-8 md:py-8">
-      <div className="flex flex-wrap items-end gap-3.5">
-        <div className="min-w-0 flex-[1_1_260px]">
-          <p className="mb-1 truncate text-sm text-muted">{ws.name}</p>
-          <h1 className="mb-1.5 text-[1.625rem] leading-tight tracking-[-0.015em]">Members</h1>
-          <p className="text-[0.9375rem] text-muted">Everyone here has one role. You choose which projects each person can open.</p>
-        </div>
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="min-w-0 flex-1 basis-64 text-label text-muted">Everyone here has one role. You choose which folders each person can open.</p>
         {isOwner && (
-          <Button variant="primary" size="lg" className="h-[42px] rounded-[10px] px-[18px] font-semibold" onClick={() => setInviting(true)}>
+          <Button variant="primary" onClick={() => setInviting(true)} className="max-md:w-full">
             Invite people
           </Button>
         )}
@@ -124,7 +123,8 @@ function Members({ ws }: { ws: WorkspaceSummary }) {
       ) : members.isError ? (
         <Notice tone="error">{errorMessage(members.error)}</Notice>
       ) : (
-        <ul aria-label="Members" className="divide-y divide-[color-mix(in_srgb,var(--line)_60%,var(--surface))] overflow-hidden rounded-[14px] border border-line bg-surface">
+        <Card padded={false} className="overflow-hidden">
+        <ul aria-label="Members" className="divide-y divide-line">
           {members.data.map((m) => (
             <MemberRow
               key={m.user_id}
@@ -157,16 +157,17 @@ function Members({ ws }: { ws: WorkspaceSummary }) {
             />
           ))}
         </ul>
+        </Card>
       )}
 
-      <p className="text-[0.8125rem] text-muted">Want someone outside the workspace to see a few records? Share a view instead. They get a read-only link to just that view.</p>
+      <p className="text-label text-muted">Want someone outside the workspace to see a few records? Share a view instead. They get a read-only link to just that view.</p>
 
       {inviting && <ShareDialog open onOpenChange={setInviting} scope="workspace" workspace={ws} />}
       <ConfirmDialog
         open={!!removing}
         onOpenChange={(o) => !o && setRemoving(null)}
         title={removing?.user_id === me?.id ? `Leave ${ws.name}?` : `Remove ${removing?.name ?? "member"}?`}
-        description={removing?.user_id === me?.id ? "You lose access to every project in this workspace." : "They lose access to every project in this workspace. You can invite them again later."}
+        description={removing?.user_id === me?.id ? "You lose access to every folder in this workspace." : "They lose access to every folder in this workspace. You can invite them again later."}
         confirmLabel={removing?.user_id === me?.id ? "Leave workspace" : "Remove"}
         destructive
         onConfirm={async () => {
@@ -215,28 +216,28 @@ function MemberRow({
   onRemove: () => void;
 }) {
   const owner = m.role === "owner";
-  const summary = accessSummary(m, ws.bases, canManage);
+  const summary = accessSummary(m, namedBases(ws), canManage);
   // A workspace must keep an owner; the server refuses, so say why before they try.
   const cannotLeave = isMe && owner && lastOwner;
   const editorId = `access-${m.user_id}`;
   return (
-    <li className={cn("px-4 py-4 sm:px-[18px]", open && "bg-[color-mix(in_srgb,var(--bg)_60%,var(--surface))]")}>
+    <li className={cn("px-4 py-4", open && "bg-bg")}>
       <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
-        <Avatar name={m.name} email={m.email} className="size-10 text-[0.9375rem]" />
+        <Avatar name={m.name} email={m.email} size="lg" className="size-10 text-ui" />
         <div className="min-w-0 flex-[1_1_180px]">
-          <p className="truncate text-[0.9375rem] font-semibold">
+          <p className="truncate text-ui font-semibold">
             {m.name}
             {isMe && <span> (you)</span>}
           </p>
-          <p className="truncate text-[0.8125rem] text-muted">{m.email}</p>
+          <p className="truncate text-label text-muted">{m.email}</p>
         </div>
         <div className="flex items-center gap-3.5 max-sm:w-full">
           {canManage && !owner ? (
-            <AccessButton open={open} controls={editorId} label={`Projects ${m.name} can open: ${summary}`} onClick={onToggle}>
+            <AccessButton open={open} controls={editorId} label={`Folder access for ${m.name}: ${summary}`} onClick={onToggle}>
               {summary}
             </AccessButton>
           ) : (
-            <span className={cn("text-sm text-muted max-sm:flex-1", ACCESS_COL)}>{summary}</span>
+            <span className={cn("text-ui text-muted max-sm:flex-1", ACCESS_COL)}>{summary}</span>
           )}
           {canManage && !owner ? (
             <div className={ROLE_COL}>
@@ -250,12 +251,12 @@ function MemberRow({
               </Select>
             </div>
           ) : (
-            <span className={cn("text-sm font-semibold", ROLE_COL)}>{roleLabel(m.role)}</span>
+            <span className={cn("text-ui font-semibold", ROLE_COL)}>{roleLabel(m.role)}</span>
           )}
           {canManage || isMe ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <IconButton label={`Actions for ${m.name}`} noTooltip className="size-10 rounded-[10px]">
+                <IconButton label={`Actions for ${m.name}`} noTooltip>
                   <Ellipsis aria-hidden className="size-[18px]" />
                 </IconButton>
               </DropdownMenuTrigger>
@@ -272,14 +273,14 @@ function MemberRow({
         </div>
       </div>
       {open && (
-        <AccessEditor id={editorId} who={m.name} access={m} ws={ws} saving={saving} onSave={onUpdate} onDone={onToggle} emptyHint="Pick at least one project, or remove them from the workspace." />
+        <AccessEditor id={editorId} who={m.name} access={m} ws={ws} saving={saving} onSave={onUpdate} onDone={onToggle} emptyHint="Pick at least one folder, or remove them from the workspace." />
       )}
     </li>
   );
 }
 
-// 38 px controls in the rows, as on the design.
-const CONTROL = "h-[38px] rounded-[9px] text-sm";
+// The rows' controls are the default 34 px (44 on a phone).
+const CONTROL = "h-control-md text-ui";
 
 /** The access column of a row that can be changed: opens the inline "Projects X can open" picker. */
 function AccessButton({ open, controls, label, onClick, children }: { open: boolean; controls: string; label: string; onClick: () => void; children: ReactNode }) {
@@ -291,7 +292,7 @@ function AccessButton({ open, controls, label, onClick, children }: { open: bool
       aria-label={label}
       onClick={onClick}
       className={cn(
-        "inline-flex h-[38px] min-w-0 items-center justify-between gap-2 rounded-[9px] border border-line-strong bg-surface px-2.5 text-sm text-fg transition-colors hover:bg-hover max-sm:flex-1",
+        "inline-flex h-control-md min-w-0 items-center justify-between gap-2 rounded-md border border-line-strong bg-surface px-2.5 text-ui text-fg transition-colors hover:bg-hover max-md:h-control-touch max-sm:flex-1",
         ACCESS_COL,
       )}
     >
@@ -301,7 +302,7 @@ function AccessButton({ open, controls, label, onClick, children }: { open: bool
   );
 }
 
-/** The inline "Projects X can open" picker, for a member or an invite. */
+/** The inline "Folder access" picker, for a member or an invite: the top level first, then each folder by its mark. */
 function AccessEditor({
   id,
   who,
@@ -323,7 +324,8 @@ function AccessEditor({
 }) {
   const [all, setAll] = useState(access.all_bases);
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set(access.base_ids));
-  const ids = ws.bases.filter((b) => picked.has(b.id)).map((b) => b.id);
+  const places = placesOf(ws);
+  const ids = places.filter((p) => picked.has(p.base.id)).map((p) => p.base.id);
   const toggle = (baseId: string, on: boolean) =>
     setPicked((cur) => {
       const next = new Set(cur);
@@ -341,31 +343,34 @@ function AccessEditor({
   };
 
   return (
-    <fieldset id={id} className="mt-3.5 flex flex-col gap-1 rounded-xl border border-line bg-surface p-3.5 sm:ml-[54px]">
-      <legend className="px-1.5 text-[0.8125rem] font-semibold text-muted">
-        Projects {who} can open
-      </legend>
+    <fieldset id={id} className="mt-3.5 flex flex-col gap-0.5 rounded-lg border border-line bg-surface p-3.5 sm:ml-[54px]">
+      <legend className="px-1.5 text-label font-semibold text-muted">Folder access for {who}</legend>
       <Checkbox
         checked={all}
         onCheckedChange={setAll}
-        className="p-2 [&>button]:size-[18px] [&>label]:text-sm"
+        className="py-1"
         label={
           <>
-            <strong className="font-semibold">All projects</strong>, including new ones
+            <strong className="font-semibold">All folders</strong>, including new ones
           </>
         }
       />
-      {ws.bases.map((b) => (
+      {places.map(({ base, name }) => (
         <Checkbox
-          key={b.id}
-          checked={all || picked.has(b.id)}
+          key={base.id}
+          checked={all || picked.has(base.id)}
           disabled={all}
-          onCheckedChange={(on) => toggle(b.id, on)}
-          label={b.name}
-          className="py-2 pl-[38px] pr-2 [&>button]:size-[18px] [&>label]:text-sm"
+          onCheckedChange={(on) => toggle(base.id, on)}
+          label={
+            <span className="inline-flex items-center gap-2">
+              <ColorMark hue={base.color} name={base.name} size={14} />
+              {name}
+            </span>
+          }
+          className="py-1 pl-6"
         />
       ))}
-      {!all && ids.length === 0 && <p className="pl-[38px] text-xs text-muted">{emptyHint}</p>}
+      {!all && ids.length === 0 && <p className="pl-6 text-meta text-muted">{emptyHint}</p>}
       <div className="mt-2 flex justify-end gap-2">
         <Button onClick={onDone} disabled={saving}>
           Cancel
@@ -376,6 +381,17 @@ function AccessEditor({
       </div>
     </fieldset>
   );
+}
+
+/** The top level, when the person can see it, then each folder: what access is given over (NAV-10). */
+function placesOf(ws: WorkspaceSummary) {
+  const top = topLevelOf(ws);
+  return [...(top ? [{ base: top, name: "Top level" }] : []), ...foldersOf(ws).map((base) => ({ base, name: base.name }))];
+}
+
+/** The workspace's folders for `accessSummary`, with the top level named as such. */
+function namedBases(ws: WorkspaceSummary) {
+  return placesOf(ws).map(({ base, name }) => ({ id: base.id, name }));
 }
 
 function InviteRow({
@@ -405,25 +421,25 @@ function InviteRow({
 }) {
   const who = invite.email || "Anyone with the link";
   const name = inviteeName(invite.email);
-  const summary = accessSummary(invite, ws.bases);
+  const summary = accessSummary(invite, namedBases(ws));
   const basesGone = !invite.all_bases && liveBaseIds(invite, ws).length === 0;
   const editorId = `access-${invite.id}`;
   const owner = invite.role === "owner";
   const link = "text-primary-text underline underline-offset-2 hover:text-primary-hover disabled:opacity-50 disabled:no-underline";
   return (
-    <li aria-label={`${who}, invited`} className={cn("px-4 py-4 sm:px-[18px]", open && "bg-[color-mix(in_srgb,var(--bg)_60%,var(--surface))]")}>
+    <li aria-label={`${who}, invited`} className={cn("px-4 py-4", open && "bg-bg")}>
       <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
-        <PendingFace size="md" email={invite.email} className="size-10 border-2 text-[0.9375rem]" />
+        <PendingFace size="md" email={invite.email} className="size-10 border-2 text-ui" />
         <div className="min-w-0 flex-[1_1_180px]">
-          <p className="flex min-w-0 items-center gap-2 text-[0.9375rem] font-semibold">
+          <p className="flex min-w-0 items-center gap-2 text-ui font-semibold">
             <span className="truncate">{who}</span>
-            <span className="shrink-0 rounded-full bg-subtle px-2 py-0.5 text-xs font-semibold text-muted">Invited</span>
+            <span className="shrink-0 rounded-pill bg-subtle px-2 py-0.5 text-meta font-semibold text-muted">Invited</span>
           </p>
-          <p className="text-[0.8125rem] text-muted">
+          <p className="text-label text-muted">
             <button
               type="button"
               disabled={busy || basesGone}
-              title={basesGone ? "Its projects are in the trash. Cancel it and invite them again." : undefined}
+              title={basesGone ? "Its folders are in the trash. Cancel it and invite them again." : undefined}
               onClick={onResend}
               className={link}
             >
@@ -438,9 +454,9 @@ function InviteRow({
         <div className="flex items-center gap-3.5 max-sm:w-full">
           {/* An owner invite always gives every base: there is nothing to pick. */}
           {owner ? (
-            <span className={cn("text-sm text-muted max-sm:flex-1", ACCESS_COL)}>{summary}</span>
+            <span className={cn("text-ui text-muted max-sm:flex-1", ACCESS_COL)}>{summary}</span>
           ) : (
-            <AccessButton open={open} controls={editorId} label={`Projects ${name} can open: ${summary}`} onClick={onToggle}>
+            <AccessButton open={open} controls={editorId} label={`Folder access for ${name}: ${summary}`} onClick={onToggle}>
               {summary}
             </AccessButton>
           )}
@@ -458,7 +474,7 @@ function InviteRow({
         </div>
       </div>
       {open && !owner && (
-        <AccessEditor id={editorId} who={name} access={invite} ws={ws} saving={saving} onSave={onUpdate} onDone={onToggle} emptyHint="Pick at least one project, or cancel the invite." />
+        <AccessEditor id={editorId} who={name} access={invite} ws={ws} saving={saving} onSave={onUpdate} onDone={onToggle} emptyHint="Pick at least one folder, or cancel the invite." />
       )}
       {result && (
         <div className="mt-3 sm:ml-[54px]">

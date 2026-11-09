@@ -189,7 +189,7 @@ describe("workspace settings", () => {
     const api = routes({ "PATCH /api/workspaces/wsp1": workspaces[0]! });
     renderApp({ route: "/workspace/wsp1/settings" });
     await screen.findByRole("heading", { level: 1, name: "Workspace settings" });
-    await user.click(screen.getByRole("button", { name: "Change color…" }));
+    await user.click(await screen.findByRole("button", { name: "Change color…" }));
     await user.click(within(await screen.findByRole("dialog", { name: "Workspace color" })).getByRole("radio", { name: "Orange" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/workspaces/wsp1")[0]?.body).toEqual({ color: "orange" }));
   });
