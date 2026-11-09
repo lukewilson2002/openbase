@@ -5,16 +5,14 @@
  * people, and where Escape and the back link lead.
  */
 import { useCallback, useEffect, useMemo } from "react";
-import { Link, useParams } from "react-router";
+import { useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { FileQuestionMark } from "lucide-react";
 import { isApiError } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import { useMe } from "@/auth/useAuth";
 import { useBaseSchema } from "@/base/useBaseSchema";
-import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ErrorState";
 import { PageSpinner } from "@/components/ui/spinner";
 import { useBaseEvents } from "@/hooks/useBaseEvents";
 import { lastViewOf } from "@/lib/lastPlace";
@@ -72,17 +70,11 @@ export function RecordRoute() {
     // Inside the shell, so an old link to something deleted still has the sidebar, the workspace switcher and the search.
     return (
       <HomeShell title={table ? undefined : "Record"} workspaceId={workspaceId}>
-        <EmptyState
-          icon={<FileQuestionMark />}
-          title={base.isError && !missing ? "Could not load this record" : "Record not found"}
-          description={base.isError && !missing ? (base.error instanceof Error ? base.error.message : undefined) : "It may have been deleted, or you may not have access to it."}
-          action={
-            <Button asChild variant="primary">
-              <Link to="/">Go home</Link>
-            </Button>
-          }
-          className="py-20"
-        />
+        {base.isError && !missing ? (
+          <ErrorState title="Could not load this record" happened={base.error instanceof Error ? base.error.message : "Something went wrong while loading it."} todo="Reload the page in a moment, or go to Home." className="py-20" />
+        ) : (
+          <ErrorState title="Record not found" happened="It was deleted, or you do not have access to it." todo="Ask whoever sent the link, or go to Home and look from there." className="py-20" />
+        )}
       </HomeShell>
     );
   }

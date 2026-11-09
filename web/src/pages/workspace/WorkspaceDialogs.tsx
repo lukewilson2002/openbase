@@ -5,6 +5,7 @@ import { keys } from "@/api/keys";
 import type { WorkspaceSummary } from "@/api/types";
 import { ColorDialog } from "@/components/ColorDialog";
 import { NameDialog } from "@/components/NameDialog";
+import { movesToTrash, useTrashDays } from "@/components/trash/retention";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { workspaceColor } from "@/lib/workspaceColor";
@@ -25,6 +26,7 @@ export function useUpdateWorkspace() {
 /** Rename, change the color of and delete a workspace (owners). Deleting leaves for the home page. Workspaces have colors, not icons (decision 3). */
 export function WorkspaceDialogs({ ws, open, onClose }: { ws: WorkspaceSummary; open: WorkspaceDialog; onClose: () => void }) {
   const qc = useQueryClient();
+  const trashDays = useTrashDays();
   const navigate = useNavigate();
   const update = useUpdateWorkspace();
   const remove = useMutation({
@@ -52,7 +54,7 @@ export function WorkspaceDialogs({ ws, open, onClose }: { ws: WorkspaceSummary; 
         open={open === "delete"}
         onOpenChange={onOpenChange}
         title={`Delete ${ws.name}?`}
-        description="The workspace and everything in it move to the trash. Restore it from Trash for 30 days."
+        description={movesToTrash(trashDays, "The workspace and everything in it", true)}
         confirmLabel="Delete workspace"
         destructive
         onConfirm={() => remove.mutateAsync()}

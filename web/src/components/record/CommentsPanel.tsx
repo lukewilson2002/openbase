@@ -193,7 +193,7 @@ export function CommentsPanel({ recordId, collaborators, currentUserId, canComme
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
         title="Delete this comment?"
-        description="It will be removed for everyone."
+        description="It is removed for everyone. This cannot be undone."
         confirmLabel="Delete comment"
         destructive
         onConfirm={async () => {

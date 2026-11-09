@@ -12,6 +12,7 @@ import { keys } from "@/api/keys";
 import type { BaseSchema, Table, View } from "@/api/types";
 import { NameDialog } from "@/components/NameDialog";
 import { ShareDialog } from "@/components/ShareDialog";
+import { movesToTrash, useTrashDays } from "@/components/trash/retention";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CollectionSettings } from "./CollectionSettings";
 
@@ -40,6 +41,7 @@ export interface BaseDialogsProps {
 
 export function BaseDialogs({ schema, activeViewId, dialog, onClose }: BaseDialogsProps) {
   const qc = useQueryClient();
+  const trashDays = useTrashDays();
   const navigate = useNavigate();
   const refresh = () => qc.invalidateQueries({ queryKey: keys.base(schema.id) });
   const onOpenChange = (open: boolean) => !open && onClose();
@@ -69,7 +71,7 @@ export function BaseDialogs({ schema, activeViewId, dialog, onClose }: BaseDialo
         open={dialog?.kind === "delete-view"}
         onOpenChange={onOpenChange}
         title={`Delete ${dialog?.kind === "delete-view" ? dialog.view.name : "view"}?`}
-        description="Records are not affected; only this view is removed."
+        description={`Records are not affected. ${movesToTrash(trashDays, "The view")}`}
         confirmLabel="Delete view"
         destructive
         onConfirm={() => (dialog?.kind === "delete-view" ? removeView.mutateAsync({ id: dialog.view.id, tableId: dialog.table.id }) : undefined)}

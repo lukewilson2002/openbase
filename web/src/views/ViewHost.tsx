@@ -1,5 +1,4 @@
 import { Component, Suspense, type ErrorInfo, type ReactNode } from "react";
-import { TriangleAlert } from "lucide-react";
 import type { BaseSchema, Table, View } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -28,9 +27,8 @@ class ViewErrorBoundary extends Component<{ children: ReactNode; resetKey: strin
     if (this.state.error) {
       return (
         <EmptyState
-          icon={<TriangleAlert />}
           title="This view hit a problem"
-          description={this.state.error.message}
+          description="It could not be drawn, and nothing you entered was lost. Try again, or reload the page if it keeps happening."
           action={<Button onClick={() => this.setState({ error: null })}>Try again</Button>}
         />
       );

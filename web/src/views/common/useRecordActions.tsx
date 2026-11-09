@@ -7,6 +7,7 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import type { TableRecord } from "@/api/types";
 import { deleteRecordsText } from "@/components/record/deleteText";
+import { useTrashDays } from "@/components/trash/retention";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { RecordWrites } from "./useRecordWrites";
 
@@ -26,6 +27,7 @@ export interface RecordActions {
 
 export function useRecordActions({ writes, role, canEdit }: { writes: Pick<RecordWrites, "remove" | "duplicate">; role: string; canEdit: boolean }): RecordActions {
   const [pending, setPending] = useState<{ ids: readonly string[]; onDone?: () => void } | null>(null);
+  const trashDays = useTrashDays();
 
   const requestDelete = useCallback<RecordActions["requestDelete"]>(
     (ids, onDone) => {
@@ -52,8 +54,8 @@ export function useRecordActions({ writes, role, canEdit }: { writes: Pick<Recor
     <ConfirmDialog
       open
       onOpenChange={(open) => !open && setPending(null)}
-      title={deleteRecordsText(role, pending.ids.length).title}
-      description={deleteRecordsText(role, pending.ids.length).description}
+      title={deleteRecordsText(role, pending.ids.length, trashDays).title}
+      description={deleteRecordsText(role, pending.ids.length, trashDays).description}
       confirmLabel={`Delete ${pending.ids.length.toLocaleString()} records`}
       destructive
       onConfirm={async () => {

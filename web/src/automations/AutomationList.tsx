@@ -140,7 +140,7 @@ export function AutomationList({ baseId, automations, activeId, onNew, onDeleted
         open={dialog?.kind === "delete"}
         onOpenChange={(o) => !o && setDialog(null)}
         title={`Delete ${dialog?.kind === "delete" ? dialog.automation.name : "automation"}?`}
-        description="The automation and its run history are deleted for good. Queued runs are dropped."
+        description="The automation and its run history are deleted for good, and queued runs are dropped. This cannot be undone."
         confirmLabel="Delete automation"
         destructive
         onConfirm={() => (dialog?.kind === "delete" ? remove.mutateAsync(dialog.automation.id) : undefined)}

@@ -64,7 +64,7 @@ export function InboxCard({ drafts, workspace }: { drafts: readonly InboxItem[];
         open={!!deleting}
         onOpenChange={(open) => !open && setDeleting(null)}
         title="Delete this draft?"
-        description="The text and the files in it are deleted. This cannot be undone."
+        description="The text and the files in it are deleted for good. This cannot be undone."
         confirmLabel="Delete"
         destructive
         onConfirm={async () => {

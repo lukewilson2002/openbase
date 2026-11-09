@@ -8,6 +8,7 @@ import { useMemo } from "react";
 import { useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
+import { asSentence } from "@/components/ErrorState";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { WorkspaceSummary } from "@/api/types";
@@ -72,7 +73,7 @@ function HomeContent({ ws }: { ws: WorkspaceSummary }) {
           }
         />
       ) : home.isError && !data ? (
-        <Notice tone="error">Home's lists could not be loaded: {errorMessage(home.error)}</Notice>
+        <Notice tone="error">{asSentence(`Home's lists could not be loaded: ${errorMessage(home.error)}`)} Reload the page to try again.</Notice>
       ) : (
         <div className="grid items-start gap-6 max-md:gap-5 @min-[47.5rem]:grid-cols-2">
           <DueSoon workspaceId={ws.id} home={data} />

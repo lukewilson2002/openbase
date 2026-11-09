@@ -39,6 +39,7 @@ import { itemsLabel } from "@/views/common/cardFields";
 import { SelectionBar } from "@/views/common/SelectionBar";
 import { usePersistedSet } from "@/views/common/usePersistedSet";
 import { deleteRecordsText } from "@/components/record/deleteText";
+import { movesToTrash, useTrashDays } from "@/components/trash/retention";
 import { Redo2, Undo2 } from "lucide-react";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
@@ -310,6 +311,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   );
 
   const [confirmDelete, setConfirmDelete] = useState<{ ids: string[] } | null>(null);
+  const trashDays = useTrashDays();
   const [confirmClear, setConfirmClear] = useState<{ sel: GridSelectionInfo; cells: number } | null>(null);
 
   const onPaste = useCallback(
@@ -1191,7 +1193,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         open={!!confirmField}
         onOpenChange={(o) => !o && setConfirmField(null)}
         title={`Delete property "${confirmField?.name ?? ""}"?`}
-        description={`The property and its values are removed from every view. Undo brings it back, as does the trash.${confirmField?.id === table.body_field_id ? " It is this collection's page, so records have no page until you choose another property." : ""}`}
+        description={`The property and its values are removed from every view. ${movesToTrash(trashDays)} Press Undo right after to bring it back at once.${confirmField?.id === table.body_field_id ? " It is this collection's page, so records have no page until you choose another property." : ""}`}
         confirmLabel="Delete property"
         destructive
         onConfirm={async () => {
@@ -1202,8 +1204,8 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       <ConfirmDialog
         open={!!confirmDelete}
         onOpenChange={(o) => !o && setConfirmDelete(null)}
-        title={deleteRecordsText(role, confirmDelete?.ids.length ?? 0).title}
-        description={deleteRecordsText(role, confirmDelete?.ids.length ?? 0).description}
+        title={deleteRecordsText(role, confirmDelete?.ids.length ?? 0, trashDays).title}
+        description={deleteRecordsText(role, confirmDelete?.ids.length ?? 0, trashDays).description}
         confirmLabel={`Delete ${(confirmDelete?.ids.length ?? 0).toLocaleString()} records`}
         destructive
         onConfirm={async () => {

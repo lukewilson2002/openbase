@@ -95,7 +95,7 @@ export function TokensSection() {
         open={!!revoking}
         onOpenChange={(o) => !o && setRevoking(null)}
         title={`Revoke ${revoking?.name ?? "token"}?`}
-        description="Anything using this token will stop working immediately."
+        description="Anything using this token stops working immediately. This cannot be undone; make a new token to get access back."
         confirmLabel="Revoke token"
         destructive
         onConfirm={async () => {

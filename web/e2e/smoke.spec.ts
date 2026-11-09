@@ -100,8 +100,11 @@ test("serves client-side routes from the app shell and real 404s for missing ass
   const missing = await request.get("/assets/does-not-exist.js");
   expect(missing.status()).toBe(404);
   expect(missing.headers()["content-type"] ?? "").not.toContain("text/html");
+  // An address that leads nowhere says so and leads Home (APP-17); it needs no sign-in to show that.
   await page.goto("/no/such/page");
-  await expect(page.getByRole("heading", { name: /Welcome to your OpenBase|Log in|Page not found/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
+  await expect(page.getByText("That address does not lead anywhere.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/");
 });
 
 test("unknown API paths return the JSON error format", async ({ request }) => {

@@ -10,11 +10,13 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ellipsis, History, MessageSquare, Share2 } from "lucide-react";
 import { errorMessage } from "@/api/client";
+import { asSentence } from "@/components/ErrorState";
 import { keys } from "@/api/keys";
 import { attachmentsApi, commentsApi, recordKeys, recordsApi } from "@/api/records";
 import type { BaseSchema, Collaborator, Table, View } from "@/api/types";
 import { CommentsPanel } from "@/components/record/CommentsPanel";
 import { deleteRecordsText } from "@/components/record/deleteText";
+import { useTrashDays } from "@/components/trash/retention";
 import { EditorEnvProvider, type EditorEnv } from "@/components/record/editors/env";
 import { HistoryPanel } from "@/components/record/HistoryPanel";
 import { LinkedRecordsProvider, type LinkedRecordsHost } from "@/components/record/linked/LinkedRecords";
@@ -113,6 +115,7 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
 
   const primary = table.fields.find((f) => f.id === table.primary_field_id);
   const titleMode = titleModeOf(primary);
+  const trashDays = useTrashDays();
   const title = record.data && primary ? displayText(primary, record.data.values[primary.id], format) || "Untitled record" : "Record";
 
   // Comments or History, remembered per device on a desktop (REC-7).
@@ -283,7 +286,7 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
   ) : record.isError || !record.data ? (
     <div role="alert" className="flex flex-col items-center justify-center gap-2 py-16 text-center text-label">
       <p className="font-medium">This record could not be loaded.</p>
-      <p className="text-muted">{record.isError ? errorMessage(record.error) : "It may have been deleted."}</p>
+      <p className="text-muted">{record.isError ? `${asSentence(errorMessage(record.error))} Reload the page to try again.` : "It was deleted. Go back to the collection."}</p>
       <Button onClick={onClose}>Back to {table.name}</Button>
     </div>
   ) : (
@@ -372,7 +375,7 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
           </SheetMenu>
         </>
       )}
-      <ConfirmDialog open={confirmDelete} onOpenChange={setConfirmDelete} {...deleteRecordsText(role)} confirmLabel="Delete record" destructive onConfirm={remove} />
+      <ConfirmDialog open={confirmDelete} onOpenChange={setConfirmDelete} {...deleteRecordsText(role, 1, trashDays, title)} confirmLabel="Delete record" destructive onConfirm={remove} />
     </EditorEnvProvider>
   );
 }

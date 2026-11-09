@@ -51,7 +51,7 @@ export function isApiError(e: unknown): e is ApiError {
 /** Human-readable message for any thrown value. */
 export function errorMessage(e: unknown): string {
   if (e instanceof Error && e.message) return e.message;
-  return "Something went wrong.";
+  return "Something went wrong. Try again in a moment.";
 }
 
 function randomId(): string {

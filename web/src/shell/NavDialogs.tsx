@@ -17,6 +17,7 @@ import { ColorDialog } from "@/components/ColorDialog";
 import { NameDialog } from "@/components/NameDialog";
 import { ShareDialog } from "@/components/ShareDialog";
 import { ImportCsvDialog, NewTableFromCsvDialog } from "@/components/csv/LazyCsvDialogs";
+import { movesToTrash, useTrashDays } from "@/components/trash/retention";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { defaultViewPath } from "@/lib/views";
@@ -59,6 +60,7 @@ export function NavDialogsProvider({ children }: { children: ReactNode }) {
 
 function NavDialogs({ dialog, onClose }: { dialog: NavDialog | null; onClose: () => void }) {
   const qc = useQueryClient();
+  const trashDays = useTrashDays();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const toast = useToast();
@@ -158,7 +160,7 @@ function NavDialogs({ dialog, onClose }: { dialog: NavDialog | null; onClose: ()
         open={dialog?.kind === "delete-folder"}
         onOpenChange={onOpenChange}
         title={`Delete ${dialog?.kind === "delete-folder" ? dialog.base.name : "folder"}?`}
-        description="The folder and its collections move to the trash and can be restored for 30 days."
+        description={movesToTrash(trashDays, "The folder and its collections", true)}
         confirmLabel="Delete folder"
         destructive
         // The server refuses the workspace's top level and says why; the dialog stays open with that answer.
@@ -195,7 +197,7 @@ function NavDialogs({ dialog, onClose }: { dialog: NavDialog | null; onClose: ()
         open={dialog?.kind === "delete-collection"}
         onOpenChange={onOpenChange}
         title={`Delete ${dialog?.kind === "delete-collection" ? dialog.table.name : "collection"}?`}
-        description="The collection and its records move to the trash and can be restored for 30 days."
+        description={movesToTrash(trashDays, "The collection and its records", true)}
         confirmLabel="Delete collection"
         destructive
         onConfirm={() => (dialog?.kind === "delete-collection" ? deleteTable.mutateAsync({ baseId: dialog.baseId, table: dialog.table }) : undefined)}

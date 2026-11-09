@@ -322,7 +322,12 @@ describe("members page", () => {
 describe("workspace settings page", () => {
   it("renames and deletes the workspace for its owner", async () => {
     const user = userEvent.setup();
-    const api = routes({ "PATCH /api/workspaces/wsp1": ws, "DELETE /api/workspaces/wsp1": { ok: true } });
+    const api = routes({
+      "PATCH /api/workspaces/wsp1": ws,
+      "DELETE /api/workspaces/wsp1": { ok: true },
+      // The confirmation quotes the server's real retention.
+      "GET /api/setup": { needs_setup: false, open_signup: false, email_enabled: false, public_url: "https://base.example.org", passkeys_enabled: true, trash_days: 14 },
+    });
     renderApp({ route: "/workspace/wsp1/settings" });
     expect(await screen.findByRole("heading", { level: 1, name: "Workspace settings" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Rename" }));
@@ -332,7 +337,9 @@ describe("workspace settings page", () => {
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/workspaces/wsp1")[0]?.body).toEqual({ name: "Home" }));
     await user.click(screen.getByRole("button", { name: "Delete workspace" }));
-    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Delete workspace" }));
+    const confirm = await screen.findByRole("alertdialog");
+    await waitFor(() => expect(confirm).toHaveAccessibleDescription("The workspace and everything in it move to the trash for 14 days. Restore them from Trash until then."));
+    await user.click(within(confirm).getByRole("button", { name: "Delete workspace" }));
     await waitFor(() => expect(api.callsTo("DELETE /api/workspaces/wsp1")).toHaveLength(1));
   });
 

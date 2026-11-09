@@ -1,12 +1,12 @@
 import { Suspense, lazy, useEffect } from "react";
-import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useNavigate } from "react-router";
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { setUnauthorizedHandler } from "@/api/client";
 import { keys } from "@/api/keys";
 import { RequireAdmin, RequireAuth } from "@/auth/guards";
 import { BaseShell } from "@/base/BaseShell";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Button } from "@/components/ui/button";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
+import { ErrorState } from "@/components/ErrorState";
 import { RecordRoute } from "@/record/RecordRoute";
 import { RootRoute } from "@/pages/RootRoute";
 import { NotificationsPage } from "@/pages/NotificationsPage";
@@ -48,80 +48,71 @@ export function AppRoutes() {
   return (
     <IntroProvider>
       <UndoScopeWatch />
-      <Suspense fallback={<PageSpinner />}>
-        <Routes>
-          {/* Public links: no RequireAuth, no redirects. /s and /f are the paths the API reports. */}
-          <Route path="/form/:token" element={<PublicFormPage />} />
-          <Route path="/f/:token" element={<PublicFormPage />} />
-          <Route path="/share/:token" element={<PublicSharePage />} />
-          <Route path="/s/:token" element={<PublicSharePage />} />
-          <Route path="/setup" element={<SetupPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/login/2fa" element={<TwoFactorLoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
-          <Route path="/invite/:token" element={<InvitePage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
-          {/* A page for looking at, with nothing behind it: no sign-in needed. */}
-          {DesignPage && <Route path="/__dev/design" element={<DesignPage />} />}
-          {/* The signed-in app: one RequireAuth and one IntroGate for every page in it. */}
-          <Route element={<SignedInArea />}>
-            <Route path="/" element={<RootRoute />} />
-            <Route path="/workspace/:workspaceId" element={<HomePage />} />
-            <Route path="/workspace/:workspaceId/collections" element={<CollectionsPage />} />
-            <Route path="/workspace/:workspaceId/automations" element={<WorkspaceAutomationsPage />} />
-            <Route path="/workspace/:workspaceId/members" element={<MembersPage />} />
-            <Route path="/workspace/:workspaceId/settings" element={<WorkspaceSettingsPage />} />
-            <Route path="/notifications" element={<NotificationsPage />} />
-            {/* Home holds the drafts; old Inbox links land there (routes table). */}
-            <Route path="/inbox" element={<Navigate to="/" replace />} />
-            <Route path="/history" element={<HistoryPage />} />
-            <Route path="/trash" element={<TrashPage />} />
-            {DevSharePage && import.meta.env.VITE_MOCK && <Route path="/__dev/share" element={<DevSharePage />} />}
-            <Route path="/account" element={<AccountPage />} />
+      <AppErrorBoundary>
+        <Suspense fallback={<PageSpinner />}>
+          <Routes>
+            {/* Public links: no RequireAuth, no redirects. /s and /f are the paths the API reports. */}
+            <Route path="/form/:token" element={<PublicFormPage />} />
+            <Route path="/f/:token" element={<PublicFormPage />} />
+            <Route path="/share/:token" element={<PublicSharePage />} />
+            <Route path="/s/:token" element={<PublicSharePage />} />
+            <Route path="/setup" element={<SetupPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/login/2fa" element={<TwoFactorLoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/invite/:token" element={<InvitePage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            {/* A page for looking at, with nothing behind it: no sign-in needed. */}
+            {DesignPage && <Route path="/__dev/design" element={<DesignPage />} />}
+            {/* The signed-in app: one RequireAuth and one IntroGate for every page in it. */}
+            <Route element={<SignedInArea />}>
+              <Route path="/" element={<RootRoute />} />
+              <Route path="/workspace/:workspaceId" element={<HomePage />} />
+              <Route path="/workspace/:workspaceId/collections" element={<CollectionsPage />} />
+              <Route path="/workspace/:workspaceId/automations" element={<WorkspaceAutomationsPage />} />
+              <Route path="/workspace/:workspaceId/members" element={<MembersPage />} />
+              <Route path="/workspace/:workspaceId/settings" element={<WorkspaceSettingsPage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
+              {/* Home holds the drafts; old Inbox links land there (routes table). */}
+              <Route path="/inbox" element={<Navigate to="/" replace />} />
+              <Route path="/history" element={<HistoryPage />} />
+              <Route path="/trash" element={<TrashPage />} />
+              {DevSharePage && import.meta.env.VITE_MOCK && <Route path="/__dev/share" element={<DevSharePage />} />}
+              <Route path="/account" element={<AccountPage />} />
+              <Route
+                path="/admin"
+                element={
+                  <RequireAdmin>
+                    <AdminPage />
+                  </RequireAdmin>
+                }
+              />
+              <Route path="/base/:baseId/automations/:automationId?/:tab?" element={<BaseShell section="automations" />} />
+              {/* A record is a page of its own (decision 5); the view in the address is the one previous and next follow. */}
+              <Route path="/base/:baseId/:tableId/r/:recordId" element={<RecordRoute />} />
+              <Route path="/base/:baseId/:tableId/:viewId/r/:recordId" element={<RecordRoute />} />
+              <Route path="/base/:baseId/:tableId?/:viewId?" element={<BaseShell />} />
+            </Route>
+            {/*
+              Behind the login like every app page (the login redirect brings the person back here), but
+              outside SignedInArea: someone connecting an app mid-way should not meet the intro first.
+            */}
             <Route
-              path="/admin"
+              path="/oauth/consent"
               element={
-                <RequireAdmin>
-                  <AdminPage />
-                </RequireAdmin>
+                <RequireAuth>
+                  <OAuthConsentPage />
+                </RequireAuth>
               }
             />
-            <Route path="/base/:baseId/automations/:automationId?/:tab?" element={<BaseShell section="automations" />} />
-            {/* A record is a page of its own (decision 5); the view in the address is the one previous and next follow. */}
-            <Route path="/base/:baseId/:tableId/r/:recordId" element={<RecordRoute />} />
-            <Route path="/base/:baseId/:tableId/:viewId/r/:recordId" element={<RecordRoute />} />
-            <Route path="/base/:baseId/:tableId?/:viewId?" element={<BaseShell />} />
-          </Route>
-          {/*
-            Behind the login like every app page (the login redirect brings the person back here), but
-            outside SignedInArea: someone connecting an app mid-way should not meet the intro first.
-          */}
-          <Route
-            path="/oauth/consent"
-            element={
-              <RequireAuth>
-                <OAuthConsentPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="*"
-            element={
-              <EmptyState
-                title="Page not found"
-                description="That address does not exist."
-                action={
-                  <Button asChild variant="primary">
-                    <Link to="/">Go home</Link>
-                  </Button>
-                }
-                className="min-h-dvh justify-center"
-              />
-            }
-          />
-        </Routes>
-      </Suspense>
+            <Route
+              path="*"
+              element={<ErrorState title="Page not found" happened="That address does not lead anywhere." todo="Check the link, or go to Home and look from there." className="min-h-dvh justify-center" />}
+            />
+          </Routes>
+        </Suspense>
+      </AppErrorBoundary>
     </IntroProvider>
   );
 }

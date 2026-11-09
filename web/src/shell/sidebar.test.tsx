@@ -581,6 +581,8 @@ describe("folder menu (NAV-3)", () => {
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     const confirm = await screen.findByRole("alertdialog");
     expect(confirm).toHaveAccessibleName("Delete CRM?");
+    // It names the thing and says it can be restored, for as long as the server keeps the trash (APP-16).
+    expect(confirm).toHaveAccessibleDescription("The folder and its collections move to the trash for 30 days. Restore them from Trash until then.");
     await user.click(within(confirm).getByRole("button", { name: "Delete folder" }));
     await waitFor(() => expect(api.callsTo("DELETE /api/bases/app2")).toHaveLength(1));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Folder options for CRM" })).not.toBeInTheDocument());

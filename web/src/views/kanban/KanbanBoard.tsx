@@ -696,7 +696,7 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
 export function deleteStackText(stack: Pick<Stack, "label" | "records">, fieldName = "the property"): string {
   const n = stack.records.length;
   const cards = n === 0 ? "No cards here use it." : `The ${n === 1 ? "card" : `${n.toLocaleString()} cards`} in this stack will keep ${n === 1 ? "its" : "their"} other values but have no ${fieldName} value, so ${n === 1 ? "it moves" : "they move"} to Uncategorized.`;
-  return `This removes "${stack.label}" as an option of ${fieldName} in every view of the table. ${cards} Cards elsewhere that use it lose it as well.`;
+  return `This removes "${stack.label}" as an option of ${fieldName} in every view of the table. ${cards} Cards elsewhere that use it lose it as well. This cannot be undone.`;
 }
 
 function RenameStack({ stack, onClose, onSave }: { stack: Stack; onClose: () => void; onSave: (name: string) => Promise<void> }) {

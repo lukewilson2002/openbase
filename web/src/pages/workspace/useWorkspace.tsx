@@ -1,13 +1,11 @@
 import { useEffect, type ReactNode } from "react";
-import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { WorkspaceSummary } from "@/api/types";
 import { Notice } from "@/components/layouts";
-import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ErrorState";
 import { PageSpinner } from "@/components/ui/spinner";
 import { readLastWorkspace, rememberWorkspace } from "./lastWorkspace";
 
@@ -40,16 +38,7 @@ export function useWorkspace(workspaceId: string | undefined): { ws: WorkspaceSu
   return {
     ws: null,
     fallback: (
-      <EmptyState
-        title="Workspace not found"
-        description="It may have been deleted, or you are no longer a member."
-        action={
-          <Button asChild variant="primary">
-            <Link to="/">Go home</Link>
-          </Button>
-        }
-        className="py-20"
-      />
+      <ErrorState title="Workspace not found" happened="It was deleted, or you are no longer a member." todo="Go to Home to open one of your workspaces." className="py-20" />
     ),
   };
 }

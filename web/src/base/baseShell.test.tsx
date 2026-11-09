@@ -296,7 +296,7 @@ describe("base shell on a desktop", () => {
     mockApi({ "GET /api/auth/me": USER, "GET /api/workspaces": [makeWorkspace("owner", [])], "GET /api/bases/app1": apiError(404, "not_found", "base not found") });
     renderApp({ route: "/base/app1" });
     expect(await screen.findByText("Folder not found")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Go home" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to Home" })).toBeInTheDocument();
     expect(await screen.findByRole("navigation", { name: "Main menu" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "Folder" })).toBeInTheDocument();
   });

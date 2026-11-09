@@ -23,6 +23,7 @@ import type { EditValue, EditorEnv } from "@/components/record/editors/env";
 import { FieldDialog, type FieldDialogState } from "@/components/fields/FieldDialog";
 import { whyNotPage, whyNotTitle } from "@/components/fields/propertyRoles";
 import { usePropertyRoles, type PropertyRoles } from "@/components/fields/usePropertyRoles";
+import { movesToTrash, useTrashDays } from "@/components/trash/retention";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Icon } from "@/components/ui/icon";
 import { PropertyList, PropertyRow } from "@/components/ui/property-list";
@@ -210,6 +211,7 @@ function focusLabelLater(fieldId: string | undefined) {
 }
 
 export function RecordProperties({ schema, table, record, view, role, env, emails, save, layout, titleMode, justCreated, addPropertyRequest }: RecordPropertiesProps) {
+  const trashDays = useTrashDays();
   const qc = useQueryClient();
   const toast = useToast();
   const readOnly = !atLeast(role, "editor");
@@ -307,7 +309,7 @@ export function RecordProperties({ schema, table, record, view, role, env, email
           if (field) focusLabelLater(field.id);
         }}
         title={`Delete property “${deleting?.name ?? ""}”?`}
-        description="The property and its values are removed from every view and every record. You can bring it back from the trash."
+        description={`The property and its values are removed from every view and every record. ${movesToTrash(trashDays)}`}
         confirmLabel="Delete property"
         destructive
         onConfirm={async () => {
