@@ -157,6 +157,14 @@ own header and one `h1`, and no horizontal scroll; the phase that adds a route a
 phase adds a screen by adding one entry to `SHOTS`. The seed gives Clients a record name ("client") and a saved view of
 each of Board, Calendar, List and Form, Projects a Gallery and a Timeline, and "Ideas" (in a workspace the sidebar shots
 do not show) no records at all; a shot opens a saved view with `openView(page, seed, "Clients", "Pipeline")`.
+`ledgerShots.ts` holds the ledger's entries (`SHOTS`, the sizes and themes, and the steps that open each screen with its menu, sheet
+or dialog), so the screenshots and the accessibility sweep walk the same screens. `a11y.spec.ts` (its own Playwright project, `a11y`)
+runs axe-core on every entry, light and dark at 1440 and 390 px, with the WCAG 2.0 to 2.2 level A and AA rules; a serious or
+critical violation fails the test, and `DISABLED_RULES` is empty (a rule may only be switched off with a recorded reason).
+`A11Y_ONLY=9,21` limits it to those ledger rows and `A11Y_REPORT=file` writes every finding to a file instead of failing, to see a
+whole sweep in one run. `a11yInteraction.spec.ts` covers what axe cannot see: keyboard-only walks, Escape handing the focus back, the
+2 px focus ring on everything Tab reaches, landmarks and headings, live regions, colour not being the only cue, 200% text,
+24 px targets and reduced motion (see "Accessibility" below).
 `collection.spec.ts` also walks the draft story end to end: a typed phrase, its chip and the changes bar, a reload that
 keeps the draft, Reset, Save as view, and a layout switched from View options.
 
@@ -677,6 +685,26 @@ section in `src/dev/designSections.ts` and to the matching `*Sections.tsx`; `Des
 by default, `size="sm"` (12 px) inside a chip or checkbox, `size="fit"` where the caller sizes it. It accepts no stroke width, colour or width/height.
 `IconButton` requires `label` by type. `ui/icons.test.tsx` holds the `@ts-expect-error` cases and a scan of `components/ui` that fails on a lucide
 glyph drawn directly, a stroke width set by hand, an `IconButton` without `label` or an icon-only `<button>` without `aria-label`.
+
+### Accessibility (A11Y-1 to A11Y-7)
+
+- **Names hold what is drawn (WCAG 2.5.3).** axe's `label-content-name-mismatch` is on: a button, link, tree item or card whose
+  `aria-label` does not contain its drawn text fails. So a control with drawn text has no `aria-label`: its name is its content, and
+  anything a screen reader needs beyond the drawing is `sr-only` text inside it (a card property's name in `CardProperties`, "unread"
+  after the notification count, "records" after a group's count). An icon-only control keeps its `aria-label` (`IconButton`). A face
+  (`Avatar`) draws its initials as generated content (`data-initials`), not text, and is `decorative` beside a name.
+- **A control may not contain a control.** A gallery card (a button) has its select box beside it, not inside; a list row is a tree
+  item, which may hold controls; a record in a listbox (the link picker) draws its values as text (`PlainValues`,
+  `RecordSummary plain`); the link field's cards sit over a real button. A tree may own only tree items, so nothing else (a select
+  box, dnd-kit's live region) is a child of it or of a menu.
+- **Scrolling boxes take the keyboard** (`Table` needs a `label`; a wide preview has `role="region"`, a name and `tabIndex`).
+- **Focus** is the global `:focus-visible` rule in `styles/index.css` (2 px `--ring`, offset 2 px). A class that takes the outline
+  away (`outline-none`) must draw its own: a field inside a bar that rings the bar (`focus-within`), a resize handle whose 2 px bar
+  turns `--ring`. Never write `outline-none` beside `focus-visible:outline-2`: `outline-none` sets the outline *style* to none, so the
+  ring is drawn in no style at all. `a11yInteraction.spec.ts` tabs through Home, a grid, a list, a board, a record and settings and fails
+  on anything else.
+- **Motion**: CSS animations are handled in `styles/index.css` (`prefers-reduced-motion`); a scroll the app starts itself uses
+  `scrollBehavior()` (`lib/reducedMotion.ts`), which is `auto` when motion is reduced.
 
 ### Logo, favicon and web app manifest
 
