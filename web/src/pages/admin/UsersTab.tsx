@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
+import { HoldMenuRow } from "@/components/ui/hold-menu-row";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
 import { Field, Input } from "@/components/ui/input";
@@ -75,7 +76,9 @@ export function UsersTab() {
             {users.data.map((u) => {
               const self = u.id === me?.id;
               return (
-                <Tr key={u.id}>
+                <HoldMenuRow as={Tr} key={u.id}>
+                  {(menu) => (
+                  <>
                   <Td>
                     <div className="flex items-center gap-2.5">
                       <Avatar name={u.name} email={u.email} size="sm" />
@@ -100,7 +103,7 @@ export function UsersTab() {
                   <Td className="whitespace-nowrap text-muted max-md:hidden">{formatDateTime(u.created_at)}</Td>
                   <Td className="whitespace-nowrap text-muted max-md:hidden">{u.last_login_at ? formatDateTime(u.last_login_at) : "Never"}</Td>
                   <Td>
-                    <DropdownMenu title={u.name}>
+                    <DropdownMenu title={u.name} open={menu.open} onOpenChange={menu.onOpenChange}>
                       <DropdownMenuTrigger asChild>
                         <IconButton label={`Actions for ${u.name}`} size="sm" noTooltip>
                           <Ellipsis aria-hidden className="size-4" />
@@ -135,7 +138,9 @@ export function UsersTab() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </Td>
-                </Tr>
+                </>
+                  )}
+                </HoldMenuRow>
               );
             })}
         </TBody>

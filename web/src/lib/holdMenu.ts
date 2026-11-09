@@ -50,8 +50,12 @@ export interface HoldMenuHandlers {
   onContextMenu(e: MouseEvent<Element>): void;
 }
 
-/** A hold is not started on a link or a button of its own inside the card (a tick box, a chip that opens something). */
-function ignored(target: EventTarget | null): boolean {
+/**
+ * A hold is not started on a link or a button of its own inside the card (a tick box, a chip that opens something), nor on
+ * something drawn elsewhere in the page whose events still reach the card through React (the card's own sheet or menu).
+ */
+function ignored(target: EventTarget | null, on?: Element): boolean {
+  if (on && target instanceof Node && !on.contains(target)) return true;
   return target instanceof Element && target.closest("a, [data-no-hold]") !== null;
 }
 
@@ -86,7 +90,7 @@ export function useHoldMenu(open: (anchor: HoldAnchor) => void, enabled = true):
 
   const onPointerDown = useCallback(
     (e: PointerEvent<Element>) => {
-      if (!enabled || e.pointerType !== "touch" || ignored(e.target)) return;
+      if (!enabled || e.pointerType !== "touch" || ignored(e.target, e.currentTarget)) return;
       clear();
       const p: Press = { id: e.pointerId, x: e.clientX, y: e.clientY, timer: 0, held: false, moved: false, contextMenu: false };
       p.timer = window.setTimeout(() => {
@@ -132,7 +136,8 @@ export function useHoldMenu(open: (anchor: HoldAnchor) => void, enabled = true):
   );
 
   const onClickCapture = useCallback((e: MouseEvent<Element>) => {
-    if (Date.now() >= swallowUntil.current) return;
+    // A tap on the sheet this hold opened is the sheet's own.
+    if (Date.now() >= swallowUntil.current || !e.currentTarget.contains(e.target as Node)) return;
     swallowUntil.current = 0;
     e.preventDefault();
     e.stopPropagation();
@@ -140,7 +145,7 @@ export function useHoldMenu(open: (anchor: HoldAnchor) => void, enabled = true):
 
   const onContextMenu = useCallback(
     (e: MouseEvent<Element>) => {
-      if (!enabled || ignored(e.target)) return;
+      if (!enabled || ignored(e.target, e.currentTarget)) return;
       e.preventDefault();
       const p = press.current;
       if (p) {

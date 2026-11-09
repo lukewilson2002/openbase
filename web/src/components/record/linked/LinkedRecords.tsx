@@ -286,7 +286,7 @@ export interface RecordPeekProps {
   /** The address of the record's page, so Open page is a link that can be opened in a new tab. */
   href?: string;
   side?: "top" | "right" | "bottom" | "left";
-  /** Whether holding a finger on it opens the details (off where a held finger starts a drag). */
+  /** Whether holding a finger on it opens the details (off in the picker, where a held finger scrolls the list). */
   touchHold?: boolean;
   className?: string;
   children: ReactNode;
@@ -375,7 +375,8 @@ export function RecordPeek({ table, recordId, record, format, emails, onOpen, hr
           }}
           onPointerDown={(e) => {
             opened.current = false;
-            if (e.pointerType === "mouse" || !touchHold) return;
+            // A press on a button of the card (its grip, which drags it, or its remove button) is that button's own.
+            if (e.pointerType === "mouse" || !touchHold || (e.target instanceof Element && e.target.closest("button, a"))) return;
             cancel();
             press.current = {
               x: e.clientX,

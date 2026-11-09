@@ -116,7 +116,7 @@ function LinkedCard({
   );
   return (
     <li ref={s.setNodeRef} style={{ transform: CSS.Translate.toString(s.transform), transition: s.transition }} className={cn("min-w-0", s.isDragging && "relative z-10")}>
-      <RecordPeek table={table} recordId={r.id} record={record} format={format} emails={emails} onOpen={onOpen} href={href} side="left" touchHold={!sortable}>
+      <RecordPeek table={table} recordId={r.id} record={record} format={format} emails={emails} onOpen={onOpen} href={href} side="left">
         <Card padded={false} data-linked-record={r.id} className={cn("flex min-w-0 items-start gap-1.5 py-1.5 pr-1.5 text-left", sortable ? "pl-1.5" : "pl-2.5", s.isDragging && "shadow-pop")}>
           {grip}
           <RecordSummary title={<span className="max-w-full truncate text-label font-semibold text-primary-text">{title}</span>} record={record} fields={fields} format={format} emails={emails} className="flex-1 self-center" />

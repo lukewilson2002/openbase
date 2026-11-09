@@ -34,9 +34,9 @@ const domain = { ...makeRecord({ fld_title: "Buy the domain", fld_status: "chs3"
 beforeEach(() => stubDesktop());
 afterEach(() => vi.useRealTimers());
 
-function setup(over: Partial<RecordPageProps> = {}) {
+function setup(over: Partial<RecordPageProps> = {}, shown = task) {
   const api = mockApi({
-    "GET /api/tables/tbl1/records/rec1": task,
+    "GET /api/tables/tbl1/records/rec1": shown,
     "GET /api/records/rec1/comments": [],
     "GET /api/records/rec1/history": [],
     "POST /api/tables/tbl2/records/get": (call: { body: unknown }) => ({ records: (call.body as { ids: string[] }).ids.includes("recD") ? [domain] : [] }),
@@ -139,6 +139,26 @@ describe("linked records on the record page", () => {
     await userEvent.click(within(sheet).getByRole("button", { name: /Open page/ }));
     expect(props.onOpenLinked).toHaveBeenCalledWith("tbl2", "recD");
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Buy the domain" })).toBeNull());
+  });
+});
+
+describe("a property with several links (PH-6)", () => {
+  const two = makeRecord({ fld_name: "Build the website", fld_requires: [{ id: "recD", name: "Buy the domain" }, { id: "recE", name: "Pick a host" }] }, "rec1");
+
+  it("shows a linked record when a finger rests on its card, while the grip beside it still only drags", async () => {
+    setup({}, two);
+    const card = await screen.findByText("Buy the domain").then((el) => el.closest("[data-linked-record]") as HTMLElement);
+    // Two links: the cards can be put in order, with a grip each.
+    const grip = within(card).getByRole("button", { name: "Move Buy the domain" });
+    vi.useFakeTimers();
+    fireEvent.pointerDown(grip, { pointerType: "touch", clientX: 10, clientY: 10 });
+    act(() => vi.advanceTimersByTime(600));
+    fireEvent.pointerUp(grip, { pointerType: "touch" });
+    expect(document.querySelector("[data-record-peek]")).toBeNull();
+    fireEvent.pointerDown(card, { pointerType: "touch", clientX: 10, clientY: 10 });
+    act(() => vi.advanceTimersByTime(500));
+    vi.useRealTimers();
+    expect(await waitFor(() => document.querySelector("[data-record-peek]"))).not.toBeNull();
   });
 });
 

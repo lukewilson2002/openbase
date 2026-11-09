@@ -10,6 +10,7 @@ import { NameDialog } from "@/components/NameDialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { HoldMenuRow } from "@/components/ui/hold-menu-row";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { IconButton } from "@/components/ui/icon-button";
@@ -86,7 +87,9 @@ export function AutomationList({ baseId, automations, activeId, onNew, onDeleted
           const last = lastRuns[i]?.data?.runs[0];
           const active = a.id === activeId;
           return (
-            <li key={a.id} className={cn("group/item flex items-start gap-2 rounded-lg border px-3 py-2.5", active ? "border-primary-soft-line bg-primary-soft" : "border-line bg-surface hover:bg-hover")}>
+            <HoldMenuRow key={a.id} className={cn("group/item flex items-start gap-2 rounded-lg border px-3 py-2.5", active ? "border-primary-soft-line bg-primary-soft" : "border-line bg-surface hover:bg-hover")}>
+              {(menu) => (
+              <>
               <Link to={`/base/${baseId}/automations/${a.id}`} aria-current={active ? "page" : undefined} className="min-w-0 flex-1 text-inherit no-underline">
                 <span className={cn("block truncate text-ui", active ? "font-semibold text-primary-ink" : "font-medium")}>{a.name}</span>
                 <span className="block truncate text-meta text-muted">{triggerSummary(a.trigger, schema)}</span>
@@ -110,7 +113,7 @@ export function AutomationList({ baseId, automations, activeId, onNew, onDeleted
                 label={<span className="sr-only">{`${a.enabled ? "Turn off" : "Turn on"} ${a.name}`}</span>}
                 className="pt-0.5"
               />
-              <DropdownMenu title={a.name}>
+              <DropdownMenu title={a.name} open={menu.open} onOpenChange={menu.onOpenChange}>
                 <DropdownMenuTrigger asChild>
                   <IconButton label={`Options for ${a.name}`} size="sm" noTooltip>
                     <Ellipsis aria-hidden className="size-4" />
@@ -125,7 +128,9 @@ export function AutomationList({ baseId, automations, activeId, onNew, onDeleted
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            </li>
+            </>
+              )}
+            </HoldMenuRow>
           );
         })}
       </ul>

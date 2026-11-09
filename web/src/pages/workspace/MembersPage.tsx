@@ -22,6 +22,7 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ColorMark } from "@/components/ui/color-mark";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { HoldMenuRow } from "@/components/ui/hold-menu-row";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
 import { Select } from "@/components/ui/input";
@@ -221,7 +222,9 @@ function MemberRow({
   const cannotLeave = isMe && owner && lastOwner;
   const editorId = `access-${m.user_id}`;
   return (
-    <li className={cn("px-4 py-4", open && "bg-bg")}>
+    <HoldMenuRow className={cn("px-4 py-4", open && "bg-bg")}>
+      {(menu) => (
+      <>
       <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
         <Avatar name={m.name} email={m.email} size="lg" className="size-10 text-ui" />
         <div className="min-w-0 flex-[1_1_180px]">
@@ -255,7 +258,7 @@ function MemberRow({
           )}
           {canManage || isMe ? (
             <div className={cn("flex justify-center", ACTIONS_COL)}>
-              <DropdownMenu title={m.name}>
+              <DropdownMenu title={m.name} open={menu.open} onOpenChange={menu.onOpenChange}>
                 <DropdownMenuTrigger asChild>
                   <IconButton label={`Actions for ${m.name}`} noTooltip>
                     <Ellipsis aria-hidden className="size-[18px]" />
@@ -277,7 +280,9 @@ function MemberRow({
       {open && (
         <AccessEditor id={editorId} who={m.name} access={m} ws={ws} saving={saving} onSave={onUpdate} onDone={onToggle} emptyHint="Pick at least one folder, or remove them from the workspace." />
       )}
-    </li>
+      </>
+      )}
+    </HoldMenuRow>
   );
 }
 
