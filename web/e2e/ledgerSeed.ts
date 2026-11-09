@@ -1,5 +1,6 @@
 import type { APIRequestContext, Browser, TestInfo } from "@playwright/test";
 import { randomBytes } from "node:crypto";
+import { crc32, deflateSync } from "node:zlib";
 import { expect, newClientContext, skipIntro } from "./fixtures";
 
 /**
@@ -12,7 +13,8 @@ import { expect, newClientContext, skipIntro } from "./fixtures";
  *  - Two more workspaces, so the switcher lists three.
  *  - A second person, limited to the Operations folder (NAV-10).
  *  - A record page in the Side projects workspace, which the other shots do not show: Accounts and Bills, with an
- *    account whose page has a heading, a list and both embeds (REC-5, REC-6).
+ *    account whose page has a heading, a list and both embeds (REC-5, REC-6), a Files property holding a picture, a PDF
+ *    and a Word file (REC-3), two linked bills and a thread of comments.
  */
 
 const PASSWORD = "correct horse battery staple 42";
@@ -41,6 +43,15 @@ export interface LedgerSeed {
   palette: string;
   /** A record with a page (REC-5, REC-6): a heading, a list, its linked bills and a view of the unpaid ones. */
   pageRecord: { baseId: string; tableId: string; viewId: string; recordId: string; title: string };
+  /** The properties of the record page's collection (Accounts) that the property screens open, by name. */
+  pageFields: { status: string; perYear: string; bills: string; files: string };
+  /** A bill linked to the page record, which the linked-record peek shows. */
+  peekedBill: string;
+  /**
+   * An account with exactly one linked bill. A property with several links can be reordered, so a finger that rests on one
+   * of its cards drags it; with one link the same hold opens the peek, which is what a phone's shot needs.
+   */
+  soloLink: { recordId: string; billId: string; billTitle: string };
 }
 
 async function call<T>(request: APIRequestContext, method: "post" | "patch", path: string, data: unknown): Promise<T> {
@@ -59,7 +70,7 @@ function day(days: number): string {
 /** The properties of a collection by name, for a view's settings. */
 type FieldIds = Record<string, string>;
 
-type FieldSpec = { name: string; type: "single_select"; choices: string[] } | { name: string; type: "date" | "checkbox" | "number" | "text" };
+type FieldSpec = { name: string; type: "single_select"; choices: string[] } | { name: string; type: "date" | "checkbox" | "number" | "text" | "email" | "attachment" };
 
 interface CollectionSpec {
   name: string;
@@ -106,6 +117,76 @@ async function collection(request: APIRequestContext, baseId: string, spec: Coll
     views[v.name] = (await call<{ id: string }>(request, "post", `/api/tables/${table.id}/views`, { name: v.name, type: v.type, config: v.config?.(propertyIds) ?? null })).id;
   }
   return { id: table.id, viewId: table.views[0]!.id, views };
+}
+
+/** A PNG of `width` x `height` pixels, each pixel from `paint`: no image library is needed for a picture to upload. */
+function png(width: number, height: number, paint: (x: number, y: number) => [number, number, number]): Buffer {
+  const raw = Buffer.alloc((width * 3 + 1) * height);
+  for (let y = 0; y < height; y++) {
+    const row = y * (width * 3 + 1);
+    for (let x = 0; x < width; x++) raw.set(paint(x, y), row + 1 + x * 3);
+  }
+  const chunk = (type: string, data: Buffer) => {
+    const head = Buffer.alloc(8);
+    head.writeUInt32BE(data.length, 0);
+    head.write(type, 4, "ascii");
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), data])), 0);
+    return Buffer.concat([head, data, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr.set([8, 2, 0, 0, 0], 8); // 8 bits, RGB
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
+}
+
+/** A shopfront in flat colours: an awning of stripes over a door and a window, so the tile's crop still reads as a picture. */
+function shopfront(): Buffer {
+  return png(720, 480, (x, y) => {
+    if (y < 150) return [236, 242, 250];
+    if (y < 230) return Math.floor(x / 60) % 2 === 0 ? [31, 90, 224] : [245, 247, 252];
+    if (x > 90 && x < 330 && y > 270 && y < 420) return [170, 205, 235];
+    if (x > 450 && x < 600 && y > 260) return [38, 70, 83];
+    return y > 440 ? [120, 130, 145] : [250, 244, 232];
+  });
+}
+
+/** A one-page PDF with a title and two lines, enough for the server to draw its first page as a preview. */
+function agreement(): Buffer {
+  const text = "BT /F1 26 Tf 60 720 Td (Service agreement) Tj /F1 13 Tf 0 -44 Td (Fernwood Dental and Northwind Studio) Tj 0 -22 Td (Website care plan, billed monthly.) Tj ET";
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Length ${text.length} >>\nstream\n${text}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  let out = "%PDF-1.4\n";
+  const offsets = objects.map((o, i) => {
+    const at = out.length;
+    out += `${i + 1} 0 obj\n${o}\nendobj\n`;
+    return at;
+  });
+  const xref = out.length;
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}`;
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, "latin1");
+}
+
+interface UploadedFile {
+  id: string;
+  filename: string;
+  mime: string;
+  size: number;
+  width?: number;
+  height?: number;
+}
+
+async function upload(request: APIRequestContext, baseId: string, name: string, mimeType: string, buffer: Buffer): Promise<UploadedFile> {
+  const res = await request.post(`/api/bases/${baseId}/attachments`, { multipart: { file: { name, mimeType, buffer } }, headers: CSRF });
+  expect(res.ok(), `upload ${name}: ${res.status()} ${await res.text()}`).toBeTruthy();
+  return (await res.json()) as UploadedFile;
 }
 
 async function signUp(request: APIRequestContext, name: string): Promise<void> {
@@ -405,16 +486,38 @@ export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<
     name: "Accounts",
     color: "blue",
     recordNoun: "account",
-    fields: [{ name: "Status", type: "single_select", choices: ["Active", "Paused"] }],
-    rows: [["Fernwood Dental", "Active"], ["Oakline Cycles", "Active"], ["Studio Vesper", "Paused"]],
+    fields: [
+      { name: "Status", type: "single_select", choices: ["Active", "Paused", "Prospect"] },
+      { name: "Renewal", type: "date" },
+      { name: "Contact", type: "email" },
+      { name: "Monthly", type: "number" },
+      { name: "Files", type: "attachment" },
+    ],
+    rows: [
+      ["Fernwood Dental", "Active", day(41), "dana@fernwood.example", 250, null],
+      ["Oakline Cycles", "Active", day(75), "hello@oakline.example", 180, null],
+      ["Studio Vesper", "Paused", null, null, null, null],
+    ],
   });
   const rows = async (viewId: string) => ((await (await r.post(`/api/views/${viewId}/query`, { data: { limit: 50 }, headers: CSRF })).json()) as { records: { id: string; values: Record<string, unknown> }[] }).records;
   const billRows = await rows(defaultViews["Bills"]!);
   const accountRows = await rows(defaultViews["Accounts"]!);
   const billsLink = await call<{ id: string }>(r, "post", `/api/tables/${t["Accounts"]}/fields`, { name: "Bills", type: "link", options: { linked_table_id: t["Bills"], single: false } });
   const accountsSchema = await (await r.get(`/api/bases/${sideTop}`)).json();
-  const pageField = (accountsSchema.tables as { id: string; body_field_id: string }[]).find((x) => x.id === t["Accounts"])!.body_field_id;
+  const accountsTable = (accountsSchema.tables as { id: string; body_field_id: string; fields: { id: string; name: string }[] }[]).find((x) => x.id === t["Accounts"])!;
+  const pageField = accountsTable.body_field_id;
+  const accountField = (name: string) => accountsTable.fields.find((f) => f.name === name)!.id;
   const fernwood = accountRows[0]!.id;
+  // A computed property, for the formula editor's shot.
+  const perYear = await call<{ id: string }>(r, "post", `/api/tables/${t["Accounts"]}/fields`, { name: "Per year", type: "formula", options: { expression: "{Monthly} * 12" } });
+  // Three files of three kinds: a picture (it also fills the record's tile), a PDF drawn from its first page and a Word
+  // file, which has no preview and shows its type.
+  const storefront = await upload(r, sideTop, "fernwood-storefront.png", "image/png", shopfront());
+  const files = [
+    storefront,
+    await upload(r, sideTop, "service-agreement.pdf", "application/pdf", agreement()),
+    await upload(r, sideTop, "brand-guidelines.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", Buffer.from("PK\u0003\u0004 not a real document")),
+  ];
   const pageText = [
     "## This quarter",
     "- Send the revised quote before the 12th",
@@ -424,10 +527,13 @@ export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<
     "Every bill still to be paid:",
     "```openbase\n" + JSON.stringify({ embed: "view", view: savedViews["Bills / Unpaid bills"], limit: 10 }) + "\n```",
   ].join("\n\n");
-  await call(r, "patch", `/api/tables/${t["Accounts"]}/records`, { records: [{ id: fernwood, values: { [billsLink.id]: billRows.slice(0, 2).map((b) => b.id), [pageField]: pageText } }] });
+  await call(r, "patch", `/api/tables/${t["Accounts"]}/records`, {
+    records: [{ id: fernwood, values: { [billsLink.id]: billRows.slice(0, 2).map((b) => b.id), [pageField]: pageText, [accountField("Files")]: files } }],
+  });
+  await call(r, "patch", `/api/tables/${t["Accounts"]}/records`, { records: [{ id: accountRows[1]!.id, values: { [billsLink.id]: [billRows[2]!.id] } }] });
   // A thread for the comments panel (REC-7); the changes above are its history.
   await call(r, "post", `/api/records/${fernwood}/comments`, { body: "Sent the revised quote. They want the annual price before the 12th." });
-  await call(r, "post", `/api/records/${fernwood}/comments`, { body: "I will move the hosting plan to annual **today**." });
+  await call(r, "post", `/api/records/${fernwood}/comments`, { body: `I will move the hosting plan to annual **today**.\n\n![The shopfront](/api/attachments/${storefront.id}/${storefront.filename})` });
 
   // A person limited to the Operations folder.
   const invite = await call<{ url: string }>(r, "post", `/api/bases/${operations.id}/invites`, { role: "editor", email: null });
@@ -449,6 +555,9 @@ export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<
     views: savedViews,
     palette: "mark",
     pageRecord: { baseId: sideTop, tableId: t["Accounts"]!, viewId: defaultViews["Accounts"]!, recordId: fernwood, title: "Fernwood Dental" },
+    pageFields: { status: accountField("Status"), perYear: perYear.id, bills: billsLink.id, files: accountField("Files") },
+    peekedBill: billRows[1]!.id,
+    soloLink: { recordId: accountRows[1]!.id, billId: billRows[2]!.id, billTitle: "Design software" },
   };
   await ownerContext.close();
   await limitedContext.close();

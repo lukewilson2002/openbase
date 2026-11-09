@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -97,6 +97,36 @@ async function applyPhrase(page: Page, phrase: string, chip: string): Promise<vo
 /** Takes the pointer and the keyboard focus off the screen's controls, so no hover or focus ring is part of the picture. */
 async function rest(page: Page): Promise<void> {
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.mouse.move(1435, 995);
+}
+
+/** The seeded account's record page (Fernwood Dental): its title and its page's editor (a chunk of its own) are up, so no placeholder is in the picture. */
+async function openAccount(page: Page, seed: LedgerSeed): Promise<void> {
+  const r = seed.pageRecord;
+  await page.goto(`/base/${r.baseId}/${r.tableId}/${r.viewId}/r/${r.recordId}`);
+  await expect(page.getByRole("heading", { level: 1, name: r.title })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Page" })).toBeVisible();
+}
+
+/** There is a picture in `scope` and every one has been decoded. */
+async function picturesLoaded(scope: Locator): Promise<void> {
+  await expect.poll(() => scope.locator("img").evaluateAll((all) => all.length > 0 && all.every((i) => (i as HTMLImageElement).complete && (i as HTMLImageElement).naturalWidth > 0))).toBe(true);
+}
+
+/** The record page's property list. */
+const propertyList = (page: Page) => page.getByRole("main", { name: "Record" }).getByRole("region", { name: "Properties" });
+
+/** A property's name opens its menu, which is a pop-over on a desktop and a sheet on a phone; "Edit property" opens the dialog. */
+async function editProperty(page: Page, name: string): Promise<Locator> {
+  await propertyList(page).getByRole("button", { name, exact: true }).click();
+  await page.getByRole("menuitem", { name: "Edit property" }).or(page.getByRole("button", { name: "Edit property", exact: true })).click();
+  const dialog = page.getByRole("dialog", { name: "Edit property" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+/** Takes the pointer off the screen's controls but leaves the focus where it is: a pop-over that closes when it loses the focus stays in the shot. */
+async function restPointer(page: Page): Promise<void> {
   await page.mouse.move(1435, 995);
 }
 
@@ -462,10 +492,11 @@ const SHOTS: Shot[] = [
     slug: "record-page",
     name: "record page",
     open: async ({ page, seed, phone }) => {
-      await page.goto(`/base/${seed.pageRecord.baseId}/${seed.pageRecord.tableId}/${seed.pageRecord.viewId}/r/${seed.pageRecord.recordId}`);
-      await expect(page.getByRole("heading", { level: 1, name: seed.pageRecord.title })).toBeVisible();
+      await openAccount(page, seed);
       const box = page.getByRole("textbox", { name: "Page" });
       await expect(box.getByRole("heading", { name: "This quarter" })).toBeVisible();
+      // The record's tile is the shopfront picture.
+      await picturesLoaded(page.getByRole("main", { name: "Record" }));
       // The embeds have their rows before the picture is taken.
       await expect(page.getByRole("region", { name: /^Bills · linked to this account/ }).getByRole("link", { name: "Domain renewal" })).toBeVisible();
       if (phone) {
@@ -478,19 +509,34 @@ const SHOTS: Shot[] = [
     },
   },
 
+  {
+    row: 18,
+    slug: "record-add-property",
+    name: "record page, the Add property box with a guessed type",
+    open: async ({ page, seed }) => {
+      await openAccount(page, seed);
+      await page.getByRole("main", { name: "Record" }).getByRole("button", { name: "Add property" }).click();
+      const box = page.getByRole("group", { name: "Add property" });
+      await box.getByRole("textbox", { name: "Name" }).fill("Next review");
+      await box.getByRole("textbox", { name: "Value" }).fill("Nov 14");
+      await expect(box.getByText("Date · Guessed from “Nov 14”")).toBeVisible();
+      await box.scrollIntoViewIfNeeded();
+    },
+  },
+
   // 19 · Comments and history panels (REC-7): a 360 px panel beside the page on a desktop, a full-screen sheet on a phone.
   {
     row: 19,
     slug: "comments-panel",
     name: "comments panel",
     open: async ({ page, seed, phone }) => {
-      await page.goto(`/base/${seed.pageRecord.baseId}/${seed.pageRecord.tableId}/${seed.pageRecord.viewId}/r/${seed.pageRecord.recordId}`);
-      await expect(page.getByRole("heading", { level: 1, name: seed.pageRecord.title })).toBeVisible();
+      await openAccount(page, seed);
       await page.getByRole("button", { name: /^Comments \(2\)$/ }).click();
       const panel = phone ? page.getByRole("dialog", { name: "Comments" }) : page.getByRole("complementary", { name: "Comments" });
       await expect(panel.getByText("Sent the revised quote.")).toBeVisible();
-      // The box to write in has loaded (its editor is a chunk of its own).
+      // The box to write in has loaded (its editor is a chunk of its own), and so has the picture in the second comment.
       await expect(panel.getByRole("textbox", { name: "Write a comment" })).toBeVisible();
+      await picturesLoaded(panel);
       await rest(page);
     },
   },
@@ -499,8 +545,7 @@ const SHOTS: Shot[] = [
     slug: "history-panel",
     name: "history panel",
     open: async ({ page, seed, phone }) => {
-      await page.goto(`/base/${seed.pageRecord.baseId}/${seed.pageRecord.tableId}/${seed.pageRecord.viewId}/r/${seed.pageRecord.recordId}`);
-      await expect(page.getByRole("heading", { level: 1, name: seed.pageRecord.title })).toBeVisible();
+      await openAccount(page, seed);
       if (phone) {
         await page.getByRole("button", { name: "More" }).click();
         await page.getByRole("button", { name: "History" }).click();
@@ -519,8 +564,7 @@ const SHOTS: Shot[] = [
     slug: "page-embeds",
     name: "page embeds",
     open: async ({ page, seed, phone }) => {
-      await page.goto(`/base/${seed.pageRecord.baseId}/${seed.pageRecord.tableId}/${seed.pageRecord.viewId}/r/${seed.pageRecord.recordId}`);
-      await expect(page.getByRole("heading", { level: 1, name: seed.pageRecord.title })).toBeVisible();
+      await openAccount(page, seed);
       const linked = page.getByRole("region", { name: /^Bills · linked to this account/ });
       const unpaid = page.getByRole("region", { name: /^Unpaid bills/ });
       await expect(linked.getByRole("link", { name: "Domain renewal" })).toBeVisible();
@@ -528,6 +572,96 @@ const SHOTS: Shot[] = [
       // The page's top (a desktop shows both tables), or the first table's, at the top of the screen.
       await (phone ? linked : page.getByRole("region", { name: "Page" })).evaluate((el) => el.scrollIntoView({ block: "start" }));
       await rest(page);
+    },
+  },
+
+  // 21 · Property editor, choices and formula (FLD-2 to FLD-6): the dialog (a sheet on a phone) from a property's menu on the
+  // record page, for a choice property, the type list and a formula.
+  {
+    row: 21,
+    slug: "property-editor",
+    name: "property editor with choices",
+    open: async ({ page, seed }) => {
+      await openAccount(page, seed);
+      const dialog = await editProperty(page, "Status");
+      await expect(dialog.getByRole("textbox", { name: "Name of option 3" })).toBeVisible();
+      await rest(page);
+    },
+  },
+  {
+    row: 21,
+    slug: "property-types",
+    name: "property editor with the type list open",
+    open: async ({ page, seed }) => {
+      await openAccount(page, seed);
+      const dialog = await editProperty(page, "Renewal");
+      await dialog.getByRole("button", { name: /^Type/ }).click();
+      await expect(dialog.getByRole("listbox", { name: "Property types" }).or(page.getByRole("listbox", { name: "Property types" }))).toBeVisible();
+      await rest(page);
+    },
+  },
+  {
+    row: 21,
+    slug: "property-formula",
+    name: "property editor with a formula and its live check",
+    open: async ({ page, seed }) => {
+      await openAccount(page, seed);
+      const dialog = await editProperty(page, "Per year");
+      await expect(dialog.getByRole("combobox", { name: "Formula" })).toHaveValue("{Monthly} * 12");
+      await expect(dialog.getByText(/Looks good/)).toBeVisible();
+      await rest(page);
+    },
+  },
+  {
+    row: 21,
+    slug: "property-type-change",
+    name: "property editor warning that a type change clears values",
+    open: async ({ page, seed }) => {
+      await openAccount(page, seed);
+      const dialog = await editProperty(page, "Contact");
+      await dialog.getByRole("button", { name: /^Type/ }).click();
+      await page.getByRole("option", { name: /^Number/ }).click();
+      await expect(dialog.getByRole("status")).toContainText(/values? may be cleared/);
+      await rest(page);
+    },
+  },
+
+  // 22 · Link picker and linked record peek (FLD-5, REC-9): the picker is a pop-over on a desktop and a bottom sheet on a
+  // phone; the peek is a hover card on a desktop and a sheet when a finger holds the record.
+  {
+    row: 22,
+    slug: "link-picker",
+    name: "link picker",
+    open: async ({ page, seed }) => {
+      await openAccount(page, seed);
+      await page.locator(`[data-linked-record="${seed.peekedBill}"]`).click({ position: { x: 4, y: 4 } });
+      const list = page.getByRole("listbox", { name: "Records" });
+      await expect(list.getByRole("option", { name: /Design software/ })).toBeVisible();
+      await restPointer(page);
+    },
+  },
+  {
+    row: 22,
+    slug: "linked-peek",
+    name: "linked record peek",
+    open: async ({ page, seed, phone }) => {
+      if (phone) {
+        // A finger resting on the card opens the peek as a sheet, where the record's one link can't be dragged. Playwright
+        // cannot hold a touch, so the press is sent the way the browser sends it.
+        const solo = seed.soloLink;
+        await page.goto(`/base/${seed.pageRecord.baseId}/${seed.pageRecord.tableId}/${seed.pageRecord.viewId}/r/${solo.recordId}`);
+        const card = page.locator(`[data-linked-record="${solo.billId}"]`);
+        await expect(card).toBeVisible();
+        await card.evaluate((el) => {
+          const box = el.getBoundingClientRect();
+          el.dispatchEvent(new PointerEvent("pointerdown", { pointerType: "touch", bubbles: true, clientX: box.x + 8, clientY: box.y + 8 }));
+        });
+        await expect(page.getByRole("dialog", { name: solo.billTitle })).toBeVisible();
+        return;
+      }
+      await openAccount(page, seed);
+      await page.locator(`[data-linked-record="${seed.peekedBill}"]`).hover();
+      await expect(page.locator("[data-record-peek]")).toContainText("Domain renewal");
     },
   },
 
@@ -539,6 +673,35 @@ const SHOTS: Shot[] = [
     open: async ({ page, seed }) => {
       await page.goto(`/base/${seed.folders.archive}`);
       await expect(page.getByRole("heading", { name: "No collections in Archive 2025 yet" })).toBeVisible();
+    },
+  },
+
+  // 44 · File preview (REC-3): the record page with a picture, a PDF and a Word file; the picture also fills the record's tile.
+  // The tiles' pictures have loaded before a shot is taken: a tile whose picture failed shows its type instead.
+  {
+    row: 44,
+    slug: "file-preview",
+    name: "file tiles on the record page",
+    open: async ({ page, seed }) => {
+      await openAccount(page, seed);
+      const file = propertyList(page).getByRole("link", { name: /fernwood-storefront\.png/ });
+      await expect(file).toBeVisible();
+      // Pictures load lazily, once they are on screen.
+      await file.scrollIntoViewIfNeeded();
+      await picturesLoaded(page.getByRole("main", { name: "Record" }));
+      await rest(page);
+    },
+  },
+  {
+    row: 44,
+    slug: "file-editor",
+    name: "file list while editing the Files property",
+    open: async ({ page, seed }) => {
+      await openAccount(page, seed);
+      await propertyList(page).getByRole("button", { name: "Edit Files" }).click();
+      await expect(page.getByRole("button", { name: "Remove brand-guidelines.docx" })).toBeVisible();
+      await picturesLoaded(page.locator("body"));
+      await restPointer(page);
     },
   },
 ];
