@@ -9,10 +9,10 @@ const DAY = 24 * 3600_000;
 
 export const TRASH_KIND_LABELS: Record<TrashKind, string> = {
   record: "Record",
-  field: "Field",
-  table: "Table",
+  field: "Property",
+  table: "Collection",
   view: "View",
-  base: "Project",
+  base: "Folder",
   workspace: "Workspace",
 };
 
@@ -24,18 +24,19 @@ export function trashKindLabel(kind: string): string {
 export function trashItemName(item: TrashItem): string {
   const name = item.name.trim();
   if (name) return name;
-  return item.kind === "record" ? "Untitled record" : `Unnamed ${item.kind}`;
+  return item.kind === "record" ? "Untitled record" : `Unnamed ${trashKindLabel(item.kind).toLowerCase()}`;
 }
 
 /**
- * What it is and where it was: "Record in Household › Chores › Chores" (workspace, base, then table
- * for what lives in one); a workspace is just "Workspace".
+ * What it is and where it was: "Record in Household › Chores › Chores" (workspace, folder, then collection
+ * for what lives in one); a workspace is just "Workspace". The top-level folder is never named, since its
+ * collections sit directly under the workspace (`topLevel` holds the ids of those folders).
  */
-export function trashItemPlace(item: TrashItem): string {
+export function trashItemPlace(item: TrashItem, topLevel?: ReadonlySet<string>): string {
   const kind = trashKindLabel(item.kind);
   if (item.kind === "workspace") return kind;
   const parts = [item.workspace_name];
-  if (item.kind !== "base" && item.base_name) parts.push(item.base_name);
+  if (item.kind !== "base" && item.base_name && !(item.base_id && topLevel?.has(item.base_id))) parts.push(item.base_name);
   if (item.table_name) parts.push(item.table_name);
   return `${kind} in ${parts.join(" › ")}`;
 }
@@ -63,4 +64,11 @@ export function retentionDays(items: readonly TrashItem[]): number {
   const item = items[0];
   if (!item) return DEFAULT_RETENTION_DAYS;
   return Math.max(1, Math.round((item.expires_at - item.deleted_at) / DAY));
+}
+
+/** The palette color of the item's mark: its own for a workspace, folder or collection, else its collection's, else its folder's. */
+export function trashItemHue(item: TrashItem): string {
+  if (item.kind === "workspace") return item.workspace_color;
+  if (item.kind === "base") return item.base_color ?? item.workspace_color;
+  return item.table_color ?? item.base_color ?? item.workspace_color;
 }

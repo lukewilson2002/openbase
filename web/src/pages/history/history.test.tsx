@@ -29,7 +29,7 @@ const workspaces: WorkspaceSummary[] = [
     member_count: 2,
     pending_invite_count: 0,
     bases: [
-      { id: "app1", workspace_id: "wsp1", name: "CRM", color: "blue", icon: "briefcase", role: "owner", is_top_level: false, people: [], tables: [] },
+      { id: "app1", workspace_id: "wsp1", name: "CRM", color: "blue", icon: "briefcase", role: "owner", is_top_level: false, people: [], tables: [{ id: "tbl1", name: "Deals", color: "orange", record_count: 3, record_noun: "" }] },
       { id: "app2", workspace_id: "wsp1", name: "Ops", color: "purple", role: "owner", is_top_level: false, people: [], tables: [] },
     ],
   },
@@ -50,8 +50,8 @@ const FIELDS = Object.fromEntries([STATUS, NOTES, DUE, OWNER].map((f) => [f.id, 
 
 const ADA = { id: "usr1", name: "Ada Lovelace" };
 const GRACE = { id: "usr2", name: "Grace Hopper" };
-const crm = { workspace_id: "wsp1", workspace_name: "Acme", workspace_color: "green", base_id: "app1", base_name: "CRM", base_icon: "briefcase", base_color: "blue", table_id: "tbl1", table_name: "Deals" };
-const ops = { ...crm, base_id: "app2", base_name: "Ops", base_color: "purple", table_id: "tbl2", table_name: "Sprints" };
+const crm = { workspace_id: "wsp1", workspace_name: "Acme", workspace_color: "green", base_id: "app1", base_name: "CRM", base_icon: "briefcase", base_color: "blue", table_id: "tbl1", table_name: "Deals", table_color: "orange" };
+const ops = { ...crm, base_id: "app2", base_name: "Ops", base_color: "purple", table_id: "tbl2", table_name: "Sprints", table_color: "teal" };
 
 const item = (id: string, kind: string, ago: number, over: Partial<ActivityItem> = {}): ActivityItem => ({
   id,
@@ -123,11 +123,12 @@ describe("History page", () => {
     renderApp({ route: "/history" });
     await screen.findAllByRole("article");
     const deal = card("Big deal", 0);
-    expect(deal).toHaveTextContent(/Big dealRecord in.*Acme.*›.*CRM.*›.*Deals/);
-    expect(within(deal).getByRole("link", { name: "Big deal" })).toHaveAttribute("href", "/base/app1/tbl1?record=rec1");
+    expect(deal).toHaveTextContent(/Big deal.*Acme.*›.*CRM.*›.*Deals/);
+    expect(within(deal).getByRole("link", { name: "Big deal" })).toHaveAttribute("href", "/base/app1/tbl1/r/rec1");
     expect(card("Sprint 1", 0)).toHaveTextContent(/Acme.*›.*Ops.*›.*Sprints/);
-    expect(within(card("Sprint 1", 0)).getByRole("link", { name: "Sprint 1" })).toHaveAttribute("href", "/base/app2/tbl2?record=rec2");
-    // The place is plain text: no tiles for the workspace or the project.
+    expect(within(card("Sprint 1", 0)).getByRole("link", { name: "Sprint 1" })).toHaveAttribute("href", "/base/app2/tbl2/r/rec2");
+    // Each step of the place sits beside its color mark, and no icon tile stands for it.
+    expect(deal.querySelectorAll(".ob-mark-8")).toHaveLength(3);
     expect(deal.querySelectorAll("[data-entity-tile]")).toHaveLength(0);
     // A deleted record is struck through and cannot be opened.
     const gone = card("Old plan");
@@ -205,64 +206,64 @@ describe("History page", () => {
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["Yesterday"]);
   });
 
-  it("filters by workspace, project, person and kind, writing them to the URL and asking again", async () => {
+  it("filters by workspace, folder, collection, person and kind with chips in a bar, writing them to the URL and asking again", async () => {
     stubDesktop();
     const user = userEvent.setup();
     const api = routes();
     renderApp({ route: "/history" });
     await screen.findAllByRole("article");
     expect(lastQuery(api).get("kind")).toBeNull();
-    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
-
-    await user.click(screen.getByRole("button", { name: "Changes" }));
+    const bar = screen.getByRole("combobox", { name: "Filter the history" });
+    // The bar offers a few of each filter before anything is typed.
+    await user.click(bar);
+    await user.click(await screen.findByRole("option", { name: /Kind: Changes/ }));
     await waitFor(() => expect(lastQuery(api).get("kind")).toBe("update"));
-    expect(screen.getByRole("button", { name: "Changes" })).toHaveAttribute("aria-pressed", "true");
-    for (const [chip, kind] of [["New records", "create"], ["Deleted", "delete"], ["Comments", "comment"]] as const) {
-      await user.click(screen.getByRole("button", { name: chip }));
-      await waitFor(() => expect(lastQuery(api).get("kind")).toBe(kind));
-    }
+    expect(screen.getByRole("button", { name: "Remove Kind: Changes" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Workspace: All workspaces" }));
-    await user.click(await screen.findByRole("menuitemradio", { name: "Acme" }));
+    // Typing only narrows what can be picked: there is no phrase parsing.
+    await user.type(bar, "comm");
+    await user.click(await screen.findByRole("option", { name: /Kind: Comments/ }));
+    await waitFor(() => expect(lastQuery(api).get("kind")).toBe("comment"));
+    expect(screen.queryByRole("button", { name: "Remove Kind: Changes" })).toBeNull();
+
+    await user.type(bar, "acme");
+    await user.click(await screen.findByRole("option", { name: /Workspace: Acme/ }));
     await waitFor(() => expect(lastQuery(api).get("workspace")).toBe("wsp1"));
     expect(lastQuery(api).get("kind")).toBe("comment");
 
-    // The project list follows the workspace.
-    await user.click(screen.getByRole("button", { name: "Project: All projects" }));
-    const projects = await screen.findByRole("menu");
-    expect(within(projects).getAllByRole("menuitemradio").map((i) => i.textContent)).toEqual(["All projects", "CRM", "Ops"]);
-    await user.click(within(projects).getByRole("menuitemradio", { name: "Ops" }));
-    await waitFor(() => expect(lastQuery(api).get("base")).toBe("app2"));
+    // A collection also names its folder and workspace.
+    await user.type(bar, "deals");
+    await user.click(await screen.findByRole("option", { name: /Collection: Deals/ }));
+    await waitFor(() => expect(lastQuery(api).get("table")).toBe("tbl1"));
+    expect(lastQuery(api).get("base")).toBe("app1");
+    expect(screen.getByRole("button", { name: "Remove Folder: CRM" })).toBeInTheDocument();
 
-    // So does the list of people.
-    await user.click(screen.getByRole("button", { name: "Person: Everyone" }));
-    const people = await screen.findByRole("menu");
-    expect(within(people).getAllByRole("menuitemradio").map((i) => i.textContent)).toEqual(["Everyone", "ALAda Lovelace", "GHGrace Hopper"]);
-    await user.click(within(people).getByRole("menuitemradio", { name: "Grace Hopper" }));
+    await user.type(bar, "grace");
+    await user.click(await screen.findByRole("option", { name: /Person: Grace Hopper/ }));
     await waitFor(() => expect(lastQuery(api).get("user")).toBe("usr2"));
-    expect(screen.getByRole("button", { name: "Person: Grace Hopper" })).toBeInTheDocument();
 
-    // Another workspace clears the project; All clears the kind.
-    await user.click(screen.getByRole("button", { name: "Workspace: Acme" }));
-    await user.click(await screen.findByRole("menuitemradio", { name: "Home" }));
+    // Another workspace drops the folder and collection that belong to the first.
+    await user.type(bar, "home");
+    await user.click(await screen.findByRole("option", { name: /Workspace: Home/ }));
     await waitFor(() => expect(lastQuery(api).get("workspace")).toBe("wsp2"));
     expect(lastQuery(api).get("base")).toBeNull();
+    expect(lastQuery(api).get("table")).toBeNull();
     expect(lastQuery(api).get("user")).toBe("usr2");
-    await user.click(screen.getByRole("button", { name: "All" }));
+
+    await user.click(screen.getByRole("button", { name: "Remove Kind: Comments" }));
     await waitFor(() => expect(lastQuery(api).get("kind")).toBeNull());
   });
 
-  it("opens filtered by what the link says, showing the project's workspace", async () => {
+  it("opens filtered by what the link says, with a chip for each filter and the folder's workspace in the menu", async () => {
     stubDesktop();
     const api = routes();
     renderApp({ route: "/history?base=app2&user=usr2&kind=update&order=oldest" });
     await screen.findAllByRole("article");
     const q = lastQuery(api);
     expect([q.get("base"), q.get("user"), q.get("kind"), q.get("order")]).toEqual(["app2", "usr2", "update", "oldest"]);
-    expect(await screen.findByRole("button", { name: "Workspace: Acme" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Project: Ops" })).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Person: Grace Hopper" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Changes" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Remove Folder: Ops" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Remove Person: Grace Hopper" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove Kind: Changes" })).toBeInTheDocument();
     // The sidebar shows that workspace, as it does for any page of one.
     expect(await within(screen.getByRole("navigation", { name: "Main menu" })).findByRole("button", { name: /^Acme/ })).toBeInTheDocument();
   });

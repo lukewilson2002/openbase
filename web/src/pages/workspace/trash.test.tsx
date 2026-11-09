@@ -48,9 +48,9 @@ const item = (over: Partial<TrashItem> & Pick<TrashItem, "kind" | "id" | "name">
 });
 
 const ITEMS: TrashItem[] = [
-  item({ kind: "record", id: "rec1", name: "Vacuum", base_id: "app1", base_name: "Chores", table_id: "tbl1", table_name: "Chores", deleted_by_id: "usr2", deleted_by_name: "Alex" }),
+  item({ kind: "record", id: "rec1", name: "Vacuum", base_id: "app1", base_name: "Chores", table_id: "tbl1", table_name: "Chores", table_color: "orange", deleted_by_id: "usr2", deleted_by_name: "Alex" }),
   item({ kind: "field", id: "fld1", name: "Notes", base_id: "app1", base_name: "Chores", table_id: "tbl2", table_name: "Chore log", deleted_by_id: USER.id, deleted_by_name: USER.name, deleted_at: NOW - DAY - HOUR, expires_at: NOW + 29 * DAY - HOUR }),
-  item({ kind: "table", id: "tbl9", name: "Old list", base_id: "app1", base_name: "Chores", deleted_at: NOW - 3 * DAY, expires_at: NOW + 27 * DAY }),
+  item({ kind: "table", id: "tbl9", name: "Old list", table_color: "red", base_id: "app1", base_name: "Chores", deleted_at: NOW - 3 * DAY, expires_at: NOW + 27 * DAY }),
   item({ kind: "base", id: "app9", name: "Wedding", icon: "heart", base_id: "app9", base_name: "Wedding", base_color: "pink", deleted_by_id: USER.id }),
   item({ kind: "workspace", id: "wsp9", name: "Book club", workspace_id: "wsp9", workspace_name: "Book club", workspace_color: "teal", deleted_by_id: USER.id, expires_at: NOW + 10 * DAY }),
   item({ kind: "record", id: "rec2", name: "Acme Co.", workspace_id: "wsp2", workspace_name: "Side business", base_id: "app3", base_name: "Clients", table_id: "tbl3", table_name: "Clients" }),
@@ -91,18 +91,20 @@ describe("Trash page", () => {
     routes();
     renderApp({ route: "/trash" });
     expect(await screen.findByRole("heading", { level: 1, name: "Trash" })).toBeInTheDocument();
-    expect(await row("Vacuum")).toHaveTextContent("VacuumRecord in Household › Chores › Chores · Deleted by Alex, 2 hours ago");
-    expect(await row("Notes")).toHaveTextContent("Field in Household › Chores › Chore log · Deleted by you, yesterday");
+    expect(await row("Vacuum")).toHaveTextContent("Vacuum30 days left · Record in Household › Chores › Chores · Deleted by Alex, 2 hours ago");
+    expect(await row("Notes")).toHaveTextContent("Property in Household › Chores › Chore log · Deleted by you, yesterday");
     // Nobody recorded: no "by".
-    expect(await row("Old list")).toHaveTextContent(/Table in Household › Chores · Deleted 3 days ago/);
+    expect(await row("Old list")).toHaveTextContent(/Collection in Household › Chores · Deleted 3 days ago/);
     expect(await row("Old list")).toHaveTextContent("27 days left");
-    expect(await row("Wedding")).toHaveTextContent("WeddingProject in Household · Deleted by you");
+    expect(await row("Wedding")).toHaveTextContent("Folder in Household · Deleted by you");
     expect(await row("Book club")).toHaveTextContent("Workspace · Deleted by you");
     expect(await row("Book club")).toHaveTextContent("10 days left");
-    // Bases and workspaces show their own tiles; everything else a plain icon of its kind.
-    expect((await row("Wedding")).querySelector("[data-entity-tile] svg.lucide-heart")).toBeInTheDocument();
-    expect((await row("Book club")).querySelector("[data-entity-tile]")).toHaveTextContent("B");
-    expect((await row("Vacuum")).querySelector("[data-entity-tile]")).toBeNull();
+    // Every item has its own color mark (a record its collection's, a folder its own), and no icon tile.
+    expect((await row("Wedding")).querySelector(".ob-mark-14")).toHaveClass("ob-hue-pink");
+    expect((await row("Vacuum")).querySelector(".ob-mark-14")).toHaveClass("ob-hue-orange");
+    expect((await row("Old list")).querySelector(".ob-mark-14")).toHaveClass("ob-hue-red");
+    expect((await row("Book club")).querySelector(".ob-mark-14")).toHaveClass("ob-hue-teal");
+    expect((await row("Wedding")).querySelector("[data-entity-tile], svg")).toBeNull();
     expect(screen.getByText("Things stay here for 30 days, then they're removed for good.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
   });
@@ -114,8 +116,7 @@ describe("Trash page", () => {
     expect(await row("Acme Co.")).toBeInTheDocument();
     expect(lastQuery(api).get("workspace_id")).toBe("wsp2");
     expect(screen.queryByText("Vacuum")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Workspace: Side business" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Project: All projects" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove Workspace: Side business" })).toBeInTheDocument();
     // The sidebar shows that workspace, as it does for any page of one.
     expect(within(screen.getByRole("navigation", { name: "Main menu" })).getByRole("button", { name: /^Side business/ })).toBeInTheDocument();
   });
@@ -126,8 +127,7 @@ describe("Trash page", () => {
     expect(await row("Vacuum")).toBeInTheDocument();
     expect(lastQuery(api).get("base_id")).toBe("app1");
     expect(within(await list()).queryByText("Wedding")).not.toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Workspace: Household" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Project: Chores" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Remove Folder: Chores" })).toBeInTheDocument();
   });
 
   it("filters by kind, workspace and base, and writes the filters to the URL", async () => {
@@ -142,24 +142,22 @@ describe("Trash page", () => {
     expect(screen.getByRole("button", { name: "Records" })).toHaveAttribute("aria-pressed", "true");
     await waitFor(() => expect(within(screen.getByRole("list", { name: "Deleted items" })).queryByText("Old list")).not.toBeInTheDocument());
 
-    await user.click(screen.getByRole("button", { name: "Workspace: All workspaces" }));
-    await user.click(await screen.findByRole("menuitemradio", { name: "Household" }));
+    const bar = screen.getByRole("combobox", { name: "Filter the trash" });
+    await user.type(bar, "house");
+    await user.click(await screen.findByRole("option", { name: /Workspace: Household/ }));
     await waitFor(() => expect(lastQuery(api).get("workspace_id")).toBe("wsp1"));
     expect(lastQuery(api).get("kind")).toBe("record");
     // The URL now says `?workspace=wsp1`: the sidebar shows that workspace.
     expect(within(screen.getByRole("navigation", { name: "Main menu" })).getByRole("button", { name: /^Household/ })).toBeInTheDocument();
 
-    // The base list follows the workspace.
-    await user.click(screen.getByRole("button", { name: "Project: All projects" }));
-    const menu = await screen.findByRole("menu");
-    expect(within(menu).getAllByRole("menuitemradio").map((i) => i.textContent)).toEqual(["All projects", "Chores", "Budget"]);
-    await user.click(within(menu).getByRole("menuitemradio", { name: "Budget" }));
+    await user.type(bar, "budget");
+    await user.click(await screen.findByRole("option", { name: /Folder: Budget/ }));
     await waitFor(() => expect(lastQuery(api).get("base_id")).toBe("app2"));
     expect(await screen.findByText("Nothing like that in the trash.")).toBeInTheDocument();
 
-    // Another workspace clears the base.
-    await user.click(screen.getByRole("button", { name: "Workspace: Household" }));
-    await user.click(await screen.findByRole("menuitemradio", { name: "Side business" }));
+    // Another workspace drops a folder that is not in it.
+    await user.type(bar, "side");
+    await user.click(await screen.findByRole("option", { name: /Workspace: Side business/ }));
     await waitFor(() => expect(lastQuery(api).get("workspace_id")).toBe("wsp2"));
     expect(lastQuery(api).get("base_id")).toBeNull();
     expect(await row("Acme Co.")).toBeInTheDocument();
@@ -256,8 +254,8 @@ describe("trash item text", () => {
   const record = ITEMS[0]!;
   it("names the place and who deleted it", () => {
     expect(trashItemPlace(record)).toBe("Record in Household › Chores › Chores");
-    expect(trashItemPlace(ITEMS[2]!)).toBe("Table in Household › Chores");
-    expect(trashItemPlace(ITEMS[3]!)).toBe("Project in Household");
+    expect(trashItemPlace(ITEMS[2]!)).toBe("Collection in Household › Chores");
+    expect(trashItemPlace(ITEMS[3]!)).toBe("Folder in Household");
     expect(trashItemPlace(ITEMS[4]!)).toBe("Workspace");
     expect(trashItemDeleted(record, "usr2", NOW)).toBe("Deleted by you, 2 hours ago");
     expect(trashItemDeleted(record, USER.id, NOW)).toBe("Deleted by Alex, 2 hours ago");

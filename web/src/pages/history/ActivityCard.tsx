@@ -8,6 +8,8 @@ import type { ActivityItem, ActivityPlace, Field } from "@/api/types";
 import { CommentBody } from "@/components/record/CommentsPanel";
 import { historyValueText } from "@/components/record/HistoryPanel";
 import { Avatar } from "@/components/ui/avatar";
+import { Card } from "@/components/ui/card";
+import { ColorMark } from "@/components/ui/color-mark";
 import type { FormatCtx } from "@/lib/cells/format";
 import { cn } from "@/lib/cn";
 import { formatDateTime } from "@/lib/format";
@@ -26,47 +28,63 @@ export interface ActivityCardProps {
   fields: Readonly<Record<string, Field>>;
   format: FormatCtx;
   now: number;
+  /** Ids of the workspaces' top-level folders: a collection there sits directly under its workspace, so no folder step is drawn. */
+  topLevel?: ReadonlySet<string>;
 }
 
-export function ActivityCard({ group, fields, format, now }: ActivityCardProps) {
+export function ActivityCard({ group, fields, format, now, topLevel }: ActivityCardProps) {
   const { record, place } = group;
   const name = record.name.trim() || "Untitled record";
   return (
-    <article aria-label={`Activity on ${name}`} className="overflow-hidden rounded-[14px] border border-line bg-surface">
-      <header className="min-w-0 border-b border-[color-mix(in_srgb,var(--line)_60%,var(--surface))] px-4 py-3 sm:px-[18px]">
-        {record.deleted ? (
-          <p className="min-w-0 break-words text-[0.9375rem] font-semibold text-muted">
-            <span className="line-through">{name}</span> <span className="text-[0.8125rem] font-normal">(deleted)</span>
-          </p>
-        ) : (
-          <Link to={`/base/${encodeURIComponent(place.base_id)}/${encodeURIComponent(place.table_id)}?record=${encodeURIComponent(record.id)}`} className="block min-w-0 break-words text-[0.9375rem] font-semibold text-fg hover:underline">
-            {name}
-          </Link>
-        )}
-        <Place place={place} />
-      </header>
-      <ul aria-label={`Activity on ${name}`} className="flex flex-col">
-        {group.items.map((item) => (
-          <li key={item.id} className="flex gap-3 border-b border-[color-mix(in_srgb,var(--line)_60%,var(--surface))] px-4 py-3 last:border-b-0 sm:px-[18px]">
-            <Avatar name={item.author?.name ?? "Someone"} size="sm" className="mt-0.5" />
-            <ActivityRow item={item} fields={fields} format={format} now={now} />
-          </li>
-        ))}
-      </ul>
-    </article>
+    <Card padded={false} className="overflow-hidden">
+      <article aria-label={`Activity on ${name}`}>
+        <header className="min-w-0 border-b border-line px-4 py-3">
+          {record.deleted ? (
+            <p className="min-w-0 break-words text-ui font-semibold text-muted">
+              <span className="line-through">{name}</span> <span className="text-label font-normal">(deleted)</span>
+            </p>
+          ) : (
+            <Link to={`/base/${encodeURIComponent(place.base_id)}/${encodeURIComponent(place.table_id)}/r/${encodeURIComponent(record.id)}`} className="block min-w-0 break-words text-ui font-semibold text-fg hover:underline">
+              {name}
+            </Link>
+          )}
+          <Place place={place} topLevel={topLevel?.has(place.base_id)} />
+        </header>
+        <ul aria-label={`Activity on ${name}`} className="flex flex-col divide-y divide-line">
+          {group.items.map((item) => (
+            <li key={item.id} className="flex gap-3 px-4 py-3">
+              <Avatar name={item.author?.name ?? "Someone"} size="sm" className="mt-0.5" />
+              <ActivityRow item={item} fields={fields} format={format} now={now} />
+            </li>
+          ))}
+        </ul>
+      </article>
+    </Card>
   );
 }
 
-/** "Record in Workspace › Project › Table", each with its tile like the Trash page. */
-function Place({ place }: { place: ActivityPlace }) {
+/** "Workspace › Folder › Collection", each beside its color mark (DL-3), so the color is never the only cue. */
+function Place({ place, topLevel }: { place: ActivityPlace; topLevel?: boolean }) {
+  const step = (hue: string, name: string, label: string) => (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      <ColorMark hue={hue} name={name} size={8} />
+      <span className="truncate">
+        <span className="sr-only">{label} </span>
+        {name}
+      </span>
+    </span>
+  );
   return (
-    <p className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[0.8125rem] text-muted">
-      <span>Record in</span>
-      <span className="truncate">{place.workspace_name}</span>
+    <p className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-meta text-muted">
+      {step(place.workspace_color, place.workspace_name, "Workspace")}
       <span aria-hidden>›</span>
-      <span className="truncate">{place.base_name}</span>
-      <span aria-hidden>›</span>
-      <span className="truncate">{place.table_name}</span>
+      {!topLevel && (
+        <>
+          {step(place.base_color, place.base_name, "Folder")}
+          <span aria-hidden>›</span>
+        </>
+      )}
+      {step(place.table_color, place.table_name, "Collection")}
     </p>
   );
 }
@@ -75,7 +93,7 @@ function ActivityRow({ item, fields, format, now }: { item: ActivityItem; fields
   const who = <span className="font-semibold">{item.author?.name ?? "Someone"}</span>;
   const changes = Object.entries(item.changes);
   return (
-    <div className="min-w-0 flex-1 text-[0.875rem]">
+    <div className="min-w-0 flex-1 text-ui">
       {item.kind === "comment" ? (
         <>
           <p>{who} commented</p>
@@ -184,9 +202,9 @@ function Value({ text, tone }: { text: string; tone: "old" | "new" }) {
   const Tag = tone === "old" ? "del" : "ins";
   return (
     <>
-      <Tag className={cn("break-words rounded px-1.5 py-0.5 text-[0.8125rem] no-underline", tone === "old" ? "bg-danger-soft line-through decoration-danger/60" : "bg-success-soft")}>{text ? shown : "(empty)"}</Tag>
+      <Tag className={cn("break-words rounded-xs px-1.5 py-0.5 text-label no-underline", tone === "old" ? "bg-danger-soft line-through decoration-danger/60" : "bg-success-soft")}>{text ? shown : "(empty)"}</Tag>
       {long && (
-        <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="ml-1 text-xs font-medium text-primary-text underline hover:no-underline">
+        <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="ml-1 text-meta font-medium text-primary-text underline hover:no-underline">
           {open ? "less" : "more"}
         </button>
       )}
@@ -199,7 +217,7 @@ function CommentText({ body }: { body: string }) {
   const long = body.length > LONG_COMMENT || body.split("\n").length > 5;
   return (
     <>
-      <div className={cn("mt-1 rounded-[10px] bg-subtle px-3 py-2", long && !open && "max-h-28 overflow-hidden [mask-image:linear-gradient(to_bottom,#000_70%,transparent)]")}>
+      <div className={cn("mt-1 rounded-md bg-subtle px-3 py-2", long && !open && "max-h-28 overflow-hidden [mask-image:linear-gradient(to_bottom,#000_70%,transparent)]")}>
         <CommentBody body={body} />
       </div>
       {long && <Toggle expanded={open} onClick={() => setOpen(!open)} more="Show the whole comment" less="Show less" />}
@@ -209,7 +227,7 @@ function CommentText({ body }: { body: string }) {
 
 function Toggle({ expanded, onClick, more, less }: { expanded: boolean; onClick: () => void; more: string; less: string }) {
   return (
-    <button type="button" aria-expanded={expanded} onClick={onClick} className="mt-1 text-xs font-medium text-primary-text underline hover:no-underline">
+    <button type="button" aria-expanded={expanded} onClick={onClick} className="mt-1 text-meta font-medium text-primary-text underline hover:no-underline">
       {expanded ? less : more}
     </button>
   );
@@ -219,7 +237,7 @@ function Toggle({ expanded, onClick, more, less }: { expanded: boolean; onClick:
 function When({ ms, timeZone, now }: { ms: number; timeZone: string; now: number }) {
   const iso = new Date(ms).toISOString();
   return (
-    <p className="mt-0.5 text-xs text-muted">
+    <p className="mt-0.5 text-meta text-muted">
       <time dateTime={iso}>{relativeTime(ms, now)}</time>
       <span aria-hidden> · </span>
       <time dateTime={iso}>{formatDateTime(ms, timeZone)}</time>
